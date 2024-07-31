@@ -3,7 +3,7 @@
 client_id = "1ff77f37375f9a6603f22ecd67e5e832"
 name = "Honey Birdette Checkout AMD"
 handle = "honey-birdette-checkout-amd"
-application_url = "https://shed-season-hairy-researcher.trycloudflare.com"
+application_url = "https://disagree-ultimately-listen-packets.trycloudflare.com"
 embedded = true
 
 [build]
@@ -17,9 +17,9 @@ scopes = "write_products"
 
 [auth]
 redirect_urls = [
-  "https://shed-season-hairy-researcher.trycloudflare.com/auth/callback",
-  "https://shed-season-hairy-researcher.trycloudflare.com/auth/shopify/callback",
-  "https://shed-season-hairy-researcher.trycloudflare.com/api/auth/callback"
+  "https://disagree-ultimately-listen-packets.trycloudflare.com/auth/callback",
+  "https://disagree-ultimately-listen-packets.trycloudflare.com/auth/shopify/callback",
+  "https://disagree-ultimately-listen-packets.trycloudflare.com/api/auth/callback"
 ]
 
 [webhooks]
