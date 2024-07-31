@@ -1,26 +1,21 @@
 import { PassThrough } from "stream";
 import { renderToPipeableStream } from "react-dom/server";
 import { RemixServer } from "@remix-run/react";
-import {
-  createReadableStreamFromReadable,
-  type EntryContext,
-} from "@remix-run/node";
+import { createReadableStreamFromReadable } from "@remix-run/node";
 import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
 
 const ABORT_DELAY = 5000;
 
 export default async function handleRequest(
-  request: Request,
-  responseStatusCode: number,
-  responseHeaders: Headers,
-  remixContext: EntryContext
+  request,
+  responseStatusCode,
+  responseHeaders,
+  remixContext,
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
   const userAgent = request.headers.get("user-agent");
-  const callbackName = isbot(userAgent ?? '')
-    ? "onAllReady"
-    : "onShellReady";
+  const callbackName = isbot(userAgent ?? "") ? "onAllReady" : "onShellReady";
 
   return new Promise((resolve, reject) => {
     const { pipe, abort } = renderToPipeableStream(
@@ -39,7 +34,7 @@ export default async function handleRequest(
             new Response(stream, {
               headers: responseHeaders,
               status: responseStatusCode,
-            })
+            }),
           );
           pipe(body);
         },
@@ -50,7 +45,7 @@ export default async function handleRequest(
           responseStatusCode = 500;
           console.error(error);
         },
-      }
+      },
     );
 
     setTimeout(abort, ABORT_DELAY);

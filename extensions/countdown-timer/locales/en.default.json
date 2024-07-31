@@ -1,0 +1,5 @@
+{
+  "time-remaining": "{{ target }}",
+  "time-has-ended": "The countdown has ended!",
+  "time-has-ended-title": "{{ target }}"
+}

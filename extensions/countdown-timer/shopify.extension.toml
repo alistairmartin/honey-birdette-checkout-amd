@@ -1,0 +1,72 @@
+api_version = "2024-07"
+
+[[extensions]]
+handle = "countdown-timer"
+name = "countdown-timer"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/Checkout.tsx"
+target = "purchase.checkout.block.render"
+
+[extensions.capabilities]
+api_access = true
+
+[extensions.settings]
+[[extensions.settings.fields]]
+description = "Select the date and time to countdown to"
+key = "countdown"
+name = "Countdown Date"
+type = "date_time"
+
+[[extensions.settings.fields]]
+description = "Enter a title for the banner."
+key = "titleBefore"
+name = "Banner title (Before)"
+type = "single_line_text_field"
+
+[[extensions.settings.fields]]
+description = "Enter a description for the banner."
+key = "descriptionBefore"
+name = "Banner description (Before)"
+type = "single_line_text_field"
+
+[[extensions.settings.fields]]
+key = "statusBefore"
+name = "Banner status (Before)"
+type = "single_line_text_field"
+[[extensions.settings.fields.validations]]
+name = "choices"
+value = "[\"info\", \"success\", \"warning\", \"critical\"]"
+
+[[extensions.settings.fields]]
+description = "Display controls to expand or collapse the banner description."
+key = "collapsibleBefore"
+name = "Show collapsible description (Before)"
+type = "boolean"
+
+[[extensions.settings.fields]]
+description = "Enter a title for the banner."
+key = "titleAfter"
+name = "Banner title (After)"
+type = "single_line_text_field"
+
+[[extensions.settings.fields]]
+description = "Enter a description for the banner."
+key = "descriptionAfter"
+name = "Banner description (After)"
+type = "single_line_text_field"
+
+[[extensions.settings.fields]]
+key = "statusAfter"
+name = "Banner status (After)"
+type = "single_line_text_field"
+[[extensions.settings.fields.validations]]
+name = "choices"
+value = "[\"info\", \"success\", \"warning\", \"critical\"]"
+
+[[extensions.settings.fields]]
+description = "Display controls to expand or collapse the banner description."
+key = "collapsibleAfter"
+name = "Show collapsible description (After)"
+type = "boolean"

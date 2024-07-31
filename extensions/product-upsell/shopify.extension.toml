@@ -3,26 +3,26 @@
 
 # The version of APIs your extension will receive. Learn more:
 # https://shopify.dev/docs/api/usage/versioning
-api_version = "2024-04"
+api_version = "2024-07"
 
 [[extensions]]
+name = "Product Upsell"
+handle = "product-upsell"
 type = "ui_extension"
-name = "Message Banner"
-handle = "message-banner"
+
 
 # Controls where in Shopify your extension will be injected,
 # and the file that contains your extension’s source code. Learn more:
 # https://shopify.dev/docs/api/checkout-ui-extensions/unstable/extension-targets-overview
 
 [[extensions.targeting]]
-module = "./src/Checkout.jsx"
+module = "./src/Checkout.tsx"
 target = "purchase.checkout.block.render"
 
 [extensions.capabilities]
 # Gives your extension access to directly query Shopify’s storefront API.
 # https://shopify.dev/docs/api/checkout-ui-extensions/unstable/configuration#api-access
 api_access = true
-network_access = true
 
 # Gives your extension access to make external network calls, using the
 # JavaScript `fetch()` API. Learn more:
@@ -50,29 +50,3 @@ network_access = true
 # type = "single_line_text_field"
 # name = "Banner title"
 # description = "Enter a title for the banner"
-
-[extensions.settings]
-  [[extensions.settings.fields]]
-  key = "title"
-  type = "single_line_text_field"
-  name = "Banner title"
-  description = "Enter a title for the banner."
-  
-  [[extensions.settings.fields]]
-  key = "description"
-  type = "single_line_text_field"
-  name = "Banner description"
-  description = "Enter a description for the banner."
-
-  [[extensions.settings.fields]]
-  key = "status"
-  type = "single_line_text_field"
-  name = "Banner status"
-    [[extensions.settings.fields.validations]]
-    name = "choices"
-    value = "[\"info\", \"success\", \"warning\", \"critical\"]"
-  [[extensions.settings.fields]]
-  key = "collapsible"
-  type = "boolean"
-  name = "Show collapsible description."
-  description = "Display controls to expand or collapse the banner description."

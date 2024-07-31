@@ -1,0 +1,26 @@
+# Learn more about configuring your checkout UI extension:
+# https://shopify.dev/api/checkout-extensions/checkout/configuration
+
+# The version of APIs your extension will receive. Learn more:
+# https://shopify.dev/docs/api/usage/versioning
+api_version = "2024-07"
+
+[[extensions]]
+name = "Giftbox Upsell"
+type = "ui_extension"
+handle = "giftbox-upsell"
+[[extensions.targeting]]
+module = "./src/Checkout.tsx"
+target = "purchase.checkout.block.render"
+
+[extensions.capabilities]
+api_access = true
+network_access = true
+block_progress = true
+
+[extensions.settings]
+  [[extensions.settings.fields]]
+  key = "product"
+  type = "variant_reference"
+  name = "Select Variant"
+  description = "Choose a product variant for the gift box upsell"

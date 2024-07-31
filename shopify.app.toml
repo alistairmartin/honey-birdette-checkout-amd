@@ -1,9 +1,9 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "1ff77f37375f9a6603f22ecd67e5e832"
-name = "honey-birdette-checkout-AMD"
+name = "Honey Birdette Checkout AMD"
 handle = "honey-birdette-checkout-amd"
-application_url = "https://condo-developers-sailing-donor.trycloudflare.com"
+application_url = "https://shed-season-hairy-researcher.trycloudflare.com"
 embedded = true
 
 [build]
@@ -17,9 +17,9 @@ scopes = "write_products"
 
 [auth]
 redirect_urls = [
-  "https://condo-developers-sailing-donor.trycloudflare.com/auth/callback",
-  "https://condo-developers-sailing-donor.trycloudflare.com/auth/shopify/callback",
-  "https://condo-developers-sailing-donor.trycloudflare.com/api/auth/callback"
+  "https://shed-season-hairy-researcher.trycloudflare.com/auth/callback",
+  "https://shed-season-hairy-researcher.trycloudflare.com/auth/shopify/callback",
+  "https://shed-season-hairy-researcher.trycloudflare.com/api/auth/callback"
 ]
 
 [webhooks]
