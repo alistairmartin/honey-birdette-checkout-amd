@@ -2,7 +2,7 @@ api_version = "2024-07"
 
 [[extensions]]
 handle = "countdown-timer"
-name = "countdown-timer"
+name = "Countdown Timer"
 type = "ui_extension"
 
 [[extensions.targeting]]

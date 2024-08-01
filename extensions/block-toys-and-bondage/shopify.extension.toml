@@ -6,7 +6,7 @@
 api_version = "2024-07"
 
 [[extensions]]
-name = "block-toys-and-bondage"
+name = "Block Toys And Bondage"
 handle = "block-toys-and-bondage"
 type = "ui_extension"
 

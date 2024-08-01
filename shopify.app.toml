@@ -1,9 +1,9 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "1ff77f37375f9a6603f22ecd67e5e832"
-name = "Honey Birdette Checkout AMD"
+name = "Honey Birdette Checkout (AMD)"
 handle = "honey-birdette-checkout-amd"
-application_url = "https://disagree-ultimately-listen-packets.trycloudflare.com"
+application_url = "https://romantic-dev-hall-mi.trycloudflare.com"
 embedded = true
 
 [build]
@@ -17,9 +17,9 @@ scopes = "write_products"
 
 [auth]
 redirect_urls = [
-  "https://disagree-ultimately-listen-packets.trycloudflare.com/auth/callback",
-  "https://disagree-ultimately-listen-packets.trycloudflare.com/auth/shopify/callback",
-  "https://disagree-ultimately-listen-packets.trycloudflare.com/api/auth/callback"
+  "https://romantic-dev-hall-mi.trycloudflare.com/auth/callback",
+  "https://romantic-dev-hall-mi.trycloudflare.com/auth/shopify/callback",
+  "https://romantic-dev-hall-mi.trycloudflare.com/api/auth/callback"
 ]
 
 [webhooks]

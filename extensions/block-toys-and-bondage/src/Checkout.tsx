@@ -5,6 +5,8 @@ import {
   useCartLines,
   Banner,
   BlockStack,
+  TextBlock,
+  View,
   Button,
   Text,
   useApplyCartLinesChange,
@@ -35,6 +37,7 @@ function Extension() {
     const checkRestrictions = () => {
       const countryCode = address?.countryCode;
       console.log("Shipping country code:", countryCode);
+      console.log("Address:", address);
 
       const restrictedItems = cartLines.filter(line => 
         restrictedProductTypes.includes(line.merchandise.product.productType)
@@ -84,23 +87,41 @@ function Extension() {
   });
 
   const removeRestrictedItems = async () => {
-    const changes = restrictedItems.map(item => ({
-      id: item.id,
-      type: "remove"
-    }));
-    console.log("Removing restricted items:", changes);
-
-    await applyCartLinesChange(changes);
-    console.log("Restricted items removed.");
-    setShowBanner(false);
+    const changes = restrictedItems.map(item => {
+      console.log("👑 Item to be removed:", item);
+      return {
+        id: item.id,
+        type: "remove"
+      };
+    });
+    console.log("Changes to apply:", changes);
+  
+    try {
+      await applyCartLinesChange(changes);
+      console.log("Restricted items removed.");
+      setShowBanner(false);
+    } catch (error) {
+      console.error("Error removing restricted items:", error);
+    }
   };
+  
 
   return showBanner ? (
-    <BlockStack border={"dotted"} padding={"tight"}>
-      <Banner title="Restricted items in cart" status="warning">
-        <Text>{translate("Please remove Toys or Bondage items from your cart before proceeding.")}</Text>
-        <Button onClick={removeRestrictedItems}>{translate("Remove restricted items")}</Button>
+      <Banner title="Restricted items in cart" status="critical" >
+        <BlockStack spacing="base">
+        <View>
+
+          <TextBlock>
+          {translate('please-remove')}
+          <Text emphasis="bold">{translate('toys-or-bondage')}</Text>
+          <Text>{translate('description')}</Text>
+          </TextBlock>
+        </View>
+        <View>
+          <Button onPress={removeRestrictedItems}>{translate('remove-items')}</Button>
+        </View>
+      </BlockStack>
+
       </Banner>
-    </BlockStack>
   ) : null;
 }
