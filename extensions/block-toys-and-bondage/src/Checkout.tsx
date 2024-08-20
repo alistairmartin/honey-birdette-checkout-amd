@@ -87,41 +87,41 @@ function Extension() {
   });
 
   const removeRestrictedItems = async () => {
-    const changes = restrictedItems.map(item => {
-      console.log("👑 Item to be removed:", item);
-      return {
-        id: item.id,
-        type: "remove"
-      };
-    });
-    console.log("Changes to apply:", changes);
-  
     try {
-      await applyCartLinesChange(changes);
+      for (const item of restrictedItems) {
+        const change = {
+          id: item.id,
+          type: "removeCartLine",
+          quantity: item.quantity,
+        };
+        console.log("Applying change:", change);
+        const result = await applyCartLinesChange(change);
+        console.log("Result of applying cart lines change:", result);
+        if (result.type !== 'success') {
+          console.error("Failed to remove restricted item:", result);
+        }
+      }
       console.log("Restricted items removed.");
       setShowBanner(false);
     } catch (error) {
       console.error("Error removing restricted items:", error);
     }
   };
-  
 
   return showBanner ? (
-      <Banner title="Restricted items in cart" status="critical" >
-        <BlockStack spacing="base">
+    <Banner title="Restricted items in cart" status="critical">
+      <BlockStack spacing="base">
         <View>
-
           <TextBlock>
-          {translate('please-remove')}
-          <Text emphasis="bold">{translate('toys-or-bondage')}</Text>
-          <Text>{translate('description')}</Text>
+            {translate('please-remove')}
+            <Text emphasis="bold">{translate('toys-or-bondage')}</Text> 
+            <Text>{translate('description')}</Text> 
           </TextBlock>
         </View>
         <View>
           <Button onPress={removeRestrictedItems}>{translate('remove-items')}</Button>
         </View>
       </BlockStack>
-
-      </Banner>
+    </Banner>
   ) : null;
 }
