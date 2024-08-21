@@ -11,6 +11,7 @@ import {
   Text,
   View,
   TextBlock,
+  Image,
   InlineSpacer,
   SkeletonText,
   SkeletonImage,
@@ -57,6 +58,9 @@ function App() {
       type: "addCartLine",
       merchandiseId: variantId,
       quantity: 1,
+      attributes: [
+        { key: "_checkout_upsell", value: "true" }
+      ],
     });
     setAdding(false);
     if (result.type === "error") {
@@ -207,7 +211,7 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError }) {
       : appendWidth("https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png?format=webp&v=1530129081");
   
   return (
-    <BlockStack spacing="tight" background="subdued" borderWidth="medium" padding="base">
+    <BlockStack spacing="tight" border="base" borderWidth="base" padding="base">
       <InlineLayout
           spacing="base"
           columns={["fill"]}
@@ -262,10 +266,10 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError }) {
 
 
             <View>
-              <ProductThumbnail
+              <Image
                 size="fill"
-                border="base"
-                borderWidth="base"
+                background="base"
+                border="none"
                 borderRadius="loose"
                 source={imageUrl}
                 alt={productData.title}

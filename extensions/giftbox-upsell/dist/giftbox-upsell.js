@@ -19732,6 +19732,12 @@ ${errorInfo.componentStack}`);
       this.name = "CheckoutUIExtensionError";
     }
   };
+  var ScopeNotGrantedError = class extends Error {
+    constructor(...args) {
+      super(...args);
+      this.name = "ScopeNotGrantedError";
+    }
+  };
   var ExtensionHasNoMethodError = class extends Error {
     constructor(method, target) {
       super(`Cannot call '${method}()' on target '${target}'. The corresponding property was not found on the API.`);
@@ -19770,6 +19776,15 @@ ${errorInfo.componentStack}`);
     return subscription.current;
   }
 
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/shipping-address.mjs
+  function useShippingAddress() {
+    const shippingAddress = useApi().shippingAddress;
+    if (!shippingAddress) {
+      throw new ScopeNotGrantedError("Using shipping address requires having shipping address permissions granted to your app.");
+    }
+    return useSubscription(shippingAddress);
+  }
+
   // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/cart-lines.mjs
   function useCartLines() {
     const {
@@ -19783,6 +19798,11 @@ ${errorInfo.componentStack}`);
       return api.applyCartLinesChange;
     }
     throw new ExtensionHasNoMethodError("applyCartLinesChange", api.extension.target);
+  }
+
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/shop.mjs
+  function useShop() {
+    return useApi().shop;
   }
 
   // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/translate.mjs
@@ -19820,10 +19840,13 @@ ${errorInfo.componentStack}`);
   function App() {
     const { query, i18n } = useApi();
     const applyCartLinesChange = useApplyCartLinesChange();
+    const { myshopifyDomain } = useShop();
+    const shippingAddress = useShippingAddress();
     const [variant, setVariant] = (0, import_react22.useState)(null);
     const [loading, setLoading] = (0, import_react22.useState)(false);
     const [adding, setAdding] = (0, import_react22.useState)(false);
     const [showError, setShowError] = (0, import_react22.useState)(false);
+    const [productsValid, setProductsValid] = (0, import_react22.useState)(true);
     const lines = useCartLines();
     const { product } = useSettings();
     const variantId = product != null ? product : "gid://shopify/ProductVariant/41816694947955";
@@ -19838,6 +19861,45 @@ ${errorInfo.componentStack}`);
         return () => clearTimeout(timer);
       }
     }, [showError]);
+    (0, import_react22.useEffect)(() => {
+      if (myshopifyDomain === "us.honeybirdette.com" && (shippingAddress == null ? void 0 : shippingAddress.countryCode) === "US") {
+        const items = lines.map((item) => ({
+          sku: item.merchandise.sku,
+          quantity: item.quantity
+        }));
+        const request = {
+          countryCode: shippingAddress.countryCode,
+          items
+        };
+        const deliveryValidatorEndpoint = "https://hb-stores-api-prod.herokuapp.com/check-inventory-v2";
+        fetch(deliveryValidatorEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json; charset=utf-8"
+          },
+          body: JSON.stringify(request)
+        }).then((response) => response.json()).then((data) => {
+          const products = data.inventoryData;
+          let allProductsValid = true;
+          products.forEach((product2) => {
+            if (!product2.isAvailable) {
+              allProductsValid = false;
+              return false;
+            }
+          });
+          if (allProductsValid) {
+            setProductsValid(true);
+          } else {
+            setProductsValid(false);
+          }
+        }).catch((error) => {
+          console.error("RESPONSE - Error: ", error);
+          setProductsValid(false);
+        });
+      } else {
+        setProductsValid(true);
+      }
+    }, [myshopifyDomain, shippingAddress, lines]);
     function handleAddToCart(variantId2) {
       return __async(this, null, function* () {
         setAdding(true);
@@ -19901,7 +19963,7 @@ ${errorInfo.componentStack}`);
     if (!loading && !variant) {
       return null;
     }
-    if (isVariantInCart) {
+    if (isVariantInCart || !productsValid) {
       return null;
     }
     const productOnOffer = variant ? [variant] : [];
@@ -20006,7 +20068,7 @@ ${errorInfo.componentStack}`);
             /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(TextBlock2, { children: [
               /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: translate("description") }),
               " ",
-              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: i18n.formatCurrency(product.price.amount).replace(/\.00$/, "").replace(/\,00$/, "") })
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: i18n.formatCurrency(price.amount).replace(/\.00$/, "").replace(/\,00$/, "") })
             ] })
           ] })
         }
