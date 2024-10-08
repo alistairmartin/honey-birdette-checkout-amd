@@ -19341,11 +19341,11 @@
   // extensions/product-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Icon/Icon.mjs
   var Icon = createRemoteComponent("Icon");
 
+  // extensions/product-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Image/Image.mjs
+  var Image = createRemoteComponent("Image");
+
   // extensions/product-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/InlineLayout/InlineLayout.mjs
   var InlineLayout = createRemoteComponent("InlineLayout");
-
-  // extensions/product-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/ProductThumbnail/ProductThumbnail.mjs
-  var ProductThumbnail = createRemoteComponent("ProductThumbnail");
 
   // extensions/product-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/SkeletonImage/SkeletonImage.mjs
   var SkeletonImage = createRemoteComponent("SkeletonImage");
@@ -19704,11 +19704,11 @@ ${errorInfo.componentStack}`);
   // extensions/product-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Icon/Icon.mjs
   var Icon2 = createRemoteReactComponent(Icon);
 
+  // extensions/product-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Image/Image.mjs
+  var Image2 = createRemoteReactComponent(Image);
+
   // extensions/product-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/InlineLayout/InlineLayout.mjs
   var InlineLayout2 = createRemoteReactComponent(InlineLayout);
-
-  // extensions/product-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/ProductThumbnail/ProductThumbnail.mjs
-  var ProductThumbnail2 = createRemoteReactComponent(ProductThumbnail);
 
   // extensions/product-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/SkeletonImage/SkeletonImage.mjs
   var SkeletonImage2 = createRemoteReactComponent(SkeletonImage);
@@ -19844,7 +19844,10 @@ ${errorInfo.componentStack}`);
         const result = yield applyCartLinesChange({
           type: "addCartLine",
           merchandiseId: variantId2,
-          quantity: 1
+          quantity: 1,
+          attributes: [
+            { key: "_checkout_upsell", value: "true" }
+          ]
         });
         setAdding(false);
         if (result.type === "error") {
@@ -19981,61 +19984,129 @@ ${errorInfo.componentStack}`);
     const appendWidth = (url) => `${url}&width=250`;
     const translate = useTranslate();
     const imageUrl = ((_a = productData.images.nodes[0]) == null ? void 0 : _a.url) ? appendWidth(productData.images.nodes[0].url) : appendWidth("https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png?format=webp&v=1530129081");
-    return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(BlockStack2, { spacing: "tight", background: "subdued", borderWidth: "medium", padding: "base", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(BlockStack2, { spacing: "tight", background: "subdued", border: "base", borderWidth: "base", padding: "base", children: [
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
         InlineLayout2,
         {
+          display: Style.default(["auto"]).when({ viewportInlineSize: { min: "small" } }, "none"),
           spacing: "base",
           columns: ["fill"],
           blockAlignment: "center",
-          children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(BlockStack2, { spacing: "none", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
-            InlineLayout2,
-            {
-              spacing: "base",
-              columns: ["auto", "fill"],
-              blockAlignment: "start",
-              children: [
-                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Icon2, { source: "bag" }),
-                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Heading2, { level: 2, children: translate("title") })
-              ]
-            }
-          ) })
+          children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(BlockStack2, { spacing: "none", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+              InlineLayout2,
+              {
+                spacing: "base",
+                padding: ["none", "none", "tight", "none"],
+                columns: ["auto", "fill"],
+                blockAlignment: "start",
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Icon2, { source: "gift" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(Heading2, { level: 2, children: [
+                    " ",
+                    translate("title")
+                  ] })
+                ]
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(InlineLayout2, { display: Style.default(["none"]).when({ viewportInlineSize: { min: "small" } }, "auto"), children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(TextBlock2, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: translate("description") }),
+              " ",
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: i18n.formatCurrency(price.amount).replace(/\.00$/, "").replace(/\,00$/, "") })
+            ] }) })
+          ] })
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(BlockStack2, { spacing: "loose", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
         InlineLayout2,
         {
+          padding: ["none", "none", "tight", "none"],
           spacing: "base",
-          columns: Style.default(["75%", "25%"]).when({ viewportInlineSize: { min: "small" } }, ["85%", "fill"]),
+          columns: Style.default(["30%", "70%"]).when({ viewportInlineSize: { min: "small" } }, ["20%", "fill"]),
           blockAlignment: "center",
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(View2, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(BlockStack2, { spacing: "base", padding: ["none", "none", "tight", "none"], children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(View2, { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: translate("description") }),
-                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: i18n.formatCurrency(product.price.amount).replace(/\.00$/, "").replace(/\,00$/, "") })
-              ] }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(BlockStack2, { spacing: "base", padding: ["none", "none", "tight", "none"], children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-                Button2,
-                {
-                  kind: "secondary",
-                  loading: adding,
-                  accessibilityLabel: `Add ${productData.title} to cart`,
-                  onPress: () => handleAddToCart(product.id),
-                  children: translate("add-to-cart")
-                }
-              ) })
-            ] }),
             /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(View2, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-              ProductThumbnail2,
+              Image2,
               {
                 size: "fill",
-                border: "base",
-                borderWidth: "base",
+                background: "base",
+                border: "none",
                 borderRadius: "loose",
                 source: imageUrl,
                 alt: productData.title
               }
-            ) })
+            ) }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(View2, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+                BlockStack2,
+                {
+                  spacing: "base",
+                  display: Style.default(["none"]).when({ viewportInlineSize: { min: "small" } }, "auto"),
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+                      InlineLayout2,
+                      {
+                        spacing: "base",
+                        columns: ["auto", "auto"],
+                        blockAlignment: "start",
+                        children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Icon2, { source: "gift" }),
+                          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Heading2, { level: 2, children: translate("title") })
+                        ]
+                      }
+                    ),
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(TextBlock2, { children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: translate("description") }),
+                      " ",
+                      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: i18n.formatCurrency(price.amount).replace(/\.00$/, "").replace(/\,00$/, "") })
+                    ] }),
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                      InlineLayout2,
+                      {
+                        spacing: "base",
+                        columns: Style.default(["100%"]).when({ viewportInlineSize: { min: "small" } }, ["100%"]),
+                        blockAlignment: "center",
+                        children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(View2, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                          Button2,
+                          {
+                            kind: "secondary",
+                            loading: adding,
+                            accessibilityLabel: `Add ${productData.title} to cart`,
+                            onPress: () => handleAddToCart(product.id),
+                            children: translate("add-to-cart")
+                          }
+                        ) })
+                      }
+                    )
+                  ]
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(BlockStack2, { spacing: "base", display: Style.default(["auto"]).when({ viewportInlineSize: { min: "small" } }, "none"), children: [
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(TextBlock2, { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: translate("description") }),
+                  " ",
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: i18n.formatCurrency(price.amount).replace(/\.00$/, "").replace(/\,00$/, "") })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                  InlineLayout2,
+                  {
+                    spacing: "base",
+                    columns: Style.default(["fill"]).when({ viewportInlineSize: { min: "small" } }, ["fill"]),
+                    blockAlignment: "center",
+                    children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                      Button2,
+                      {
+                        kind: "secondary",
+                        loading: adding,
+                        accessibilityLabel: `Add ${productData.title} to cart`,
+                        onPress: () => handleAddToCart(product.id),
+                        children: translate("add-to-cart")
+                      }
+                    )
+                  }
+                )
+              ] })
+            ] })
           ]
         }
       ) }),

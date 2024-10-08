@@ -60,7 +60,7 @@ network_access = true
   
   [[extensions.settings.fields]]
   key = "description"
-  type = "single_line_text_field"
+  type = "rich_text_field"
   name = "Banner description"
   description = "Enter a description for the banner."
 

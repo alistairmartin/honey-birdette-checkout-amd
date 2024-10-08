@@ -64,14 +64,7 @@ function Extension() {
       </TextBlock>
       </Banner>
 
-   
 
-     
-
-
-     
-     
-   
     </BlockStack>
   );
 }

@@ -60,26 +60,26 @@ function App() {
     console.log("myshopifyDomain:", myshopifyDomain);
     console.log("shippingAddress:", shippingAddress);
     console.log("lines:", lines);
-  
-    if (myshopifyDomain === 'honey-birdette-us.myshopify.com' && shippingAddress?.countryCode === 'US') {
+
+    if (myshopifyDomain === 'honey-birdette-usa.myshopify.com' && shippingAddress?.countryCode === 'US') {
       console.log("Condition met: honeybirdette US shop and shipping to US");
-  
+
       const items = lines.map(item => ({
         sku: item.merchandise.sku,
         quantity: item.quantity,
       }));
-      
+
       console.log("Mapped items:", items);
-  
+
       const request = {
         countryCode: shippingAddress.countryCode,
         items: items,
       };
-  
+
       console.log("Request payload:", request);
-  
+
       const deliveryValidatorEndpoint = "https://hb-stores-api-prod.herokuapp.com/check-inventory-v2";
-  
+
       fetch(deliveryValidatorEndpoint, {
         method: 'POST',
         headers: {
@@ -92,7 +92,7 @@ function App() {
           console.log("API Response data:", data);
           const products = data.inventoryData;
           let allProductsValid = true;
-  
+
           products.forEach((product) => {
             if (!product.isAvailable) {
               console.log(`Product unavailable:`, product);
@@ -100,7 +100,7 @@ function App() {
               return false;
             }
           });
-  
+
           if (allProductsValid) {
             console.log("All products are valid");
             setProductsValid(true);
@@ -113,12 +113,15 @@ function App() {
           console.error("RESPONSE - Error:", error);
           setProductsValid(false);
         });
+
+    } else if(myshopifyDomain === 'honey-birdette-usa.myshopify.com'){
+      setProductsValid(false); 
     } else {
       console.log("Condition not met: either not honeybirdette US or not shipping to US");
       setProductsValid(true); // Allow if not US or not honeybirdette US
     }
   }, [myshopifyDomain, shippingAddress, lines]);
-  
+
 
   async function handleAddToCart(variantId) {
     setAdding(true);
@@ -126,6 +129,9 @@ function App() {
       type: "addCartLine",
       merchandiseId: variantId,
       quantity: 1,
+      attributes: [
+        { key: "_checkout_upsell", value: "true" }
+      ],
     });
     setAdding(false);
     if (result.type === "error") {
@@ -168,7 +174,7 @@ function App() {
       } else {
         console.error('No variant response found:', response.errors || 'Unknown error');
       }
-      
+
     } catch (error) {
       console.error('Error fetching variant:', error);
     } finally {
@@ -186,6 +192,9 @@ function App() {
   if (!loading && !variant) {
     return null;
   }
+
+  console.log("productsValid")
+  console.log(productsValid)
 
   // Return null if the variant is already in the cart or products are not valid
   if (isVariantInCart || !productsValid) {
@@ -264,35 +273,51 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError }) {
   console.log(product);
   const appendWidth = (url) => `${url}&width=250`;
   const translate = useTranslate();
+  const formattedPrice = i18n.formatCurrency(price.amount).replace(/\.00$/, '').replace(/\,00$/, '');
+  const currencySymbols = {
+      EUR: '€',
+      USD: '$',
+      AUD: 'A$',
+      NZD: 'NZ$',
+      GBP: '£',
+      CAD: 'C$'
+  };
+  const priceWithSymbol = formattedPrice
+    .replace(/\b(EUR|USD|AUD|NZD|GBP|CAD)\b/g, (match) => currencySymbols[match])
+    .replace(/\s+/g, ''); 
   const imageUrl =
     productData.images.nodes[0]?.url
       ? appendWidth(productData.images.nodes[0].url)
       : appendWidth("https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png?format=webp&v=1530129081");
 
+
+
   return (
-    <BlockStack spacing="tight" background="subdued"  border="base" borderWidth="base" padding="base">
+    <BlockStack spacing="tight" background="subdued" border="base" borderWidth="base" padding="base">
       <InlineLayout
+        display={Style.default(['auto']).when({ viewportInlineSize: { min: 'small' } }, 'none')}
         spacing="base"
-        padding={["tight", "none", "base", "none"]}
         columns={["fill"]}
         blockAlignment="center"
       >
         <BlockStack spacing="none">
           <InlineLayout
-            padding={["none", "none", "tight", "none"]}
             spacing="base"
+            padding={["none", "none", "tight", "none"]}
             columns={["auto", "fill"]}
             blockAlignment="start"
           >
             <Icon source="gift" />
-            <Heading level={2}>{translate('title')}</Heading>
+            <Heading level={2}> {translate('title')}</Heading>
           </InlineLayout>
-          <TextBlock>
-            <Text>{translate('description')}</Text>{" "}
-            <Text emphasis="bold">
-              {i18n.formatCurrency(price.amount).replace(/\.00$/, '').replace(/\,00$/, '')}
-            </Text>
-          </TextBlock>
+          <InlineLayout display={Style.default(['none']).when({ viewportInlineSize: { min: 'small' } }, 'auto')}>
+            <TextBlock>
+              <Text>{translate('description')}</Text>{" "}
+              <Text emphasis="bold">
+                {priceWithSymbol}
+              </Text>
+            </TextBlock>
+          </InlineLayout>
         </BlockStack>
       </InlineLayout>
 
@@ -300,7 +325,7 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError }) {
         <InlineLayout
           padding={["none", "none", "tight", "none"]}
           spacing="base"
-          columns={Style.default(['30%', '70%']).when({ viewportInlineSize: { min: 'small' } }, ['20%', '40%'])}
+          columns={Style.default(['30%', '70%']).when({ viewportInlineSize: { min: 'small' } }, ['20%', 'fill'])}
           blockAlignment="center"
         >
           <View>
@@ -314,14 +339,77 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError }) {
             />
           </View>
 
-          <Button
-            kind="secondary"
-            loading={adding}
-            accessibilityLabel={`Add ${productData.title} to cart`}
-            onPress={() => handleAddToCart(product.id)}
-          >
-            {translate('add-to-cart')}
-          </Button>
+          <View>
+            <BlockStack 
+            spacing="base" 
+            display={Style.default(['none']).when({ viewportInlineSize: { min: 'small' } }, 'auto')}>
+              <InlineLayout
+                spacing="base"
+                columns={["auto", "auto"]}
+                blockAlignment="start"
+              >
+                <Icon source="gift" />
+                <Heading level={2}>{translate('title')}</Heading>
+              </InlineLayout>
+              <TextBlock>
+                <Text>{translate('description')}</Text>{" "}
+                <Text emphasis="bold">
+                  {priceWithSymbol}
+                </Text>
+              </TextBlock>
+
+              <InlineLayout
+                  spacing="base"
+                  columns={Style.default(['100%']).when({ viewportInlineSize: { min: 'small' } }, ['100%'])}
+                  blockAlignment="center"
+                >
+                  <View>
+                  <Button
+                      kind="secondary"
+                      loading={adding}
+                      accessibilityLabel={`Add ${productData.title} to cart`}
+                      onPress={() => handleAddToCart(product.id)}
+                    >
+                      {translate('add-to-cart')}
+                    </Button>
+                  </View>
+
+       
+              </InlineLayout>
+
+         
+            </BlockStack>
+    
+            <BlockStack spacing="base" display={Style.default(['auto']).when({ viewportInlineSize: { min: 'small' } }, 'none')}>
+              <TextBlock>
+                <Text>{translate('description')}</Text>{" "}
+                <Text emphasis="bold">
+                  {priceWithSymbol}
+                </Text>
+              </TextBlock>
+
+              <InlineLayout
+                  spacing="base"
+                  columns={Style.default(['fill']).when({ viewportInlineSize: { min: 'small' } }, ['fill'])}
+                  blockAlignment="center"
+                >
+
+              <Button
+                kind="secondary"
+                loading={adding}
+                accessibilityLabel={`Add ${productData.title} to cart`}
+                onPress={() => handleAddToCart(product.id)}
+              >
+                {translate('add-to-cart')}
+              </Button>
+
+
+
+            </InlineLayout>
+    
+            </BlockStack>
+
+          </View>
         </InlineLayout>
       </BlockStack>
       {showError && <ErrorBanner />}

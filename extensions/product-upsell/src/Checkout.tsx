@@ -205,77 +205,141 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError }) {
   console.log(product)
   const appendWidth = (url) => `${url}&width=250`;
   const translate = useTranslate();
+  const formattedPrice = i18n.formatCurrency(price.amount).replace(/\.00$/, '').replace(/\,00$/, '');
+  const currencySymbols = {
+      EUR: '€',
+      USD: '$',
+      AUD: 'A$',
+      NZD: 'NZ$',
+      GBP: '£',
+      CAD: 'C$'
+  };
+  const priceWithSymbol = formattedPrice
+    .replace(/\b(EUR|USD|AUD|NZD|GBP|CAD)\b/g, (match) => currencySymbols[match])
+    .replace(/\s+/g, ''); 
   const imageUrl =
     productData.images.nodes[0]?.url
       ? appendWidth(productData.images.nodes[0].url)
       : appendWidth("https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png?format=webp&v=1530129081");
   
   return (
-    <BlockStack spacing="tight" border="base" borderWidth="base" padding="base">
+    <BlockStack spacing="tight" background="subdued" border="base" borderWidth="base" padding="base">
       <InlineLayout
-          spacing="base"
-          columns={["fill"]}
-          blockAlignment="center">
- 
-          <BlockStack spacing="none">
-            <InlineLayout
+        display={Style.default(['auto']).when({ viewportInlineSize: { min: 'small' } }, 'none')}
+        spacing="base"
+        columns={["fill"]}
+        blockAlignment="center"
+      >
+        <BlockStack spacing="none">
+          <InlineLayout
             spacing="base"
+            padding={["none", "none", "tight", "none"]}
             columns={["auto", "fill"]}
-            blockAlignment="start">
-              <Icon source="bag"/>
-              <Heading level={2}>{translate('title')}</Heading>
-            </InlineLayout>
-            {/* <TextBlock>
-              <Text>{translate('description')}</Text> <Text emphasis="bold">
-                {i18n.formatCurrency(product.price.amount).replace(/\.00$/, '').replace(/\,00$/, '')}
-                </Text>
-            </TextBlock> */}
-          </BlockStack>
+            blockAlignment="start"
+          >
+            <Icon source="gift" />
+            <Heading level={2}> {translate('title')}</Heading>
+          </InlineLayout>
+          <InlineLayout display={Style.default(['none']).when({ viewportInlineSize: { min: 'small' } }, 'auto')}>
+            <TextBlock>
+              <Text>{translate('description')}</Text>{" "}
+              <Text emphasis="bold">
+                {priceWithSymbol}
+              </Text>
+            </TextBlock>
+          </InlineLayout>
+        </BlockStack>
       </InlineLayout>
 
       <BlockStack spacing="loose">
         <InlineLayout
+          padding={["none", "none", "tight", "none"]}
           spacing="base"
-          columns={Style.default(['75%', '25%'])
-            .when({ viewportInlineSize: { min: 'small' } }, ['85%', 'fill'])
-          }
+          columns={Style.default(['30%', '70%']).when({ viewportInlineSize: { min: 'small' } }, ['20%', 'fill'])}
           blockAlignment="center"
-          >
+        >
+          <View>
+            <Image
+              size="fill"
+              background="base"
+              border="none"
+              borderRadius="loose"
+              source={imageUrl}
+              alt={productData.title}
+            />
+          </View>
 
           <View>
-            <BlockStack spacing="base" padding={["none", "none", "tight", "none"]}>
-              <View>
-              <Text>{translate('description')}</Text> 
-              <Text emphasis="bold">
-                  {i18n.formatCurrency(product.price.amount).replace(/\.00$/, '').replace(/\,00$/, '')}
-              </Text>
-              </View>
+            <BlockStack 
+            spacing="base" 
+            display={Style.default(['none']).when({ viewportInlineSize: { min: 'small' } }, 'auto')}>
+              <InlineLayout
+                spacing="base"
+                columns={["auto", "auto"]}
+                blockAlignment="start"
+              >
+                <Icon source="gift" />
+                <Heading level={2}>{translate('title')}</Heading>
+              </InlineLayout>
+              <TextBlock>
+                <Text>{translate('description')}</Text>{" "}
+                <Text emphasis="bold">
+                  {priceWithSymbol}
+                </Text>
+              </TextBlock>
+
+              <InlineLayout
+                  spacing="base"
+                  columns={Style.default(['100%']).when({ viewportInlineSize: { min: 'small' } }, ['100%'])}
+                  blockAlignment="center"
+                >
+                  <View>
+                  <Button
+                      kind="secondary"
+                      loading={adding}
+                      accessibilityLabel={`Add ${productData.title} to cart`}
+                      onPress={() => handleAddToCart(product.id)}
+                    >
+                      {translate('add-to-cart')}
+                    </Button>
+                  </View>
+
+       
+              </InlineLayout>
+
+         
             </BlockStack>
-            <BlockStack spacing="base" padding={["none", "none", "tight", "none"]}>
+    
+            <BlockStack spacing="base" display={Style.default(['auto']).when({ viewportInlineSize: { min: 'small' } }, 'none')}>
+              <TextBlock>
+                <Text>{translate('description')}</Text>{" "}
+                <Text emphasis="bold">
+                  {priceWithSymbol}
+                </Text>
+              </TextBlock>
+
+              <InlineLayout
+                  spacing="base"
+                  columns={Style.default(['fill']).when({ viewportInlineSize: { min: 'small' } }, ['fill'])}
+                  blockAlignment="center"
+                >
+
               <Button
                 kind="secondary"
-            
                 loading={adding}
                 accessibilityLabel={`Add ${productData.title} to cart`}
                 onPress={() => handleAddToCart(product.id)}
               >
                 {translate('add-to-cart')}
               </Button>
+
+
+
+            </InlineLayout>
+    
             </BlockStack>
-            </View>
 
-
-            <View>
-              <Image
-                size="fill"
-                background="base"
-                border="none"
-                borderRadius="loose"
-                source={imageUrl}
-                alt={productData.title}
-              />
-            </View>
-
+          </View>
         </InlineLayout>
       </BlockStack>
       {showError && <ErrorBanner />}
