@@ -19825,8 +19825,10 @@ ${errorInfo.componentStack}`);
     const [adding, setAdding] = (0, import_react22.useState)(false);
     const [showError, setShowError] = (0, import_react22.useState)(false);
     const lines = useCartLines();
-    const { product } = useSettings();
+    const { product, title, description } = useSettings();
     const variantId = product != null ? product : "gid://shopify/ProductVariant/41816694947955";
+    const titleSetting = title != null ? title : "Upsell Title";
+    const descriptionSetting = description != null ? description : "Upsell Description.";
     (0, import_react22.useEffect)(() => {
       if (variantId) {
         fetchVariant(variantId);
@@ -19918,11 +19920,13 @@ ${errorInfo.componentStack}`);
         i18n,
         adding,
         handleAddToCart,
-        showError
+        showError,
+        titleSetting,
+        descriptionSetting
       }
     );
   }
-  function LoadingSkeleton() {
+  function LoadingSkeleton({ titleSetting, descriptionSetting }) {
     const translate = useTranslate();
     return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(BlockStack2, { spacing: "tight", background: "subdued", borderWidth: "medium", padding: "base", children: [
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
@@ -19942,12 +19946,12 @@ ${errorInfo.componentStack}`);
                 blockAlignment: "start",
                 children: [
                   /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Icon2, { source: "bag" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Heading2, { level: 2, children: translate("title") })
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Heading2, { level: 2, children: titleSetting })
                 ]
               }
             ),
             /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(TextBlock2, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: translate("description") }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: descriptionSetting }),
               " ",
               /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: "..." })
             ] })
@@ -19977,12 +19981,22 @@ ${errorInfo.componentStack}`);
       ) })
     ] });
   }
-  function ProductOffer({ product, i18n, adding, handleAddToCart, showError }) {
+  function ProductOffer({ product, i18n, adding, handleAddToCart, showError, titleSetting, descriptionSetting }) {
     var _a;
     const { product: productData, price } = product;
     console.log(product);
     const appendWidth = (url) => `${url}&width=250`;
     const translate = useTranslate();
+    const formattedPrice = i18n.formatCurrency(price.amount).replace(/\.00$/, "").replace(/\,00$/, "");
+    const currencySymbols = {
+      EUR: "\u20AC",
+      USD: "$",
+      AUD: "A$",
+      NZD: "NZ$",
+      GBP: "\xA3",
+      CAD: "C$"
+    };
+    const priceWithSymbol = formattedPrice.replace(/\b(EUR|USD|AUD|NZD|GBP|CAD)\b/g, (match) => currencySymbols[match]).replace(/\s+/g, "");
     const imageUrl = ((_a = productData.images.nodes[0]) == null ? void 0 : _a.url) ? appendWidth(productData.images.nodes[0].url) : appendWidth("https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png?format=webp&v=1530129081");
     return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(BlockStack2, { spacing: "tight", background: "subdued", border: "base", borderWidth: "base", padding: "base", children: [
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
@@ -20004,15 +20018,15 @@ ${errorInfo.componentStack}`);
                   /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Icon2, { source: "gift" }),
                   /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(Heading2, { level: 2, children: [
                     " ",
-                    translate("title")
+                    titleSetting
                   ] })
                 ]
               }
             ),
             /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(InlineLayout2, { display: Style.default(["none"]).when({ viewportInlineSize: { min: "small" } }, "auto"), children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(TextBlock2, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: translate("description") }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: descriptionSetting }),
               " ",
-              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: i18n.formatCurrency(price.amount).replace(/\.00$/, "").replace(/\,00$/, "") })
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: priceWithSymbol })
             ] }) })
           ] })
         }
@@ -20051,14 +20065,14 @@ ${errorInfo.componentStack}`);
                         blockAlignment: "start",
                         children: [
                           /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Icon2, { source: "gift" }),
-                          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Heading2, { level: 2, children: translate("title") })
+                          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Heading2, { level: 2, children: titleSetting })
                         ]
                       }
                     ),
                     /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(TextBlock2, { children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: translate("description") }),
+                      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: descriptionSetting }),
                       " ",
-                      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: i18n.formatCurrency(price.amount).replace(/\.00$/, "").replace(/\,00$/, "") })
+                      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: priceWithSymbol })
                     ] }),
                     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
                       InlineLayout2,
@@ -20083,9 +20097,9 @@ ${errorInfo.componentStack}`);
               ),
               /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(BlockStack2, { spacing: "base", display: Style.default(["auto"]).when({ viewportInlineSize: { min: "small" } }, "none"), children: [
                 /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(TextBlock2, { children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: translate("description") }),
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { children: descriptionSetting }),
                   " ",
-                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: i18n.formatCurrency(price.amount).replace(/\.00$/, "").replace(/\,00$/, "") })
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", children: priceWithSymbol })
                 ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
                   InlineLayout2,

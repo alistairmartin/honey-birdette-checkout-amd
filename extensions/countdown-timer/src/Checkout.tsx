@@ -51,8 +51,6 @@ function Extension() {
 
   return (
     <BlockStack>
-
-
       <Banner title={titleBeforeSetting} status={statusBeforeSetting} collapsible={collapsibleBeforeSetting}>
         <BlockSpacer spacing="base" />  
             <Text emphasis="bold" size="medium">

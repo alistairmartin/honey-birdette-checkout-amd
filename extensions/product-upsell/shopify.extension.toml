@@ -26,3 +26,16 @@ block_progress = true
   type = "variant_reference"
   name = "Select Variant"
   description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "title"
+  type = "multi_line_text_field"
+  name = "Title"
+  description = "Enter a title."
+  
+  [[extensions.settings.fields]]
+  key = "description"
+  type = "multi_line_text_field"
+  name = "Description"
+  description = "Enter a description."
+

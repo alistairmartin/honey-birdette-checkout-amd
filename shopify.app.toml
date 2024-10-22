@@ -3,7 +3,7 @@
 client_id = "1ff77f37375f9a6603f22ecd67e5e832"
 name = "Honey Birdette Checkout (AMD)"
 handle = "honey-birdette-checkout-amd"
-application_url = "https://track-mt-faces-maps.trycloudflare.com"
+application_url = "https://anger-mileage-colour-specials.trycloudflare.com"
 embedded = true
 
 [build]
@@ -17,9 +17,9 @@ scopes = "write_products"
 
 [auth]
 redirect_urls = [
-  "https://track-mt-faces-maps.trycloudflare.com/auth/callback",
-  "https://track-mt-faces-maps.trycloudflare.com/auth/shopify/callback",
-  "https://track-mt-faces-maps.trycloudflare.com/api/auth/callback"
+  "https://anger-mileage-colour-specials.trycloudflare.com/auth/callback",
+  "https://anger-mileage-colour-specials.trycloudflare.com/auth/shopify/callback",
+  "https://anger-mileage-colour-specials.trycloudflare.com/api/auth/callback"
 ]
 
 [webhooks]

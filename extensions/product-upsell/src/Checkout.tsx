@@ -36,8 +36,11 @@ function App() {
   const [showError, setShowError] = useState(false);
 
   const lines = useCartLines();
-  const { product } = useSettings();
+  const { product, title, description } = useSettings();
   const variantId = product ?? "gid://shopify/ProductVariant/41816694947955";
+
+  const titleSetting = title ?? 'Upsell Title';
+  const descriptionSetting = description ?? 'Upsell Description.';
 
   useEffect(() => {
     if (variantId) {
@@ -140,11 +143,13 @@ function App() {
       adding={adding}
       handleAddToCart={handleAddToCart}
       showError={showError}
+      titleSetting={titleSetting}
+      descriptionSetting={descriptionSetting}
     />
   );
 }
 
-function LoadingSkeleton() {
+function LoadingSkeleton({titleSetting,descriptionSetting}) {
   const translate = useTranslate();
   return (
 
@@ -162,10 +167,10 @@ function LoadingSkeleton() {
             columns={["auto", "fill"]}
             blockAlignment="start">
               <Icon source="bag"/>
-              <Heading level={2}>{translate('title')}</Heading>
+              <Heading level={2}>{titleSetting}</Heading>
             </InlineLayout>
             <TextBlock>
-              <Text>{translate('description')}</Text> <Text emphasis="bold">...</Text>
+              <Text>{descriptionSetting}</Text> <Text emphasis="bold">...</Text>
             </TextBlock>
           </BlockStack>
       </InlineLayout>
@@ -200,7 +205,7 @@ function LoadingSkeleton() {
   );
 }
 
-function ProductOffer({ product, i18n, adding, handleAddToCart, showError }) {
+function ProductOffer({ product, i18n, adding, handleAddToCart, showError, titleSetting, descriptionSetting }) {
   const { product: productData, price } = product;
   console.log(product)
   const appendWidth = (url) => `${url}&width=250`;
@@ -238,11 +243,11 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError }) {
             blockAlignment="start"
           >
             <Icon source="gift" />
-            <Heading level={2}> {translate('title')}</Heading>
+            <Heading level={2}> {titleSetting}</Heading>
           </InlineLayout>
           <InlineLayout display={Style.default(['none']).when({ viewportInlineSize: { min: 'small' } }, 'auto')}>
             <TextBlock>
-              <Text>{translate('description')}</Text>{" "}
+              <Text>{descriptionSetting}</Text>{" "}
               <Text emphasis="bold">
                 {priceWithSymbol}
               </Text>
@@ -279,10 +284,10 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError }) {
                 blockAlignment="start"
               >
                 <Icon source="gift" />
-                <Heading level={2}>{translate('title')}</Heading>
+                <Heading level={2}>{titleSetting}</Heading>
               </InlineLayout>
               <TextBlock>
-                <Text>{translate('description')}</Text>{" "}
+                <Text>{descriptionSetting}</Text>{" "}
                 <Text emphasis="bold">
                   {priceWithSymbol}
                 </Text>
@@ -312,7 +317,7 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError }) {
     
             <BlockStack spacing="base" display={Style.default(['auto']).when({ viewportInlineSize: { min: 'small' } }, 'none')}>
               <TextBlock>
-                <Text>{translate('description')}</Text>{" "}
+                <Text>{descriptionSetting}</Text>{" "}
                 <Text emphasis="bold">
                   {priceWithSymbol}
                 </Text>
