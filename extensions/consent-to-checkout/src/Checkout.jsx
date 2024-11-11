@@ -4,7 +4,8 @@ import {
   useExtensionCapability,
   useBuyerJourneyIntercept,
   BlockStack,
-  Banner
+  Banner,
+  Text,
 } from "@shopify/ui-extensions-react/checkout";
 import React, { useState } from "react";
 
@@ -43,7 +44,6 @@ function App() {
     return {
       behavior: "allow",
       perform: () => {
-        // Clear any validation errors if the terms are accepted
         clearValidationErrors();
       },
     };
