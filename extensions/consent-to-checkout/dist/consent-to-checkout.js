@@ -19146,8 +19146,8 @@
   // extensions/consent-to-checkout/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Checkbox/Checkbox.mjs
   var Checkbox = createRemoteComponent("Checkbox");
 
-  // extensions/consent-to-checkout/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Text/Text.mjs
-  var Text = createRemoteComponent("Text");
+  // extensions/consent-to-checkout/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Link/Link.mjs
+  var Link = createRemoteComponent("Link");
 
   // extensions/consent-to-checkout/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/render.mjs
   var import_react6 = __toESM(require_react(), 1);
@@ -19486,8 +19486,10 @@ ${errorInfo.componentStack}`);
   // extensions/consent-to-checkout/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Checkbox/Checkbox.mjs
   var Checkbox2 = createRemoteReactComponent(Checkbox);
 
-  // extensions/consent-to-checkout/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Text/Text.mjs
-  var Text2 = createRemoteReactComponent(Text);
+  // extensions/consent-to-checkout/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Link/Link.mjs
+  var Link2 = createRemoteReactComponent(Link, {
+    fragmentProps: ["overlay"]
+  });
 
   // extensions/consent-to-checkout/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/api.mjs
   var import_react12 = __toESM(require_react(), 1);
@@ -19566,15 +19568,13 @@ ${errorInfo.componentStack}`);
   // extensions/consent-to-checkout/src/Checkout.jsx
   var import_react15 = __toESM(require_react());
   var import_jsx_runtime4 = __toESM(require_jsx_runtime());
-  console.log("here lolcats");
-  var Checkout_default = reactExtension("purchase.checkout.contact.render-after", () => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(App, {}));
+  var Checkout_default = reactExtension("purchase.checkout.block.render", () => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(App, {}));
   function App() {
-    console.log("here lolcats");
     const [isAccepted, setIsAccepted] = (0, import_react15.useState)(false);
     const [validationError, setValidationError] = (0, import_react15.useState)("");
     const canBlockProgress = useExtensionCapability("block_progress");
-    useBuyerJourneyIntercept(({ canBlockProgress: canBlockProgress2 }) => {
-      if (canBlockProgress2 && !isAccepted) {
+    useBuyerJourneyIntercept(() => {
+      if (canBlockProgress && !isAccepted) {
         return {
           behavior: "block",
           reason: "Terms must be accepted",
@@ -19595,19 +19595,30 @@ ${errorInfo.componentStack}`);
     function clearValidationErrors() {
       setValidationError("");
     }
-    return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(BlockStack2, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(Banner2, { title: "Test", status: "warning", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Text2, { emphasis: "bold", size: "medium", children: "By placing your order, you agree to our Terms and Conditions and Privacy Policy" }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-        Checkbox2,
-        {
-          label: "By placing your order, you agree to our Terms and Conditions and Privacy Policy",
-          checked: isAccepted,
-          onChange: setIsAccepted,
-          error: validationError,
-          required: canBlockProgress
-        }
-      )
-    ] }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(BlockStack2, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Banner2, { status: "warning", title: "", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+      Checkbox2,
+      {
+        label: "By placing your order, you agree to our Terms and Conditions and Privacy Policy.",
+        checked: isAccepted,
+        onChange: (newValue) => {
+          setIsAccepted(newValue);
+          if (newValue)
+            clearValidationErrors();
+        },
+        error: validationError,
+        required: true,
+        children: [
+          "By placing your order, you agree to our",
+          " ",
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Link2, { to: "https://us.honeybirdette.com/pages/privacy-policy", children: "Privacy Policy" }),
+          " ",
+          "and",
+          " ",
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Link2, { to: "https://us.honeybirdette.com/pages/terms-conditions", children: "Terms and Conditions" }),
+          "."
+        ]
+      }
+    ) }) });
   }
 })();
 //# sourceMappingURL=consent-to-checkout.js.map

@@ -6,7 +6,7 @@
 api_version = "2024-10"
 
 [[extensions]]
-name = "consent-to-checkout"
+name = "(US) Consent To Checkout"
 handle = "consent-to-checkout"
 type = "ui_extension"
 
@@ -19,7 +19,7 @@ type = "ui_extension"
 
 [[extensions.targeting]]
 module = "./src/Checkout.jsx"
-target = "purchase.checkout.contact.render-after"
+target = "purchase.checkout.block.render"
 
 [extensions.capabilities]
 # Gives your extension access to directly query Shopify’s storefront API.
