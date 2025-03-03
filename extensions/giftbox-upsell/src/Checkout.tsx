@@ -38,6 +38,7 @@ function App() {
   const [adding, setAdding] = useState(false);
   const [showError, setShowError] = useState(false);
   const [productsValid, setProductsValid] = useState(true);
+  const [productsHaveNoGiftTag, setProductsHaveNoGiftTag] = useState(false);
 
   const lines = useCartLines();
   const { product } = useSettings();
@@ -61,7 +62,47 @@ function App() {
     console.log("shippingAddress:", shippingAddress);
     console.log("lines:", lines);
 
-    if (myshopifyDomain === 'honey-birdette-usa.myshopify.com' && shippingAddress?.countryCode === 'US') {
+
+    const productIds = lines.map(line => line.merchandise.product.id);
+    const fetchProductTags = async () => {
+          try {
+            const response = await query(
+              `query ($productIds: [ID!]!) {
+                  nodes(ids: $productIds) {
+                      ... on Product {
+                          id
+                          title
+                          tags
+                      }
+                  }
+              }`,
+              { variables: { productIds } } 
+          );
+
+
+            console.log("Fetched product data for giftbox:", response);
+
+            // Check if any product has the "no-giftbox" tag
+            const hasNoGiftboxTag = response.data.nodes.some(product => 
+                product.tags?.includes("no-giftbox")
+            );
+
+            if (hasNoGiftboxTag) {
+                console.log("Cart contains a product with 'no-giftbox' tag. Disabling giftbox offer.");
+                setProductsValid(false);
+                setProductsHaveNoGiftTag(false);
+                return;
+            }
+
+        } catch (error) {
+            console.error("Error fetching product tags:", error);
+        }
+    };  
+    fetchProductTags();
+    console.log("productsHaveNoGiftTag")
+    console.log(productsHaveNoGiftTag)
+
+    if (myshopifyDomain === 'honey-birdette-usa.myshopify.com' && shippingAddress?.countryCode === 'US' && productsHaveNoGiftTag === false) {
       console.log("Condition met: honeybirdette US shop and shipping to US");
 
       const items = lines.map(item => ({
@@ -114,7 +155,10 @@ function App() {
           setProductsValid(false);
         });
 
-    } else if(myshopifyDomain === 'honey-birdette-usa.myshopify.com'){
+    } else if(myshopifyDomain === 'honey-birdette-usa.myshopify.com' && productsHaveNoGiftTag === false){
+      setProductsValid(false); 
+
+    } else if(productsHaveNoGiftTag === true){
       setProductsValid(false); 
     } else {
       console.log("Condition not met: either not honeybirdette US or not shipping to US");

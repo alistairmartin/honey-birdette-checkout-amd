@@ -27,10 +27,7 @@ function Extension() {
   const [showBanner, setShowBanner] = useState(false);
   const [restrictedItems, setRestrictedItems] = useState([]);
 
-  const restrictedCountries = [
-    "EG", "SA", "AE", "QA", "OM", "BH", "YE", "IN", "PK", "MV", 
-    "TH", "VN", "ID", "MY", "SY", "IQ", "AF", "TR"
-  ];
+  const restrictedCountries = ["EG", "SA", "AE", "QA", "OM", "BH", "YE", "IN", "PK", "MV", "TH", "VN", "ID", "MY", "SY", "IQ", "AF", "TR"];
   const restrictedProductTypes = ["Toys", "Bondage"];
 
   useEffect(() => {

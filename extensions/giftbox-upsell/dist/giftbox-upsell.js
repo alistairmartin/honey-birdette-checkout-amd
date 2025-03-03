@@ -19847,6 +19847,7 @@ ${errorInfo.componentStack}`);
     const [adding, setAdding] = (0, import_react22.useState)(false);
     const [showError, setShowError] = (0, import_react22.useState)(false);
     const [productsValid, setProductsValid] = (0, import_react22.useState)(true);
+    const [productsHaveNoGiftTag, setProductsHaveNoGiftTag] = (0, import_react22.useState)(false);
     const lines = useCartLines();
     const { product } = useSettings();
     const variantId = product != null ? product : "gid://shopify/ProductVariant/41816694947955";
@@ -19865,7 +19866,42 @@ ${errorInfo.componentStack}`);
       console.log("myshopifyDomain:", myshopifyDomain);
       console.log("shippingAddress:", shippingAddress);
       console.log("lines:", lines);
-      if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && (shippingAddress == null ? void 0 : shippingAddress.countryCode) === "US") {
+      const productIds = lines.map((line) => line.merchandise.product.id);
+      const fetchProductTags = () => __async(this, null, function* () {
+        try {
+          const response = yield query(
+            `query ($productIds: [ID!]!) {
+                  nodes(ids: $productIds) {
+                      ... on Product {
+                          id
+                          title
+                          tags
+                      }
+                  }
+              }`,
+            { variables: { productIds } }
+          );
+          console.log("Fetched product data for giftbox:", response);
+          const hasNoGiftboxTag = response.data.nodes.some(
+            (product2) => {
+              var _a;
+              return (_a = product2.tags) == null ? void 0 : _a.includes("no-giftbox");
+            }
+          );
+          if (hasNoGiftboxTag) {
+            console.log("Cart contains a product with 'no-giftbox' tag. Disabling giftbox offer.");
+            setProductsValid(false);
+            setProductsHaveNoGiftTag(false);
+            return;
+          }
+        } catch (error) {
+          console.error("Error fetching product tags:", error);
+        }
+      });
+      fetchProductTags();
+      console.log("productsHaveNoGiftTag");
+      console.log(productsHaveNoGiftTag);
+      if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && (shippingAddress == null ? void 0 : shippingAddress.countryCode) === "US" && productsHaveNoGiftTag === false) {
         console.log("Condition met: honeybirdette US shop and shipping to US");
         const items = lines.map((item) => ({
           sku: item.merchandise.sku,
@@ -19906,7 +19942,9 @@ ${errorInfo.componentStack}`);
           console.error("RESPONSE - Error:", error);
           setProductsValid(false);
         });
-      } else if (myshopifyDomain === "honey-birdette-usa.myshopify.com") {
+      } else if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && productsHaveNoGiftTag === false) {
+        setProductsValid(false);
+      } else if (productsHaveNoGiftTag === true) {
         setProductsValid(false);
       } else {
         console.log("Condition not met: either not honeybirdette US or not shipping to US");

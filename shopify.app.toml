@@ -3,7 +3,7 @@
 client_id = "1ff77f37375f9a6603f22ecd67e5e832"
 name = "Honey Birdette Checkout (AMD)"
 handle = "honey-birdette-checkout-amd"
-application_url = "https://relatively-russia-proceed-hiking.trycloudflare.com"
+application_url = "https://decisions-contamination-arc-specialist.trycloudflare.com"
 embedded = true
 
 [build]
@@ -17,9 +17,9 @@ scopes = "write_products"
 
 [auth]
 redirect_urls = [
-  "https://relatively-russia-proceed-hiking.trycloudflare.com/auth/callback",
-  "https://relatively-russia-proceed-hiking.trycloudflare.com/auth/shopify/callback",
-  "https://relatively-russia-proceed-hiking.trycloudflare.com/api/auth/callback"
+  "https://decisions-contamination-arc-specialist.trycloudflare.com/auth/callback",
+  "https://decisions-contamination-arc-specialist.trycloudflare.com/auth/shopify/callback",
+  "https://decisions-contamination-arc-specialist.trycloudflare.com/api/auth/callback"
 ]
 
 [webhooks]
