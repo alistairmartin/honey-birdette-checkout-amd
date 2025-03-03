@@ -36,11 +36,12 @@ function App() {
   const [showError, setShowError] = useState(false);
 
   const lines = useCartLines();
-  const { product, title, description } = useSettings();
+  const { product, title, description, gwp } = useSettings();
   const variantId = product ?? "gid://shopify/ProductVariant/41816694947955";
 
   const titleSetting = title ?? 'Upsell Title';
   const descriptionSetting = description ?? 'Upsell Description.';
+  const gwpSetting = gwp ?? false;
 
   useEffect(() => {
     if (variantId) {
@@ -145,6 +146,7 @@ function App() {
       showError={showError}
       titleSetting={titleSetting}
       descriptionSetting={descriptionSetting}
+      gwpSetting={gwpSetting}
     />
   );
 }
@@ -165,8 +167,7 @@ function LoadingSkeleton({titleSetting,descriptionSetting}) {
             padding={["none", "none", "tight", "none"]}
             spacing="base"
             columns={["auto", "fill"]}
-            blockAlignment="start">
-              <Icon source="bag"/>
+            blockAlignment="start"> 
               <Heading level={2}>{titleSetting}</Heading>
             </InlineLayout>
             <TextBlock>
@@ -205,7 +206,7 @@ function LoadingSkeleton({titleSetting,descriptionSetting}) {
   );
 }
 
-function ProductOffer({ product, i18n, adding, handleAddToCart, showError, titleSetting, descriptionSetting }) {
+function ProductOffer({ product, i18n, adding, handleAddToCart, showError, titleSetting, descriptionSetting, gwpSetting }) {
   const { product: productData, price } = product;
   console.log(product)
   const appendWidth = (url) => `${url}&width=250`;
@@ -242,7 +243,7 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError, title
             columns={["auto", "fill"]}
             blockAlignment="start"
           >
-            <Icon source="gift" />
+             {gwpSetting && <Icon source="bag" />}
             <Heading level={2}> {titleSetting}</Heading>
           </InlineLayout>
           <InlineLayout display={Style.default(['none']).when({ viewportInlineSize: { min: 'small' } }, 'auto')}>
@@ -283,13 +284,13 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError, title
                 columns={["auto", "auto"]}
                 blockAlignment="start"
               >
-                <Icon source="gift" />
+                {gwpSetting && <Icon source="gift" />}
                 <Heading level={2}>{titleSetting}</Heading>
               </InlineLayout>
               <TextBlock>
                 <Text>{descriptionSetting}</Text>{" "}
                 <Text emphasis="bold">
-                  {priceWithSymbol}
+                  {gwpSetting ? "FREE" : priceWithSymbol }
                 </Text>
               </TextBlock>
 
@@ -305,7 +306,7 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError, title
                       accessibilityLabel={`Add ${productData.title} to cart`}
                       onPress={() => handleAddToCart(product.id)}
                     >
-                      {translate('add-to-cart')}
+                         {gwpSetting ? translate('add-free-gift') : translate('add-to-cart') }
                     </Button>
                   </View>
 
@@ -319,7 +320,7 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError, title
               <TextBlock>
                 <Text>{descriptionSetting}</Text>{" "}
                 <Text emphasis="bold">
-                  {priceWithSymbol}
+                  {gwpSetting ? "FREE" : priceWithSymbol }
                 </Text>
               </TextBlock>
 
@@ -335,7 +336,7 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError, title
                 accessibilityLabel={`Add ${productData.title} to cart`}
                 onPress={() => handleAddToCart(product.id)}
               >
-                {translate('add-to-cart')}
+                {gwpSetting ? translate('add-free-gift') : translate('add-to-cart') }
               </Button>
 
 

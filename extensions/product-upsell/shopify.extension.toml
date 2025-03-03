@@ -39,3 +39,10 @@ block_progress = true
   name = "Description"
   description = "Enter a description."
 
+
+  [[extensions.settings.fields]]
+  key = "gwp"
+  type = "boolean"
+  name = "Gift With Purchase?"
+  description = "Must make the product $0 or add an automatic discout or Shopify Function."
+  default = false

@@ -1,0 +1,351 @@
+# Learn more about configuring your checkout UI extension:
+# https://shopify.dev/api/checkout-extensions/checkout/configuration
+
+# The version of APIs your extension will receive. Learn more:
+# https://shopify.dev/docs/api/usage/versioning
+api_version = "2025-01"
+
+[[extensions]]
+name = "product-upsells"
+handle = "product-upsells"
+type = "ui_extension"
+
+
+# Controls where in Shopify your extension will be injected,
+# and the file that contains your extension’s source code. Learn more:
+# https://shopify.dev/docs/api/checkout-ui-extensions/unstable/extension-targets-overview
+
+[[extensions.targeting]]
+module = "./src/Checkout.tsx"
+target = "purchase.checkout.block.render"
+
+[extensions.capabilities]
+# Gives your extension access to directly query Shopify’s storefront API.
+# https://shopify.dev/docs/api/checkout-ui-extensions/unstable/configuration#api-access
+api_access = true
+
+# Gives your extension access to make external network calls, using the
+# JavaScript `fetch()` API. Learn more:
+# https://shopify.dev/docs/api/checkout-ui-extensions/unstable/configuration#network-access
+# network_access = true
+
+# Loads metafields on checkout resources, including the cart,
+# products, customers, and more. Learn more:
+# https://shopify.dev/docs/api/checkout-ui-extensions/unstable/configuration#metafields
+
+# [[extensions.metafields]]
+# namespace = "my_namespace"
+# key = "my_key"
+# [[extensions.metafields]]
+# namespace = "my_namespace"
+# key = "my_other_key"
+
+# Defines settings that will be collected from merchants installing
+# your extension. Learn more:
+# https://shopify.dev/docs/api/checkout-ui-extensions/unstable/configuration#settings-definition
+
+# [extensions.settings]
+# [[extensions.settings.fields]]
+# key = "banner_title"
+# type = "single_line_text_field"
+# name = "Banner title"
+# description = "Enter a title for the banner"
+
+
+# The settings below are just examples—customize them as needed.
+
+
+# shopify.extension.toml
+[settings]
+
+  # --- Product 1 ---
+  [[extensions.settings.fields]]
+  key = "product1"
+  type = "variant_reference"
+  name = "Select Variant 1"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product1_is_gwp"
+  type = "checkbox"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product1_is_giftbox"
+  type = "checkbox"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product1_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (1)"
+  description = "Enter a custom upsell title for product 1"
+
+  [[extensions.settings.fields]]
+  key = "product1_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (1)"
+  description = "Enter a custom upsell description for product 1"
+
+
+  # --- Product 2 ---
+  [[extensions.settings.fields]]
+  key = "product2"
+  type = "variant_reference"
+  name = "Select Variant 2"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product2_is_gwp"
+  type = "checkbox"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product2_is_giftbox"
+  type = "checkbox"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product2_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (2)"
+  description = "Enter a custom upsell title for product 2"
+
+  [[extensions.settings.fields]]
+  key = "product2_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (2)"
+  description = "Enter a custom upsell description for product 2"
+
+
+  # --- Product 3 ---
+  [[extensions.settings.fields]]
+  key = "product3"
+  type = "variant_reference"
+  name = "Select Variant 3"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product3_is_gwp"
+  type = "checkbox"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product3_is_giftbox"
+  type = "checkbox"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product3_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (3)"
+  description = "Enter a custom upsell title for product 3"
+
+  [[extensions.settings.fields]]
+  key = "product3_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (3)"
+  description = "Enter a custom upsell description for product 3"
+
+
+  # --- Product 4 ---
+  [[extensions.settings.fields]]
+  key = "product4"
+  type = "variant_reference"
+  name = "Select Variant 4"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product4_is_gwp"
+  type = "checkbox"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product4_is_giftbox"
+  type = "checkbox"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product4_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (4)"
+  description = "Enter a custom upsell title for product 4"
+
+  [[extensions.settings.fields]]
+  key = "product4_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (4)"
+  description = "Enter a custom upsell description for product 4"
+
+
+  # --- Product 5 ---
+  [[extensions.settings.fields]]
+  key = "product5"
+  type = "variant_reference"
+  name = "Select Variant 5"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product5_is_gwp"
+  type = "checkbox"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product5_is_giftbox"
+  type = "checkbox"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product5_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (5)"
+  description = "Enter a custom upsell title for product 5"
+
+  [[extensions.settings.fields]]
+  key = "product5_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (5)"
+  description = "Enter a custom upsell description for product 5"
+
+
+  # --- Product 6 ---
+  [[extensions.settings.fields]]
+  key = "product6"
+  type = "variant_reference"
+  name = "Select Variant 6"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product6_is_gwp"
+  type = "checkbox"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product6_is_giftbox"
+  type = "checkbox"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product6_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (6)"
+  description = "Enter a custom upsell title for product 6"
+
+  [[extensions.settings.fields]]
+  key = "product6_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (6)"
+  description = "Enter a custom upsell description for product 6"
+
+
+  # --- Product 7 ---
+  [[extensions.settings.fields]]
+  key = "product7"
+  type = "variant_reference"
+  name = "Select Variant 7"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product7_is_gwp"
+  type = "checkbox"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product7_is_giftbox"
+  type = "checkbox"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product7_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (7)"
+  description = "Enter a custom upsell title for product 7"
+
+  [[extensions.settings.fields]]
+  key = "product7_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (7)"
+  description = "Enter a custom upsell description for product 7"
+
+
+  # --- Product 8 ---
+  [[extensions.settings.fields]]
+  key = "product8"
+  type = "variant_reference"
+  name = "Select Variant 8"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product8_is_gwp"
+  type = "checkbox"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product8_is_giftbox"
+  type = "checkbox"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product8_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (8)"
+  description = "Enter a custom upsell title for product 8"
+
+  [[extensions.settings.fields]]
+  key = "product8_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (8)"
+  description = "Enter a custom upsell description for product 8"
+
+
+  # --- Product 9 ---
+  [[extensions.settings.fields]]
+  key = "product9"
+  type = "variant_reference"
+  name = "Select Variant 9"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product9_is_gwp"
+  type = "checkbox"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product9_is_giftbox"
+  type = "checkbox"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product9_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (9)"
+  description = "Enter a custom upsell title for product 9"
+
+  [[extensions.settings.fields]]
+  key = "product9_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (9)"
+  description = "Enter a custom upsell description for product 9"
+
+# Optional text settings (for titles, styling, etc.)
+giftbox_section_title  = { type = "singleLineText", label = "Giftbox Section Title", default = "Giftbox Upsell" }
+product_section_title  = { type = "singleLineText", label = "Product Section Title", default = "Product Upsell" }
+scroll_container_height = { type = "singleLineText", label = "Scroll Container Max Height", default = "300px" }

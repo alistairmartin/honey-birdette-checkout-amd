@@ -19106,7 +19106,7 @@
     return [hasChanged ? normalizedNewValue : IGNORE, hotSwaps];
   }
 
-  // node_modules/@shopify/ui-extensions/build/esm/utilities/registration.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/utilities/registration.mjs
   function createExtensionRegistrationFunction() {
     const extensionWrapper = (target, implementation) => {
       var _shopify;
@@ -19137,10 +19137,10 @@
     return extensionWrapper;
   }
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/extension.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/extension.mjs
   var extension = createExtensionRegistrationFunction();
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/style/memoize.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/style/memoize.mjs
   var NOT_FOUND = "NOT_FOUND";
   function createSingletonCache(equals) {
     let entry;
@@ -19250,7 +19250,7 @@
     return memoized;
   }
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/style/isEqual.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/style/isEqual.mjs
   function isEqual(first, second) {
     if (Object.is(first, second)) {
       return true;
@@ -19271,7 +19271,7 @@
     return false;
   }
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/style/style.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/style/style.mjs
   var MAX_CACHE_SIZE = 50;
   var MEMOIZE_OPTIONS = {
     equalityCheck: isEqual,
@@ -19326,40 +19326,40 @@
     return value !== null && typeof value === "object" && "conditionals" in value;
   }
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Banner/Banner.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Banner/Banner.mjs
   var Banner = createRemoteComponent("Banner");
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/BlockStack/BlockStack.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/BlockStack/BlockStack.mjs
   var BlockStack = createRemoteComponent("BlockStack");
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Button/Button.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Button/Button.mjs
   var Button = createRemoteComponent("Button");
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Heading/Heading.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Heading/Heading.mjs
   var Heading = createRemoteComponent("Heading");
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Icon/Icon.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Icon/Icon.mjs
   var Icon = createRemoteComponent("Icon");
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Image/Image.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Image/Image.mjs
   var Image = createRemoteComponent("Image");
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/InlineLayout/InlineLayout.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/InlineLayout/InlineLayout.mjs
   var InlineLayout = createRemoteComponent("InlineLayout");
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/SkeletonImage/SkeletonImage.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/SkeletonImage/SkeletonImage.mjs
   var SkeletonImage = createRemoteComponent("SkeletonImage");
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Text/Text.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/Text/Text.mjs
   var Text = createRemoteComponent("Text");
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/TextBlock/TextBlock.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/TextBlock/TextBlock.mjs
   var TextBlock = createRemoteComponent("TextBlock");
 
-  // node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/View/View.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions/build/esm/surfaces/checkout/components/View/View.mjs
   var View = createRemoteComponent("View");
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/render.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/render.mjs
   var import_react6 = __toESM(require_react(), 1);
 
   // node_modules/@remote-ui/react/build/esm/render.mjs
@@ -19634,11 +19634,11 @@
     });
   }
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/context.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/context.mjs
   var import_react5 = __toESM(require_react(), 1);
   var ExtensionApiContext = /* @__PURE__ */ (0, import_react5.createContext)(null);
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/render.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/render.mjs
   var import_jsx_runtime3 = __toESM(require_jsx_runtime(), 1);
   function reactExtension(target, render3) {
     return extension(target, (root, api) => __async(this, null, function* () {
@@ -19687,45 +19687,45 @@ ${errorInfo.componentStack}`);
     }
   };
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Banner/Banner.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Banner/Banner.mjs
   var Banner2 = createRemoteReactComponent(Banner);
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/BlockStack/BlockStack.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/BlockStack/BlockStack.mjs
   var BlockStack2 = createRemoteReactComponent(BlockStack);
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Button/Button.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Button/Button.mjs
   var Button2 = createRemoteReactComponent(Button, {
     fragmentProps: ["overlay"]
   });
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Heading/Heading.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Heading/Heading.mjs
   var Heading2 = createRemoteReactComponent(Heading);
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Icon/Icon.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Icon/Icon.mjs
   var Icon2 = createRemoteReactComponent(Icon);
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Image/Image.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Image/Image.mjs
   var Image2 = createRemoteReactComponent(Image);
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/InlineLayout/InlineLayout.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/InlineLayout/InlineLayout.mjs
   var InlineLayout2 = createRemoteReactComponent(InlineLayout);
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/SkeletonImage/SkeletonImage.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/SkeletonImage/SkeletonImage.mjs
   var SkeletonImage2 = createRemoteReactComponent(SkeletonImage);
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Text/Text.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/Text/Text.mjs
   var Text2 = createRemoteReactComponent(Text);
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/TextBlock/TextBlock.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/TextBlock/TextBlock.mjs
   var TextBlock2 = createRemoteReactComponent(TextBlock);
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/View/View.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/components/View/View.mjs
   var View2 = createRemoteReactComponent(View);
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/api.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/api.mjs
   var import_react19 = __toESM(require_react(), 1);
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/errors.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/errors.mjs
   var CheckoutUIExtensionError = class extends Error {
     constructor(...args) {
       super(...args);
@@ -19745,7 +19745,7 @@ ${errorInfo.componentStack}`);
     }
   };
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/api.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/api.mjs
   function useApi(_target) {
     const api = (0, import_react19.useContext)(ExtensionApiContext);
     if (api == null) {
@@ -19754,7 +19754,7 @@ ${errorInfo.componentStack}`);
     return api;
   }
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/subscription.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/subscription.mjs
   var import_react20 = __toESM(require_react(), 1);
   function useSubscription(subscription) {
     const [, setValue] = (0, import_react20.useState)(subscription.current);
@@ -19776,7 +19776,7 @@ ${errorInfo.componentStack}`);
     return subscription.current;
   }
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/shipping-address.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/shipping-address.mjs
   function useShippingAddress() {
     const shippingAddress = useApi().shippingAddress;
     if (!shippingAddress) {
@@ -19785,7 +19785,7 @@ ${errorInfo.componentStack}`);
     return useSubscription(shippingAddress);
   }
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/cart-lines.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/cart-lines.mjs
   function useCartLines() {
     const {
       lines
@@ -19800,12 +19800,12 @@ ${errorInfo.componentStack}`);
     throw new ExtensionHasNoMethodError("applyCartLinesChange", api.extension.target);
   }
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/shop.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/shop.mjs
   function useShop() {
     return useApi().shop;
   }
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/translate.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/translate.mjs
   var import_react21 = __toESM(require_react(), 1);
   function useTranslate() {
     const {
@@ -19828,7 +19828,7 @@ ${errorInfo.componentStack}`);
     return translate;
   }
 
-  // node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/settings.mjs
+  // extensions/giftbox-upsell/node_modules/@shopify/ui-extensions-react/build/esm/surfaces/checkout/hooks/settings.mjs
   function useSettings() {
     const settings = useSubscription(useApi().settings);
     return settings;
