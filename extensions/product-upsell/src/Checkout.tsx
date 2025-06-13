@@ -261,7 +261,7 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError, title
         <InlineLayout
           padding={["none", "none", "tight", "none"]}
           spacing="base"
-          columns={Style.default(['30%', '70%']).when({ viewportInlineSize: { min: 'small' } }, ['20%', 'fill'])}
+          columns={Style.default(['20%', '80%']).when({ viewportInlineSize: { min: 'small' } }, ['20%', 'fill'])}
           blockAlignment="center"
         >
           <View>

@@ -6,8 +6,8 @@
 api_version = "2025-01"
 
 [[extensions]]
-name = "Product Upsells"
-handle = "Product-upsells"
+name = "product-upsells"
+handle = "product-upsells"
 type = "ui_extension"
 
 
@@ -62,7 +62,7 @@ api_access = true
   [[extensions.settings.fields]]
   key = "product1"
   type = "variant_reference"
-  name = "PRODUCT #1"
+  name = "Select Variant 1"
   description = "Choose a product variant for the upsell"
 
   [[extensions.settings.fields]]
@@ -80,13 +80,13 @@ api_access = true
   [[extensions.settings.fields]]
   key = "product1_title"
   type = "single_line_text_field"
-  name = "Title"
+  name = "Upsell Title (1)"
   description = "Enter a custom upsell title for product 1"
 
   [[extensions.settings.fields]]
   key = "product1_description"
   type = "single_line_text_field"
-  name = "Description"
+  name = "Upsell Description (1)"
   description = "Enter a custom upsell description for product 1"
 
 
@@ -94,7 +94,7 @@ api_access = true
   [[extensions.settings.fields]]
   key = "product2"
   type = "variant_reference"
-  name = "PRODUCT #2"
+  name = "Select Variant 2"
   description = "Choose a product variant for the upsell"
 
   [[extensions.settings.fields]]
@@ -112,13 +112,13 @@ api_access = true
   [[extensions.settings.fields]]
   key = "product2_title"
   type = "single_line_text_field"
-  name = "Title"
+  name = "Upsell Title (2)"
   description = "Enter a custom upsell title for product 2"
 
   [[extensions.settings.fields]]
   key = "product2_description"
   type = "single_line_text_field"
-  name = "Description"
+  name = "Upsell Description (2)"
   description = "Enter a custom upsell description for product 2"
 
 
@@ -126,7 +126,7 @@ api_access = true
   [[extensions.settings.fields]]
   key = "product3"
   type = "variant_reference"
-    name = "PRODUCT #3"
+  name = "Select Variant 3"
   description = "Choose a product variant for the upsell"
 
   [[extensions.settings.fields]]
@@ -144,13 +144,13 @@ api_access = true
   [[extensions.settings.fields]]
   key = "product3_title"
   type = "single_line_text_field"
-  name = "Title"
+  name = "Upsell Title (3)"
   description = "Enter a custom upsell title for product 3"
 
   [[extensions.settings.fields]]
   key = "product3_description"
   type = "single_line_text_field"
-  name = "Description"
+  name = "Upsell Description (3)"
   description = "Enter a custom upsell description for product 3"
 
 
@@ -158,7 +158,7 @@ api_access = true
   [[extensions.settings.fields]]
   key = "product4"
   type = "variant_reference"
-  name = "PRODUCT #4"
+  name = "Select Variant 4"
   description = "Choose a product variant for the upsell"
 
   [[extensions.settings.fields]]
@@ -176,13 +176,172 @@ api_access = true
   [[extensions.settings.fields]]
   key = "product4_title"
   type = "single_line_text_field"
-  name = "Title"
+  name = "Upsell Title (4)"
   description = "Enter a custom upsell title for product 4"
 
   [[extensions.settings.fields]]
   key = "product4_description"
   type = "single_line_text_field"
-  name = "Description"
+  name = "Upsell Description (4)"
   description = "Enter a custom upsell description for product 4"
 
+
+  # --- Product 5 ---
+  [[extensions.settings.fields]]
+  key = "product5"
+  type = "variant_reference"
+  name = "Select Variant 5"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product5_is_gwp"
+  type = "boolean"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product5_is_giftbox"
+  type = "boolean"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product5_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (5)"
+  description = "Enter a custom upsell title for product 5"
+
+  [[extensions.settings.fields]]
+  key = "product5_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (5)"
+  description = "Enter a custom upsell description for product 5"
+
+
+  # --- Product 6 ---
+  [[extensions.settings.fields]]
+  key = "product6"
+  type = "variant_reference"
+  name = "Select Variant 6"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product6_is_gwp"
+  type = "boolean"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product6_is_giftbox"
+  type = "boolean"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product6_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (6)"
+  description = "Enter a custom upsell title for product 6"
+
+  [[extensions.settings.fields]]
+  key = "product6_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (6)"
+  description = "Enter a custom upsell description for product 6"
+
+
+  # --- Product 7 ---
+  [[extensions.settings.fields]]
+  key = "product7"
+  type = "variant_reference"
+  name = "Select Variant 7"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product7_is_gwp"
+  type = "boolean"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product7_is_giftbox"
+  type = "boolean"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product7_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (7)"
+  description = "Enter a custom upsell title for product 7"
+
+  [[extensions.settings.fields]]
+  key = "product7_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (7)"
+  description = "Enter a custom upsell description for product 7"
+
+
+  # --- Product 8 ---
+  [[extensions.settings.fields]]
+  key = "product8"
+  type = "variant_reference"
+  name = "Select Variant 8"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product8_is_gwp"
+  type = "boolean"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product8_is_giftbox"
+  type = "boolean"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product8_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (8)"
+  description = "Enter a custom upsell title for product 8"
+
+  [[extensions.settings.fields]]
+  key = "product8_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (8)"
+  description = "Enter a custom upsell description for product 8"
+
+
+  # --- Product 9 ---
+  [[extensions.settings.fields]]
+  key = "product9"
+  type = "variant_reference"
+  name = "Select Variant 9"
+  description = "Choose a product variant for the upsell"
+
+  [[extensions.settings.fields]]
+  key = "product9_is_gwp"
+  type = "boolean"
+  name = "Is GWP?"
+  description = "Check if this upsell is a GWP"
+
+  [[extensions.settings.fields]]
+  key = "product9_is_giftbox"
+  type = "boolean"
+  name = "Is Giftbox?"
+  description = "Check if this upsell is a Giftbox"
+
+  [[extensions.settings.fields]]
+  key = "product9_title"
+  type = "single_line_text_field"
+  name = "Upsell Title (9)"
+  description = "Enter a custom upsell title for product 9"
+
+  [[extensions.settings.fields]]
+  key = "product9_description"
+  type = "single_line_text_field"
+  name = "Upsell Description (9)"
+  description = "Enter a custom upsell description for product 9"
 

@@ -25,6 +25,8 @@ import {
   useTranslate,
   Style,
   Icon,
+  useShop,         
+  useShippingAddress,
 } from "@shopify/ui-extensions-react/checkout";
 
 // Set up the entry point for the extension
@@ -32,6 +34,8 @@ export default reactExtension("purchase.checkout.block.render", () => <App />);
 
 function App() {
   const { query, i18n } = useApi();
+  const { myshopifyDomain } = useShop();
+  const shippingAddress = useShippingAddress();
   const applyCartLinesChange = useApplyCartLinesChange();
 
   // Store variants in state
@@ -40,14 +44,12 @@ function App() {
   const [variant3, setVariant3] = useState(null);
   const [variant4, setVariant4] = useState(null);
   const [variant5, setVariant5] = useState(null);
-  const [variant6, setVariant6] = useState(null);
-  const [variant7, setVariant7] = useState(null);
-  const [variant8, setVariant8] = useState(null);
-  const [variant9, setVariant9] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
   const [showError, setShowError] = useState(false);
+  const [giftboxValid, setGiftboxValid] = useState(true);
+  const [loadingGiftCheck, setLoadingGiftCheck] = useState(true);
 
   // Grab active cart lines and settings
   const lines = useCartLines();
@@ -87,34 +89,6 @@ function App() {
     product5_title,
     product5_description,
   
-    // Product 6
-    product6,
-    product6_is_gwp,
-    product6_is_giftbox,
-    product6_title,
-    product6_description,
-  
-    // Product 7
-    product7,
-    product7_is_gwp,
-    product7_is_giftbox,
-    product7_title,
-    product7_description,
-  
-    // Product 8
-    product8,
-    product8_is_gwp,
-    product8_is_giftbox,
-    product8_title,
-    product8_description,
-  
-    // Product 9
-    product9,
-    product9_is_gwp,
-    product9_is_giftbox,
-    product9_title,
-    product9_description,
-
     giftbox_section_title,
     product_section_title,
     scroll_container_height,
@@ -122,14 +96,10 @@ function App() {
 
   // Provide fallback variant IDs if none are configured in settings
   const variantId1 = product1 ?? "gid://shopify/ProductVariant/41816694947955";
-  const variantId2 = product2 ?? "gid://shopify/ProductVariant/41816694947955";
-  const variantId3 = product3 ?? "gid://shopify/ProductVariant/41816694947955";
-  const variantId4 = product4 ?? "gid://shopify/ProductVariant/41816694947955";
+  const variantId2 = product2 ?? "gid://shopify/ProductVariant/41816704516211";
+  const variantId3 = product3 ?? "gid://shopify/ProductVariant/41816701599859";
+  const variantId4 = product4 ?? "gid://shopify/ProductVariant/41816701501555";
   const variantId5 = product5 ?? "gid://shopify/ProductVariant/41816694947955";
-  const variantId6 = product6 ?? "gid://shopify/ProductVariant/41816694947955";
-  const variantId7 = product7 ?? "gid://shopify/ProductVariant/41816694947955";
-  const variantId8 = product8 ?? "gid://shopify/ProductVariant/41816694947955";
-  const variantId9 = product9 ?? "gid://shopify/ProductVariant/41816694947955";
 
 // Product 1
 const titleSetting1 = product1_title ?? "Upsell Title";
@@ -161,29 +131,131 @@ const descriptionSetting5 = product5_description ?? "Upsell Description.";
 const isGWP5 = product5_is_gwp ?? false;
 const isGiftbox5 = product5_is_giftbox ?? false;
 
-// Product 6
-const titleSetting6 = product6_title ?? "Upsell Title";
-const descriptionSetting6 = product6_description ?? "Upsell Description.";
-const isGWP6 = product6_is_gwp ?? false;
-const isGiftbox6 = product6_is_giftbox ?? false;
 
-// Product 7
-const titleSetting7 = product7_title ?? "Upsell Title";
-const descriptionSetting7 = product7_description ?? "Upsell Description.";
-const isGWP7 = product7_is_gwp ?? false;
-const isGiftbox7 = product7_is_giftbox ?? false;
 
-// Product 8
-const titleSetting8 = product8_title ?? "Upsell Title";
-const descriptionSetting8 = product8_description ?? "Upsell Description.";
-const isGWP8 = product8_is_gwp ?? false;
-const isGiftbox8 = product8_is_giftbox ?? false;
+useEffect(() => {
+  async function checkGiftboxes() {
+    // // If no giftbox items at all, no need to block anything
 
-// Product 9
-const titleSetting9 = product9_title ?? "Upsell Title";
-const descriptionSetting9 = product9_description ?? "Upsell Description.";
-const isGWP9 = product9_is_gwp ?? false;
-const isGiftbox9 = product9_is_giftbox ?? false;
+    // let hasNoGiftboxProductTag = false;
+
+    // console.log("checkGiftboxes()")
+    // const anyGiftbox = [
+    //   isGiftbox1,
+    //   isGiftbox2,
+    //   isGiftbox3,
+    //   isGiftbox4,
+    //   isGiftbox5,
+    // ].some(Boolean);
+
+    // console.log(anyGiftbox)
+
+    // // If we don't even have a giftbox product, skip
+    // if (!anyGiftbox) {
+    //   setGiftboxValid(true);
+    //   setLoadingGiftCheck(false);
+    //   return;
+    // }
+
+    // // 1) Check for "no-giftbox" tags in cart lines
+    // try {
+    //   const productIds = lines.map((line) => line.merchandise.product.id);
+    //   if (productIds.length > 0) {
+    //     const response = await query(
+    //       `
+    //       query ($productIds: [ID!]!) {
+    //         nodes(ids: $productIds) {
+    //           ... on Product {
+    //             id
+    //             tags
+    //           }
+    //         }
+    //       }
+    //       `,
+    //       { variables: { productIds } }
+    //     );
+
+    //     console.log("response")
+    //     console.log(response)
+    //     // If ANY product has "no-giftbox" -> disable giftbox
+    //     const hasNoGiftboxTag = response.data.nodes.some((p) =>
+    //       p?.tags?.includes("no-giftbox")
+    //     );
+
+    //     hasNoGiftboxProductTag = hasNoGiftboxTag;
+
+    //     console.log(`hasNoGiftboxTag: ${hasNoGiftboxTag}`)
+    //     if (hasNoGiftboxTag === false) {
+    //       setGiftboxValid(true);
+    //       setLoadingGiftCheck(false);
+    //       return;
+    //     }
+    //   }
+    // } catch (err) {
+    //   console.error("Error fetching product tags for giftbox:", err);
+    //   // If error, let's be safe and hide giftbox
+    //   setGiftboxValid(true);
+    //   setLoadingGiftCheck(false);
+    //   return;
+    // }
+
+    // // 2) If domain = honey-birdette-usa & shipping to US, call external inventory check
+    // if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && shippingAddress?.countryCode === "US" && hasNoGiftboxProductTag === false) {
+    //   console.log("Condition met: honeybirdette US shop and shipping to US");
+    //   try {
+    //     const items = lines.map((item) => ({
+    //       sku: item.merchandise.sku,
+    //       quantity: item.quantity,
+    //     }));
+
+    //     const deliveryValidatorEndpoint = "https://hb-stores-api-prod.herokuapp.com/check-inventory-v2";
+
+    //     const reqBody = {
+    //       countryCode: shippingAddress.countryCode,
+    //       items,
+    //     };
+
+    //     const fetchResp = await fetch(deliveryValidatorEndpoint, {
+    //       method: "POST",
+    //       headers: { "Content-Type": "application/json; charset=utf-8" },
+    //       body: JSON.stringify(reqBody),
+    //     });
+
+    //     const data = await fetchResp.json();
+    //     const products = data.inventoryData;
+    //     let allProductsValid = true;
+    //     products.forEach((p) => {
+    //       if (!p.isAvailable) {
+    //         allProductsValid = false;
+    //       }
+    //     });
+
+    //     setGiftboxValid(allProductsValid);
+    //     setLoadingGiftCheck(false);
+    //   } catch (error) {
+    //     console.error("Giftbox inventory check error:", error);
+    //     // If error, default to not showing giftbox
+    //     setGiftboxValid(false);
+    //     setLoadingGiftCheck(false);
+    //   }
+    // } else if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && hasNoGiftboxProductTag === true) {
+    //   setGiftboxValid(false);
+    //   setLoadingGiftCheck(false);
+    // } else if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && hasNoGiftboxProductTag === false) {
+    //   setGiftboxValid(false);
+    //   setLoadingGiftCheck(false);
+    // } else if (hasNoGiftboxProductTag === true) {
+    //   setGiftboxValid(false);
+    //   setLoadingGiftCheck(false);
+    // } else {
+    //   console.log("Condition not met: either not honeybirdette US or not shipping to US");
+    //   setGiftboxValid(true);
+    //   setLoadingGiftCheck(false);
+    // }
+  }
+
+  checkGiftboxes();
+}, [lines, myshopifyDomain, shippingAddress, query]);
 
 
   useEffect(() => {
@@ -196,10 +268,6 @@ const isGiftbox9 = product9_is_giftbox ?? false;
         fetchVariant(variantId3, 3),
         fetchVariant(variantId4, 4),
         fetchVariant(variantId5, 5),
-        fetchVariant(variantId6, 6),
-        fetchVariant(variantId7, 7),
-        fetchVariant(variantId8, 8),
-        fetchVariant(variantId9, 9),
       ]);
       setLoading(false);
     }
@@ -214,10 +282,6 @@ const isGiftbox9 = product9_is_giftbox ?? false;
     variantId3,
     variantId4,
     variantId5,
-    variantId6,
-    variantId7,
-    variantId8,
-    variantId9,
   ]);
 
   // Hide error banner automatically after 3s
@@ -297,18 +361,6 @@ const isGiftbox9 = product9_is_giftbox ?? false;
         case 5:
           setVariant5(fetchedVariant);
           break;
-        case 6:
-          setVariant6(fetchedVariant);
-          break;
-        case 7:
-          setVariant7(fetchedVariant);
-          break;
-        case 8:
-          setVariant8(fetchedVariant);
-          break;
-        case 9:
-          setVariant9(fetchedVariant);
-          break;
       }
     } catch (error) {
       console.error("Error fetching variant:", error);
@@ -316,24 +368,9 @@ const isGiftbox9 = product9_is_giftbox ?? false;
   }
 
 
-  if (loading) {
-    return <LoadingSkeleton titleSetting="..." descriptionSetting="..." />;
-  }
-
-  // If any of these variant IDs is in the cart already, hide the offer
-  const isVariantInCart = lines.some((line) =>
-    [
-      variantId1,
-      variantId2,
-      variantId3,
-      variantId4,
-      variantId5,
-      variantId6,
-      variantId7,
-      variantId8,
-      variantId9,
-    ].includes(line.merchandise.id)
-  );
+  // if (loading) {
+  //   return <LoadingSkeleton titleSetting="..." descriptionSetting="..." />;
+  // }
 
   // If we have not loaded any variant data at all, return null
   const variantsLoaded = [
@@ -342,20 +379,13 @@ const isGiftbox9 = product9_is_giftbox ?? false;
     variant3,
     variant4,
     variant5,
-    variant6,
-    variant7,
-    variant8,
-    variant9,
   ].some(Boolean);
 
   if (!variantsLoaded) {
     return null;
   }
 
-  // If all variants are in the cart, return null
-  if (isVariantInCart) {
-    return null;
-  }
+  const giftboxIsActive = giftboxValid;
 
   // Pass the loaded variant objects into ProductOffer
   return (
@@ -366,10 +396,9 @@ const isGiftbox9 = product9_is_giftbox ?? false;
   variant3={variant3}
   variant4={variant4}
   variant5={variant5}
-  variant6={variant6}
-  variant7={variant7}
-  variant8={variant8}
-  variant9={variant9}
+
+  giftboxValid={giftboxIsActive}
+  cartLines={lines}
 
   // API/Handlers
   i18n={i18n}
@@ -407,29 +436,6 @@ const isGiftbox9 = product9_is_giftbox ?? false;
   isGWP5={isGWP5}
   isGiftbox5={isGiftbox5}
 
-  // Product 6
-  titleSetting6={titleSetting6}
-  descriptionSetting6={descriptionSetting6}
-  isGWP6={isGWP6}
-  isGiftbox6={isGiftbox6}
-
-  // Product 7
-  titleSetting7={titleSetting7}
-  descriptionSetting7={descriptionSetting7}
-  isGWP7={isGWP7}
-  isGiftbox7={isGiftbox7}
-
-  // Product 8
-  titleSetting8={titleSetting8}
-  descriptionSetting8={descriptionSetting8}
-  isGWP8={isGWP8}
-  isGiftbox8={isGiftbox8}
-
-  // Product 9
-  titleSetting9={titleSetting9}
-  descriptionSetting9={descriptionSetting9}
-  isGWP9={isGWP9}
-  isGiftbox9={isGiftbox9}
 />
   );
 }
@@ -487,10 +493,9 @@ function ProductOffer({
   variant3,
   variant4,
   variant5,
-  variant6,
-  variant7,
-  variant8,
-  variant9,
+
+  giftboxValid,
+  cartLines,
 
   // --- API / Handlers ---
   i18n,
@@ -527,35 +532,9 @@ function ProductOffer({
   descriptionSetting5,
   isGWP5,
   isGiftbox5,
-
-  // --- Product 6 ---
-  titleSetting6,
-  descriptionSetting6,
-  isGWP6,
-  isGiftbox6,
-
-  // --- Product 7 ---
-  titleSetting7,
-  descriptionSetting7,
-  isGWP7,
-  isGiftbox7,
-
-  // --- Product 8 ---
-  titleSetting8,
-  descriptionSetting8,
-  isGWP8,
-  isGiftbox8,
-
-  // --- Product 9 ---
-  titleSetting9,
-  descriptionSetting9,
-  isGWP9,
-  isGiftbox9,
 }) {
   // We import these from @shopify/ui-extensions-react/checkout
   // (ScrollView, BlockStack, InlineLayout, Heading, etc.)
-
-  const translate = useTranslate();
 
   // 1. Bundle each product’s data into an array
   const allItems = [
@@ -593,46 +572,29 @@ function ProductOffer({
       description: descriptionSetting5,
       isGWP: isGWP5,
       isGiftbox: isGiftbox5,
-    },
-    {
-      variant: variant6,
-      title: titleSetting6,
-      description: descriptionSetting6,
-      isGWP: isGWP6,
-      isGiftbox: isGiftbox6,
-    },
-    {
-      variant: variant7,
-      title: titleSetting7,
-      description: descriptionSetting7,
-      isGWP: isGWP7,
-      isGiftbox: isGiftbox7,
-    },
-    {
-      variant: variant8,
-      title: titleSetting8,
-      description: descriptionSetting8,
-      isGWP: isGWP8,
-      isGiftbox: isGiftbox8,
-    },
-    {
-      variant: variant9,
-      title: titleSetting9,
-      description: descriptionSetting9,
-      isGWP: isGWP9,
-      isGiftbox: isGiftbox9,
-    },
+    }
   ];
 
-  // 2. Separate giftbox items vs. other items
-  // const giftboxItems = allItems.filter((item) => item.isGiftbox && item.variant);
-  // const productItems = allItems.filter((item) => !item.isGiftbox && item.variant);
+  const filteredItems = allItems.filter((item) => {
+    if (!item.variant) return false; // skip if no variant data
+
+    console.log(item)
+    const isInCart = cartLines.some(
+      (line) => line.merchandise.id === item.variant.id
+    );
+    return !isInCart;
+  });
+
+  // If nothing left to show, hide extension entirely
+  if (filteredItems.length === 0) {
+    return null;
+  }
 
   return (
 
     <ScrollView
       maxBlockSize={300}
-      hint="innerShadow"
+      hint={{ type: 'pill', content: 'Scroll for more' }}
       padding="base"
       border="base"
       borderRadius="base"
@@ -643,10 +605,10 @@ function ProductOffer({
 
 
         {/* Product upsell section */}
-        {allItems.length > 0 && (
+        {filteredItems.length > 0 && (
           <BlockStack spacing="tight">
             
-            {allItems.map((item, index) => (
+            {filteredItems.map((item, index) => (
               <VariantCard
                 key={`product-${index}`}
                 variant={item.variant}
@@ -654,6 +616,7 @@ function ProductOffer({
                 description={item.description}
                 isGWP={item.isGWP}
                 isGiftbox={item.isGiftbox}
+                giftboxValid={giftboxValid}
                 i18n={i18n}
                 adding={adding}
                 handleAddToCart={handleAddToCart}
@@ -679,6 +642,7 @@ function VariantCard({
   description,
   isGWP,
   isGiftbox,
+  giftboxValid,
   i18n,
   adding,
   handleAddToCart
@@ -689,11 +653,31 @@ function VariantCard({
   const imageUrl = product?.images?.nodes?.[0]?.url || "";
   const translate = useTranslate();
 
+  if (title === "Upsell Title") {
+    return null;
+  }
+
+  if(giftboxValid === false && isGiftbox) {
+    return null;
+  }
+
   // Format the price (If GWP is true, optionally skip or show 'FREE')
-  let formattedPrice = i18n.formatCurrency(priceAmount).replace(/\.00$/, "");
+    let formattedPrice = i18n.formatCurrency(priceAmount).replace(/\.00$/, "");
+    const currencySymbols = {
+      EUR: '€',
+      USD: '$',
+      AUD: 'A$',
+      NZD: 'NZ$',
+      GBP: '£',
+      CAD: 'C$'
+  };
+  let priceWithSymbol = formattedPrice
+    .replace(/\b(EUR|USD|AUD|NZD|GBP|CAD)\b/g, (match) => currencySymbols[match])
+    .replace(/\s+/g, ''); 
+    
   if (isGWP) {
     // For GWP, you might set formattedPrice = "FREE" or similar:
-    formattedPrice = "FREE"; 
+    priceWithSymbol = "FREE"; 
   }
 
   // Provide a fallback image if none is available
@@ -729,14 +713,14 @@ function VariantCard({
             columns={["auto", "fill"]}
             blockAlignment="start"
           >
-             {isGWP && <Icon source="bag" />}
-            <Heading level={2}> {title}</Heading>
+             {isGWP && <Icon source="gift" />}
+            <Heading level={3}> {title}</Heading>
           </InlineLayout>
       
           <TextBlock>
             <Text>{description}</Text> 
             {" "}
-            <Text emphasis="bold">{formattedPrice}</Text>
+            <Text emphasis="bold">{priceWithSymbol}</Text>
           </TextBlock>
 
           <InlineLayout
@@ -746,7 +730,7 @@ function VariantCard({
           blockAlignment="center"
           >
             <Button
-              kind={isGWP ? "primary" : "secondary" }
+              kind={isGWP ? "secondary" : "secondary" }
               loading={adding}
               onPress={() => handleAddToCart(variant.id)}
             >
@@ -762,7 +746,7 @@ function VariantCard({
           blockAlignment="center"
           >
             <Button
-              kind={isGWP ? "primary" : "secondary" }
+              kind={isGWP ? "secondary" : "secondary" }
               loading={adding}
               onPress={() => handleAddToCart(variant.id)}
             >
@@ -770,11 +754,6 @@ function VariantCard({
             </Button>
         </InlineLayout>
       </InlineLayout>
-
-
-
-   
-
     </BlockStack>
   );
 }
