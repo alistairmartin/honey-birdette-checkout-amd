@@ -102,7 +102,17 @@ function App() {
     console.log("productsHaveNoGiftTag")
     console.log(productsHaveNoGiftTag)
 
-    if (myshopifyDomain === 'honey-birdette-usa.myshopify.com' && shippingAddress?.countryCode === 'US' && productsHaveNoGiftTag === false) {
+    var validForGiftBox = false;
+
+    if(myshopifyDomain === 'honey-birdette-usa.myshopify.com' && shippingAddress?.countryCode === 'US') {
+      validForGiftBox = true;
+    }
+
+    if(myshopifyDomain === 'honey-birdette-2.myshopify.com' && shippingAddress?.countryCode === 'AU') {
+      validForGiftBox = true;
+    }
+
+    if (validForGiftBox && productsHaveNoGiftTag === false) {
       console.log("Condition met: honeybirdette US shop and shipping to US");
 
       const items = lines.map(item => ({
@@ -155,13 +165,13 @@ function App() {
           setProductsValid(false);
         });
 
-    } else if(myshopifyDomain === 'honey-birdette-usa.myshopify.com' && productsHaveNoGiftTag === false){
+    } else if((myshopifyDomain === 'honey-birdette-usa.myshopify.com' || myshopifyDomain === 'honey-birdette-2.myshopify.com') && productsHaveNoGiftTag === false){
       setProductsValid(false); 
 
     } else if(productsHaveNoGiftTag === true){
       setProductsValid(false); 
     } else {
-      console.log("Condition not met: either not honeybirdette US or not shipping to US");
+      console.log("Condition not met: either not honeybirdette US / AU or not shipping to US / AU");
       setProductsValid(true); // Allow if not US or not honeybirdette US
     }
   }, [myshopifyDomain, shippingAddress, lines]);
