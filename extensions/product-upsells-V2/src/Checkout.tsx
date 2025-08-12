@@ -125,123 +125,124 @@ const isGiftbox5 = product5_is_giftbox ?? false;
 
 useEffect(() => {
   async function checkGiftboxes() {
-    // // If no giftbox items at all, no need to block anything
+    // If no giftbox items at all, no need to block anything
 
-    // let hasNoGiftboxProductTag = false;
+    let hasNoGiftboxProductTag = false;
 
-    // console.log("checkGiftboxes()")
-    // const anyGiftbox = [
-    //   isGiftbox1,
-    //   isGiftbox2,
-    //   isGiftbox3,
-    //   isGiftbox4,
-    //   isGiftbox5,
-    // ].some(Boolean);
+    console.log("checkGiftboxes()")
+    const anyGiftbox = [
+      isGiftbox1,
+      isGiftbox2,
+      isGiftbox3,
+      isGiftbox4,
+      isGiftbox5,
+    ].some(Boolean);
 
-    // console.log(anyGiftbox)
+    console.log(anyGiftbox)
 
-    // // If we don't even have a giftbox product, skip
-    // if (!anyGiftbox) {
-    //   setGiftboxValid(true);
-    //   setLoadingGiftCheck(false);
-    //   return;
-    // }
+    // If we don't even have a giftbox product, skip
+    if (!anyGiftbox) {
+      setGiftboxValid(true);
+      setLoadingGiftCheck(false);
+      return;
+    }
 
-    // // 1) Check for "no-giftbox" tags in cart lines
-    // try {
-    //   const productIds = lines.map((line) => line.merchandise.product.id);
-    //   if (productIds.length > 0) {
-    //     const response = await query(
-    //       `
-    //       query ($productIds: [ID!]!) {
-    //         nodes(ids: $productIds) {
-    //           ... on Product {
-    //             id
-    //             tags
-    //           }
-    //         }
-    //       }
-    //       `,
-    //       { variables: { productIds } }
-    //     );
+    // 1) Check for "no-giftbox" tags in cart lines
+    try {
+      const productIds = lines.map((line) => line.merchandise.product.id);
+      if (productIds.length > 0) {
+        const response = await query(
+          `
+          query ($productIds: [ID!]!) {
+            nodes(ids: $productIds) {
+              ... on Product {
+                id
+                tags
+              }
+            }
+          }
+          `,
+          { variables: { productIds } }
+        );
 
-    //     console.log("response")
-    //     console.log(response)
-    //     // If ANY product has "no-giftbox" -> disable giftbox
-    //     const hasNoGiftboxTag = response.data.nodes.some((p) =>
-    //       p?.tags?.includes("no-giftbox")
-    //     );
+        console.log("response")
+        console.log(response)
+        // If ANY product has "no-giftbox" -> disable giftbox
+        const hasNoGiftboxTag = response.data.nodes.some((p) =>
+          p?.tags?.includes("no-giftbox")
+        );
 
-    //     hasNoGiftboxProductTag = hasNoGiftboxTag;
+        hasNoGiftboxProductTag = hasNoGiftboxTag;
 
-    //     console.log(`hasNoGiftboxTag: ${hasNoGiftboxTag}`)
-    //     if (hasNoGiftboxTag === false) {
-    //       setGiftboxValid(true);
-    //       setLoadingGiftCheck(false);
-    //       return;
-    //     }
-    //   }
-    // } catch (err) {
-    //   console.error("Error fetching product tags for giftbox:", err);
-    //   // If error, let's be safe and hide giftbox
-    //   setGiftboxValid(true);
-    //   setLoadingGiftCheck(false);
-    //   return;
-    // }
+        console.log(`hasNoGiftboxTag: ${hasNoGiftboxTag}`)
+        if (hasNoGiftboxTag === false) {
+          setGiftboxValid(true);
+          setLoadingGiftCheck(false);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching product tags for giftbox:", err);
+      // If error, let's be safe and hide giftbox
+      setGiftboxValid(true);
+      setLoadingGiftCheck(false);
+      return;
+    }
 
-    // // 2) If domain = honey-birdette-usa & shipping to US, call external inventory check
-    // if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && shippingAddress?.countryCode === "US" && hasNoGiftboxProductTag === false) {
-    //   console.log("Condition met: honeybirdette US shop and shipping to US");
-    //   try {
-    //     const items = lines.map((item) => ({
-    //       sku: item.merchandise.sku,
-    //       quantity: item.quantity,
-    //     }));
 
-    //     const deliveryValidatorEndpoint = "https://hb-stores-api-prod.herokuapp.com/check-inventory-v2";
+    // 2) If domain = honey-birdette-usa & shipping to US, call external inventory check
+    if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && shippingAddress?.countryCode === "US" && hasNoGiftboxProductTag === false) {
+      console.log("Condition met: honeybirdette US shop and shipping to US");
+      try {
+        const items = lines.map((item) => ({
+          sku: item.merchandise.sku,
+          quantity: item.quantity,
+        }));
 
-    //     const reqBody = {
-    //       countryCode: shippingAddress.countryCode,
-    //       items,
-    //     };
+        const deliveryValidatorEndpoint = "https://hb-stores-api-prod.herokuapp.com/check-inventory-v2";
 
-    //     const fetchResp = await fetch(deliveryValidatorEndpoint, {
-    //       method: "POST",
-    //       headers: { "Content-Type": "application/json; charset=utf-8" },
-    //       body: JSON.stringify(reqBody),
-    //     });
+        const reqBody = {
+          countryCode: shippingAddress.countryCode,
+          items,
+        };
 
-    //     const data = await fetchResp.json();
-    //     const products = data.inventoryData;
-    //     let allProductsValid = true;
-    //     products.forEach((p) => {
-    //       if (!p.isAvailable) {
-    //         allProductsValid = false;
-    //       }
-    //     });
+        const fetchResp = await fetch(deliveryValidatorEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify(reqBody),
+        });
 
-    //     setGiftboxValid(allProductsValid);
-    //     setLoadingGiftCheck(false);
-    //   } catch (error) {
-    //     console.error("Giftbox inventory check error:", error);
-    //     // If error, default to not showing giftbox
-    //     setGiftboxValid(false);
-    //     setLoadingGiftCheck(false);
-    //   }
-    // } else if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && hasNoGiftboxProductTag === true) {
-    //   setGiftboxValid(false);
-    //   setLoadingGiftCheck(false);
-    // } else if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && hasNoGiftboxProductTag === false) {
-    //   setGiftboxValid(false);
-    //   setLoadingGiftCheck(false);
-    // } else if (hasNoGiftboxProductTag === true) {
-    //   setGiftboxValid(false);
-    //   setLoadingGiftCheck(false);
-    // } else {
-    //   console.log("Condition not met: either not honeybirdette US or not shipping to US");
-    //   setGiftboxValid(true);
-    //   setLoadingGiftCheck(false);
-    // }
+        const data = await fetchResp.json();
+        const products = data.inventoryData;
+        let allProductsValid = true;
+        products.forEach((p) => {
+          if (!p.isAvailable) {
+            allProductsValid = false;
+          }
+        });
+
+        setGiftboxValid(allProductsValid);
+        setLoadingGiftCheck(false);
+      } catch (error) {
+        console.error("Giftbox inventory check error:", error);
+        // If error, default to not showing giftbox
+        setGiftboxValid(false);
+        setLoadingGiftCheck(false);
+      }
+    } else if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && hasNoGiftboxProductTag === true) {
+      setGiftboxValid(false);
+      setLoadingGiftCheck(false);
+    } else if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && hasNoGiftboxProductTag === false) {
+      setGiftboxValid(false);
+      setLoadingGiftCheck(false);
+    } else if (hasNoGiftboxProductTag === true) {
+      setGiftboxValid(false);
+      setLoadingGiftCheck(false);
+    } else {
+      console.log("Condition not met: either not honeybirdette US or not shipping to US");
+      setGiftboxValid(true);
+      setLoadingGiftCheck(false);
+    }
   }
 
   checkGiftboxes();

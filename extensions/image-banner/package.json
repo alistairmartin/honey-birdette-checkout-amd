@@ -1,12 +1,12 @@
 {
-  "name": "product-upsells-V2",
+  "name": "image-banner",
   "private": true,
   "version": "1.0.0",
   "license": "UNLICENSED",
   "dependencies": {
     "react": "^18.0.0",
-    "@shopify/ui-extensions": "2025.1.x",
-    "@shopify/ui-extensions-react": "2025.1.x",
+    "@shopify/ui-extensions": "2025.7.x",
+    "@shopify/ui-extensions-react": "2025.7.x",
     "react-reconciler": "0.29.0"
   },
   "devDependencies": {
