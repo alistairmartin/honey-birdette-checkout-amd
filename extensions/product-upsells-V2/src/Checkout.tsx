@@ -43,13 +43,14 @@ function App() {
   const [variant2, setVariant2] = useState(null);
   const [variant3, setVariant3] = useState(null);
   const [variant4, setVariant4] = useState(null);
-  const [variant5, setVariant5] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
   const [showError, setShowError] = useState(false);
   const [giftboxValid, setGiftboxValid] = useState(true);
   const [loadingGiftCheck, setLoadingGiftCheck] = useState(true);
+  const [productsHaveNoGiftTag, setProductsHaveNoGiftTag] = useState(false);
+
 
   // Grab active cart lines and settings
   const lines = useCartLines();
@@ -77,12 +78,7 @@ function App() {
     product4_is_gwp,
     product4_is_giftbox,
     product4_title,
-  
-    // Product 5
-    product5,
-    product5_is_gwp,
-    product5_is_giftbox,
-    product5_title,
+
   
     giftbox_section_title,
     product_section_title,
@@ -94,7 +90,6 @@ function App() {
   const variantId2 = product2 ?? "gid://shopify/ProductVariant/41816704516211";
   const variantId3 = product3 ?? "gid://shopify/ProductVariant/41816701599859";
   const variantId4 = product4 ?? "gid://shopify/ProductVariant/41816701501555";
-  const variantId5 = product5 ?? "gid://shopify/ProductVariant/41816694947955";
 
 // Product 1
 const titleSetting1 = product1_title ?? "Upsell Title";
@@ -116,17 +111,12 @@ const titleSetting4 = product4_title ?? "Upsell Title";
 const isGWP4 = product4_is_gwp ?? false;
 const isGiftbox4 = product4_is_giftbox ?? false;
 
-// Product 5
-const titleSetting5 = product5_title ?? "Upsell Title";
-const isGWP5 = product5_is_gwp ?? false;
-const isGiftbox5 = product5_is_giftbox ?? false;
-
 
 
 useEffect(() => {
   async function checkGiftboxes() {
     // If no giftbox items at all, no need to block anything
-
+    console.log("CHECKING GIFTBOXES")
     let hasNoGiftboxProductTag = false;
 
     console.log("checkGiftboxes()")
@@ -135,7 +125,6 @@ useEffect(() => {
       isGiftbox2,
       isGiftbox3,
       isGiftbox4,
-      isGiftbox5,
     ].some(Boolean);
 
     console.log(anyGiftbox)
@@ -189,10 +178,24 @@ useEffect(() => {
       return;
     }
 
+    var validForGiftBox = false;
+    var validShopifyDomain = false;
 
+    if(myshopifyDomain === 'honey-birdette-usa.myshopify.com' && shippingAddress?.countryCode === 'US') {
+      validForGiftBox = true;
+      validShopifyDomain = true; 
+    }
+
+    if(myshopifyDomain === 'honey-birdette-2.myshopify.com' && shippingAddress?.countryCode === 'AU') {
+      validForGiftBox = true;
+      validShopifyDomain = true;
+    }
+
+    console.log(`validForGiftBox:${validForGiftBox}`);
+    console.log(`validShopifyDomain:${validShopifyDomain}`);
     // 2) If domain = honey-birdette-usa & shipping to US, call external inventory check
-    if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && shippingAddress?.countryCode === "US" && hasNoGiftboxProductTag === false) {
-      console.log("Condition met: honeybirdette US shop and shipping to US");
+    if (validForGiftBox && productsHaveNoGiftTag === false) {
+      console.log("Condition met: honeybirdette US or AU shop and shipping to US or AU");
       try {
         const items = lines.map((item) => ({
           sku: item.merchandise.sku,
@@ -217,6 +220,7 @@ useEffect(() => {
         let allProductsValid = true;
         products.forEach((p) => {
           if (!p.isAvailable) {
+              console.log(`Product unavailable:`, p);
             allProductsValid = false;
           }
         });
@@ -229,17 +233,17 @@ useEffect(() => {
         setGiftboxValid(false);
         setLoadingGiftCheck(false);
       }
-    } else if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && hasNoGiftboxProductTag === true) {
+    } else if(validShopifyDomain && productsHaveNoGiftTag === true){
       setGiftboxValid(false);
       setLoadingGiftCheck(false);
-    } else if (myshopifyDomain === "honey-birdette-usa.myshopify.com" && hasNoGiftboxProductTag === false) {
+     } else if(validShopifyDomain && productsHaveNoGiftTag === false){
       setGiftboxValid(false);
       setLoadingGiftCheck(false);
     } else if (hasNoGiftboxProductTag === true) {
       setGiftboxValid(false);
       setLoadingGiftCheck(false);
     } else {
-      console.log("Condition not met: either not honeybirdette US or not shipping to US");
+      console.log("Condition not met: either not honeybirdette US / AU or not shipping to US / AU");
       setGiftboxValid(true);
       setLoadingGiftCheck(false);
     }
@@ -258,7 +262,6 @@ useEffect(() => {
         fetchVariant(variantId2, 2),
         fetchVariant(variantId3, 3),
         fetchVariant(variantId4, 4),
-        fetchVariant(variantId5, 5),
       ]);
       setLoading(false);
     }
@@ -272,7 +275,6 @@ useEffect(() => {
     variantId2,
     variantId3,
     variantId4,
-    variantId5,
   ]);
 
   // Hide error banner automatically after 3s
@@ -349,9 +351,6 @@ useEffect(() => {
         case 4:
           setVariant4(fetchedVariant);
           break;
-        case 5:
-          setVariant5(fetchedVariant);
-          break;
       }
     } catch (error) {
       console.error("Error fetching variant:", error);
@@ -369,7 +368,6 @@ useEffect(() => {
     variant2,
     variant3,
     variant4,
-    variant5,
   ].some(Boolean);
 
   if (!variantsLoaded) {
@@ -386,7 +384,6 @@ useEffect(() => {
   variant2={variant2}
   variant3={variant3}
   variant4={variant4}
-  variant5={variant5}
 
   giftboxValid={giftboxIsActive}
   cartLines={lines}
@@ -416,11 +413,6 @@ useEffect(() => {
   titleSetting4={titleSetting4}
   isGWP4={isGWP4}
   isGiftbox4={isGiftbox4}
-
-  // Product 5
-  titleSetting5={titleSetting5}
-  isGWP5={isGWP5}
-  isGiftbox5={isGiftbox5}
 
 />
   );
@@ -478,7 +470,6 @@ function ProductOffer({
   variant2,
   variant3,
   variant4,
-  variant5,
 
   giftboxValid,
   cartLines,
@@ -508,11 +499,6 @@ function ProductOffer({
   titleSetting4,
   isGWP4,
   isGiftbox4,
-
-  // --- Product 5 ---
-  titleSetting5,
-  isGWP5,
-  isGiftbox5,
 }) {
   // We import these from @shopify/ui-extensions-react/checkout
   // (ScrollView, BlockStack, InlineLayout, Heading, etc.)
@@ -543,12 +529,6 @@ function ProductOffer({
       isGWP: isGWP4,
       isGiftbox: isGiftbox4,
     },
-    {
-      variant: variant5,
-      title: titleSetting5,
-      isGWP: isGWP5,
-      isGiftbox: isGiftbox5,
-    }
   ];
 
   const filteredItems = allItems.filter((item) => {
