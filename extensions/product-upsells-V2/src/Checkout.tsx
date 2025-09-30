@@ -27,6 +27,7 @@ import {
   Icon,
   useShop,         
   useShippingAddress,
+  useDeliveryGroups,
 } from "@shopify/ui-extensions-react/checkout";
 
 // Set up the entry point for the extension
@@ -37,6 +38,8 @@ function App() {
   const { myshopifyDomain } = useShop();
   const shippingAddress = useShippingAddress();
   const applyCartLinesChange = useApplyCartLinesChange();
+
+  const deliveryGroups = useDeliveryGroups();
 
   // Store variants in state
   const [variant1, setVariant1] = useState(null);
@@ -183,7 +186,7 @@ useEffect(() => {
       validShopifyDomain = true;
     }
 
-        if (validShopifyDomain == false) {
+    if (validShopifyDomain == false) {
       // If ANY product has the no-giftbox tag, disable giftbox and stop.
       setGiftboxValid(false);
       setLoadingGiftCheck(false);
@@ -255,6 +258,63 @@ useEffect(() => {
 
   checkGiftboxes();
 }, [lines, myshopifyDomain, shippingAddress, query]);
+
+  // If buyer selects Pickup / Ship to store, remove any giftbox lines and hide giftbox offer
+  useEffect(() => {
+    if (!deliveryGroups) return;
+
+    // Determine if any delivery group is set to Pickup or Pickup Point ("Shipping to pickup points")
+    const pickupSelected = deliveryGroups.some((group) => {
+      const opt = group?.selectedDeliveryOption as any;
+      const t = opt?.type; // 'shipping' | 'local' | 'pickup' | 'pickupPoint'
+      return t === 'pickup' || t === 'pickupPoint';
+    });
+
+    if (!pickupSelected) {
+      return;
+    }
+
+    // Collect the variant IDs that are configured as giftboxes
+    const giftVariantIds: string[] = [
+      isGiftbox1 ? variant1?.id : undefined,
+      isGiftbox2 ? variant2?.id : undefined,
+      isGiftbox3 ? variant3?.id : undefined,
+      isGiftbox4 ? variant4?.id : undefined,
+    ].filter(Boolean) as string[];
+
+    if (giftVariantIds.length === 0) {
+      // Still hide the giftbox offer when pickup is selected
+      setGiftboxValid(false);
+      return;
+    }
+
+    // Find any matching cart lines
+    const giftLines = lines.filter((l) => giftVariantIds.includes(l.merchandise.id));
+
+    if (giftLines.length === 0) {
+      // Hide the giftbox offer even if not in cart yet
+      setGiftboxValid(false);
+      return;
+    }
+
+    // Remove all giftbox lines one-by-one
+    (async () => {
+      try {
+        for (const gl of giftLines) {
+          await applyCartLinesChange({
+            type: 'removeCartLine',
+            id: gl.id,
+            quantity: 1
+          });
+        }
+      } catch (err) {
+        console.error('Failed removing giftbox for pickup selection:', err);
+      } finally {
+        // Ensure UI does not re-offer the giftbox while pickup is selected
+        setGiftboxValid(false);
+      }
+    })();
+  }, [deliveryGroups, lines, variant1, variant2, variant3, variant4, isGiftbox1, isGiftbox2, isGiftbox3, isGiftbox4, applyCartLinesChange]);
 
 
   useEffect(() => {

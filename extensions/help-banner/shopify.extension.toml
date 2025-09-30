@@ -8,6 +8,7 @@ api_version = "2025-07"
 [[extensions]]
 name = "Help Banner"
 handle = "help-banner"
+uid = "5ea08954-35d4-0bbf-19b8-7b09545f90238a842cbd"
 type = "ui_extension"
 
 

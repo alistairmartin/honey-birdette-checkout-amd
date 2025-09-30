@@ -8,6 +8,7 @@ api_version = "2024-10"
 [[extensions]]
 name = "(US) Consent To Checkout"
 handle = "consent-to-checkout"
+uid = "2bc6fae1-265f-2f4e-f4ca-44bcd1e8dcd76a3403aa"
 type = "ui_extension"
 
 

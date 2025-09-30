@@ -7,6 +7,7 @@ api_version = "2025-01"
 
 [[extensions]]
 name = "Giftbox Upsell"
+uid = "7d0e5fae-8a79-d5df-90f2-18a078e9a7d2b4f21c7a"
 type = "ui_extension"
 handle = "giftbox-upsell"
 [[extensions.targeting]]

@@ -6,6 +6,7 @@
 api_version = "2024-04"
 
 [[extensions]]
+uid = "e6b9a5ff-8797-d73d-f4d6-a7f4bb4923c920da1658"
 type = "ui_extension"
 name = "Message Banner"
 handle = "message-banner"

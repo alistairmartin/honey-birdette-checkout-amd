@@ -8,6 +8,7 @@ api_version = "2025-01"
 [[extensions]]
 name = "Reject Discount Codes"
 handle = "reject-discount-codes"
+uid = "f7102a61-9b7a-2de2-4e27-0acf36ab2cfc8394e4fb"
 type = "ui_extension"
 
 

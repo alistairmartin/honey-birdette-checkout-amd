@@ -8,6 +8,7 @@ api_version = "2025-07"
 [[extensions]]
 name = "Image Banner"
 handle = "image-banner"
+uid = "9a20766b-d215-ed56-d1af-177b2486f936008c2921"
 type = "ui_extension"
 
 

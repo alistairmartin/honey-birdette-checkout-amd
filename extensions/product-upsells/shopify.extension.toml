@@ -8,6 +8,7 @@ api_version = "2025-01"
 [[extensions]]
 name = "Product Upsells"
 handle = "Product-upsells"
+uid = "3c6509be-81f2-e947-dbb7-0c8d925b838cee14881b"
 type = "ui_extension"
 
 
