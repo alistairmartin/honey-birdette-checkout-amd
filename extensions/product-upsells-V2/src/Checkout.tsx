@@ -49,7 +49,6 @@ function App() {
   const [showError, setShowError] = useState(false);
   const [giftboxValid, setGiftboxValid] = useState(true);
   const [loadingGiftCheck, setLoadingGiftCheck] = useState(true);
-  const [productsHaveNoGiftTag, setProductsHaveNoGiftTag] = useState(false);
 
 
   // Grab active cart lines and settings
@@ -162,13 +161,6 @@ useEffect(() => {
         );
 
         hasNoGiftboxProductTag = hasNoGiftboxTag;
-
-        console.log(`hasNoGiftboxTag: ${hasNoGiftboxTag}`)
-        if (hasNoGiftboxTag === false) {
-          setGiftboxValid(true);
-          setLoadingGiftCheck(false);
-          return;
-        }
       }
     } catch (err) {
       console.error("Error fetching product tags for giftbox:", err);
@@ -191,10 +183,24 @@ useEffect(() => {
       validShopifyDomain = true;
     }
 
+        if (validShopifyDomain == false) {
+      // If ANY product has the no-giftbox tag, disable giftbox and stop.
+      setGiftboxValid(false);
+      setLoadingGiftCheck(false);
+      return;
+    }
+
     console.log(`validForGiftBox:${validForGiftBox}`);
     console.log(`validShopifyDomain:${validShopifyDomain}`);
-    // 2) If domain = honey-birdette-usa & shipping to US, call external inventory check
-    if (validForGiftBox && productsHaveNoGiftTag === false) {
+    // 2) Giftbox logic branching
+    if (hasNoGiftboxProductTag || !validShopifyDomain) {
+      // If ANY product has the no-giftbox tag, disable giftbox and stop.
+      setGiftboxValid(false);
+      setLoadingGiftCheck(false);
+      return;
+    }
+
+    if (validForGiftBox && hasNoGiftboxProductTag === false && validShopifyDomain) {
       console.log("Condition met: honeybirdette US or AU shop and shipping to US or AU");
       try {
         const items = lines.map((item) => ({
@@ -220,8 +226,10 @@ useEffect(() => {
         let allProductsValid = true;
         products.forEach((p) => {
           if (!p.isAvailable) {
-              console.log(`Product unavailable:`, p);
+            console.log("🎁 Product NOT available:", p);
             allProductsValid = false;
+          } else {
+            console.log("🎁 Product available:", p);
           }
         });
 
@@ -233,16 +241,12 @@ useEffect(() => {
         setGiftboxValid(false);
         setLoadingGiftCheck(false);
       }
-    } else if(validShopifyDomain && productsHaveNoGiftTag === true){
-      setGiftboxValid(false);
-      setLoadingGiftCheck(false);
-     } else if(validShopifyDomain && productsHaveNoGiftTag === false){
-      setGiftboxValid(false);
-      setLoadingGiftCheck(false);
-    } else if (hasNoGiftboxProductTag === true) {
+    } else if (validShopifyDomain && hasNoGiftboxProductTag === false) {
+      // On HB US/AU domains but shipping country doesn't match → default block (conservative)
       setGiftboxValid(false);
       setLoadingGiftCheck(false);
     } else {
+      // Not HB US/AU → allow giftbox by default
       console.log("Condition not met: either not honeybirdette US / AU or not shipping to US / AU");
       setGiftboxValid(true);
       setLoadingGiftCheck(false);
@@ -547,7 +551,9 @@ function ProductOffer({
   }
 
   return (
-
+    <BlockStack spacing="base">
+    <View><Heading level={2}>You May Also Like</Heading></View>
+    <View>
     <ScrollView
       maxBlockSize={400}
       hint={{ type: 'pill', content: 'Scroll for more' }}
@@ -583,7 +589,8 @@ function ProductOffer({
         {showError && <ErrorBanner />}
       </View>
     </ScrollView>
-
+    </View>
+    </BlockStack>
   );
 }
 
