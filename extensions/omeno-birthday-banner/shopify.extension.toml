@@ -1,0 +1,22 @@
+api_version = "2025-07"
+
+[[extensions]]
+name = "omeno-birthday-banner"
+handle = "omeno-birthday-banner"
+type = "ui_extension"
+uid = "2bd0aa92-06c2-54b2-6059-a86286eefb081514f1d3"
+
+[[extensions.targeting]]
+module = "./src/OrderStatusBlock.tsx"
+target = "customer-account.profile.block.render"
+
+[extensions.capabilities]
+api_access = true
+network_access = true
+
+[access_scopes]
+scopes = "read_customers, write_customers, read_metafields, write_metafields"
+
+[[extensions.metafields]]
+namespace = "custom"
+key = "omeno_customer_birthday"

@@ -41,6 +41,20 @@ function App() {
 
   const deliveryGroups = useDeliveryGroups();
 
+  // Helper to resolve selected option type from delivery groups
+  const isPickupSelectedFromGroups = (groups: any[] | undefined) => {
+    if (!groups || groups.length === 0) return false;
+    return groups.some((group: any) => {
+      const selectedHandle = group?.selectedDeliveryOption?.handle;
+      if (!selectedHandle) return false;
+      const selected = group.deliveryOptions?.find((opt: any) => opt.handle === selectedHandle);
+      const t = selected?.type; // 'shipping' | 'local' | 'pickup' | 'pickupPoint'
+      return t === 'pickup' || t === 'pickupPoint';
+    });
+  };
+
+  const pickupSelected = isPickupSelectedFromGroups(deliveryGroups as any);
+
   // Store variants in state
   const [variant1, setVariant1] = useState(null);
   const [variant2, setVariant2] = useState(null);
@@ -263,12 +277,10 @@ useEffect(() => {
   useEffect(() => {
     if (!deliveryGroups) return;
 
-    // Determine if any delivery group is set to Pickup or Pickup Point ("Shipping to pickup points")
-    const pickupSelected = deliveryGroups.some((group) => {
-      const opt = group?.selectedDeliveryOption as any;
-      const t = opt?.type; // 'shipping' | 'local' | 'pickup' | 'pickupPoint'
-      return t === 'pickup' || t === 'pickupPoint';
-    });
+    console.log("deliveryGroups")
+    console.log(deliveryGroups)
+
+    const pickupSelected = isPickupSelectedFromGroups(deliveryGroups as any);
 
     if (!pickupSelected) {
       return;
@@ -350,8 +362,14 @@ useEffect(() => {
   }, [showError]);
 
   // “Add to cart” button callback
-  async function handleAddToCart(variantId) {
+  async function handleAddToCart(variantId, isGiftboxParam?: boolean) {
     setAdding(true);
+    // Block adding gift box when Pickup / Pickup Point is selected
+    if (isGiftboxParam && pickupSelected) {
+      console.log('Blocking gift box add: pickup/pickupPoint selected');
+      setAdding(false);
+      return;
+    }
     const result = await applyCartLinesChange({
       type: "addCartLine",
       merchandiseId: variantId,
@@ -478,6 +496,7 @@ useEffect(() => {
   isGWP4={isGWP4}
   isGiftbox4={isGiftbox4}
 
+  pickupSelected={pickupSelected}
 />
   );
 }
@@ -563,6 +582,8 @@ function ProductOffer({
   titleSetting4,
   isGWP4,
   isGiftbox4,
+
+  pickupSelected,
 }) {
   // We import these from @shopify/ui-extensions-react/checkout
   // (ScrollView, BlockStack, InlineLayout, Heading, etc.)
@@ -638,6 +659,7 @@ function ProductOffer({
                 isGWP={item.isGWP}
                 isGiftbox={item.isGiftbox}
                 giftboxValid={giftboxValid}
+                pickupSelected={pickupSelected}
                 i18n={i18n}
                 adding={adding}
                 handleAddToCart={handleAddToCart}
@@ -664,6 +686,7 @@ function VariantCard({
   isGWP,
   isGiftbox,
   giftboxValid,
+  pickupSelected,
   i18n,
   adding,
   handleAddToCart
@@ -683,22 +706,22 @@ function VariantCard({
   }
 
   // Format the price (If GWP is true, optionally skip or show 'FREE')
-    let formattedPrice = i18n.formatCurrency(priceAmount).replace(/\.00$/, "");
-    const currencySymbols = {
-      EUR: '€',
-      USD: '$',
-      AUD: 'A$',
-      NZD: 'NZ$',
-      GBP: '£',
-      CAD: 'C$'
+  let formattedPrice = i18n.formatCurrency(priceAmount).replace(/\.00$/, "");
+  const currencySymbols = {
+    EUR: '€',
+    USD: '$',
+    AUD: 'A$',
+    NZD: 'NZ$',
+    GBP: '£',
+    CAD: 'C$'
   };
   let priceWithSymbol = formattedPrice
     .replace(/\b(EUR|USD|AUD|NZD|GBP|CAD)\b/g, (match) => currencySymbols[match])
-    .replace(/\s+/g, ''); 
-    
+    .replace(/\s+/g, '');
+
   if (isGWP) {
     // For GWP, you might set formattedPrice = "FREE" or similar:
-    priceWithSymbol = "FREE"; 
+    priceWithSymbol = "FREE";
   }
 
   // Provide a fallback image if none is available
@@ -706,15 +729,22 @@ function VariantCard({
     ? `${imageUrl}&width=200&crop=center&height=200`
     : "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png";
 
+  // --- Insert isGiftboxDisabled flag here ---
+  const isGiftboxDisabled = pickupSelected && isGiftbox;
+
   return (
-    <BlockStack 
+    <BlockStack
       background="transparent"
       border="none"
       borderRadius="none"
       padding="none"
       spacing="none"
     >
-      <InlineLayout spacing="base" columns={["auto", "fill", "auto"]} blockAlignment="center">
+      <InlineLayout
+        spacing="base"
+        columns={isGiftboxDisabled ? ["auto", "fill"] : ["auto", "fill", "auto"]}
+        blockAlignment="center"
+      >
         {/* Image */}
         <View maxInlineSize={64}>
           <Image
@@ -734,29 +764,44 @@ function VariantCard({
             columns={["auto", "fill"]}
             blockAlignment="start"
           >
-             {isGWP && <Icon source="gift" />}
+            {isGWP && <Icon source="gift" />}
             <Heading level={3}> {title}</Heading>
           </InlineLayout>
-      
+
           <TextBlock appearance="subdued">
             <Text appearance="subdued">{priceWithSymbol}</Text>
           </TextBlock>
 
+          {/* Insert helper text when giftbox is disabled */}
+          {isGiftboxDisabled && (
+            <TextBlock appearance="subdued">
+              <Text emphasis="bold">Not available for Pickup Orders</Text>
+            </TextBlock>
+          )}
         </BlockStack>
 
-        <InlineLayout
-          spacing="base"
-          columns={["fill"]}
-          blockAlignment="center"
+        {/* Rightmost button/message column, only render if NOT disabled */}
+        {!isGiftboxDisabled && (
+          <InlineLayout
+            spacing="base"
+            columns={["fill"]}
+            blockAlignment="center"
           >
-            <Button
-              kind={isGWP ? "secondary" : "secondary" }
-              loading={adding}
-              onPress={() => handleAddToCart(variant.id)}
-            >
-              {isGWP ? translate('add-free-gift') : translate('add-to-cart') }
-            </Button>
-        </InlineLayout>
+            {pickupSelected && isGiftbox ? (
+              <Text appearance="subdued" emphasis="bold" accessibilityRole="status">
+                Not available for Pickup Orders
+              </Text>
+            ) : (
+              <Button
+                kind={isGWP ? "secondary" : "secondary" }
+                loading={adding}
+                onPress={() => handleAddToCart(variant.id, isGiftbox)}
+              >
+                {isGWP ? translate('add-free-gift') : translate('add-to-cart') }
+              </Button>
+            )}
+          </InlineLayout>
+        )}
       </InlineLayout>
     </BlockStack>
   );
