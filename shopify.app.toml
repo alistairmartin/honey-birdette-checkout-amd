@@ -27,22 +27,17 @@ api_version = "2025-10"
 [pos]
 embedded = false
 
-access.admin = "merchant_read_write"
-access.storefront = "public_read"
-access.customer_account = "public_read"
 
+[metafields]
+api_version = "2025-10"
 
-[customer.metafields.custom.omeno_customer_birthday]
-type = "single_line_text_field"
-name = "Customer birthday (DD/MM)"
-description = "Day/Month in DD/MM format"
-access.customer_account = "read_write"
-access.admin = "merchant_read"
+[customer.metafields.app.customer_birthday_day]
+name = "Birthday Day"
+description = "Stores the day of the customer's birthday"
+type = "number_integer"
 
+[customer.metafields.app.customer_birthday_month]
+name = "Birthday Month"
+description = "Stores the month of the customer's birthday"
+type = "number_integer"
 
-[customer.metafields.app.nickname]
-type = "single_line_text_field"
-name = "The customer's preferred name"
-description = "The customer's preferred nickname for personalization"
-access.customer_account = "read_write"
-access.admin = "merchant_read"

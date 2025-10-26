@@ -19,3 +19,6 @@ Your new extension contains the following files:
   - [Configuration](https://shopify.dev/docs/api/customer-account-ui-extensions/unstable/configuration)
   - [API Reference](https://shopify.dev/docs/api/customer-account-ui-extensions/unstable/apis)
   - [UI Components](https://shopify.dev/docs/api/customer-account-ui-extensions/unstable/components)
+
+
+RENDER.com

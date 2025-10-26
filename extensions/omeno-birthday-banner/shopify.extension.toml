@@ -15,8 +15,12 @@ api_access = true
 network_access = true
 
 [access_scopes]
-scopes = "read_customers, write_customers, read_metafields, write_metafields"
+scopes = "read_customers, write_customers, read_metaobjects, write_metaobjects"
 
 [[extensions.metafields]]
 namespace = "custom"
-key = "omeno_customer_birthday"
+key = "customer_birthday_day"
+
+[[extensions.metafields]]
+namespace = "custom"
+key = "customer_birthday_month"
