@@ -24,3 +24,8 @@ key = "customer_birthday_day"
 [[extensions.metafields]]
 namespace = "custom"
 key = "customer_birthday_month"
+
+[[extensions.metafields]]
+namespace = "custom"
+key = "tags"
+

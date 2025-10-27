@@ -41,3 +41,7 @@ name = "Birthday Month"
 description = "Stores the month of the customer's birthday"
 type = "number_integer"
 
+[app_proxy]
+url = "https://honey-birdette-birthday-app.onrender.com"
+subpath = "omeno-birthday"
+prefix = "apps"

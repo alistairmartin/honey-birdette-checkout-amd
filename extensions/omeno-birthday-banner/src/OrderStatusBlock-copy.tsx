@@ -5,12 +5,9 @@ import {
   Button,
   Form,
   Text,
-  Select,
-  useShop,
+  TextField,
   reactExtension,
   useApi,
-  Grid,
-  View,
   useAuthenticatedAccountCustomer,
 } from "@shopify/ui-extensions-react/customer-account";
 
@@ -19,7 +16,6 @@ export default reactExtension(
   () => <CustomerBirthdayBlock />
 );
 
-const { myshopifyDomain } = useShop();
 // Map account origins to Shopify store domains and proxy URLs
 const REGION_CONFIG: Record<string, { shopifyDomain: string; proxyUrl: string; region: string }> = {
   "account-us.honeybirdette.com": {
@@ -41,24 +37,7 @@ const REGION_CONFIG: Record<string, { shopifyDomain: string; proxyUrl: string; r
     shopifyDomain: "honey-birdette-uk.myshopify.com",
     proxyUrl: "https://uk.honeybirdette.com",
     region: "UK"
-  },
-  "amd-checkout-2024.myshopify.com": {
-    shopifyDomain: "amd-checkout-2024.myshopify.com",
-    proxyUrl: "https://amd-checkout-2024.myshopify.com",
-    region: "DEV"
   }
-};
-
-// Derive public shop URL from a myshopify domain (fallbacks to simple replacement)
-function shopUrlFromMyshopify(myshopifyDomain: string): string {
-  const map: Record<string, string> = {
-    "honey-birdette-usa.myshopify.com": "https://us.honeybirdette.com",
-    "honey-birdette-eu.myshopify.com": "https://eu.honeybirdette.com",
-    "honey-birdette-2.myshopify.com": "https://www.honeybirdette.com",
-    "honey-birdette-uk.myshopify.com": "https://uk.honeybirdette.com",
-    "amd-checkout-2024.myshopify.com": "https://amd-checkout-2024.myshopify.com",
-  };
-  return map[myshopifyDomain] || `https://${myshopifyDomain.replace('.myshopify.com', '.com')}`;
 };
 
 // Helper function to get the correct config based on current origin
@@ -66,15 +45,14 @@ function getRegionConfig(): { shopifyDomain: string; proxyUrl: string; region: s
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     const config = REGION_CONFIG[hostname];
-
+    
     if (config) {
       console.log(`Detected region: ${config.region}`);
       console.log(`Shopify domain: ${config.shopifyDomain}`);
       console.log(`Proxy URL: ${config.proxyUrl}`);
-      const computedProxyUrl = shopUrlFromMyshopify(config.shopifyDomain);
-      return { ...config, proxyUrl: computedProxyUrl };
+      return config;
     }
-
+    
     // Fallback for localhost or unknown domains
     if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
       console.warn('Running on localhost, using AU as default');
@@ -82,15 +60,12 @@ function getRegionConfig(): { shopifyDomain: string; proxyUrl: string; region: s
       console.warn(`Unknown hostname: ${hostname}, using AU as default`);
     }
   }
-
-  const computedProxyUrl = shopUrlFromMyshopify(myshopifyDomain);
-
+  
   // Default fallback to AU
-  const fallbackShopifyDomain = "honey-birdette-2.myshopify.com";
   return {
-    shopifyDomain: fallbackShopifyDomain,
-    proxyUrl: shopUrlFromMyshopify(fallbackShopifyDomain),
-    region: "AU",
+    shopifyDomain: "honey-birdette-2.myshopify.com",
+    proxyUrl: "https://www.honeybirdette.com",
+    region: "AU"
   };
 }
 
@@ -113,49 +88,53 @@ function CustomerBirthdayBlock() {
   // Get customer ID directly from useAuthenticatedAccountCustomer hook
   useEffect(() => {
     if (authenticatedCustomer?.id) {
-      // The hook returns the numeric ID directly (e.g., "2052958781512")
-      // Not the full GID format like "gid://shopify/Customer/2052958781512"
-      const id = String(authenticatedCustomer.id);
-      setCustomerId(id);
-      console.log("✅ Customer ID from useAuthenticatedAccountCustomer:", id);
+      // Extract numeric ID from GID
+      const idMatch = authenticatedCustomer.id.match(/Customer\/(\d+)/);
+      if (idMatch) {
+        setCustomerId(idMatch[1]);
+        console.log("✅ Customer ID from useAuthenticatedAccountCustomer:", idMatch[1]);
+      }
     }
   }, [authenticatedCustomer]);
 
-  // Fetch customer tags on mount (using backend Admin API)
+  // Fetch customer tags on mount
   useEffect(() => {
     async function fetchCustomerTags() {
       try {
-        // Wait for customer ID to be available
-        if (!customerId) {
-          console.log("Waiting for customer ID before fetching tags...");
-          return;
-        }
-
-        console.log("Fetching tags from backend for customer:", customerId);
-
-        // Call backend endpoint to get tags (uses Admin API)
-        const resp = await fetch(
-          `${regionConfig.proxyUrl}/apps/omeno-birthday/get-tags?customerId=${customerId}&shop=${regionConfig.shopifyDomain}`,
-          {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-          }
-        );
+        const token = await sessionToken.get();
+        const resp = await fetch("/account/api/2025-07/graphql.json", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            query: `
+              query GetCustomerTags {
+                customer {
+                  id
+                  tags
+                }
+              }
+            `,
+          }),
+        });
 
         const result = await resp.json();
         const debugInfo = {
           region: regionConfig.region,
           shopifyDomain: regionConfig.shopifyDomain,
           proxyUrl: regionConfig.proxyUrl,
-          customerId: customerId,
           response: result
         };
         setDebug(JSON.stringify(debugInfo, null, 2));
         console.log("Fetch customer tags result:", result);
 
-        if (result.success && result.tags) {
-          const tags = result.tags;
-
+        const customer = result?.data?.customer;
+        if (customer) {
+          if (customer.tags) {
+            const tags = customer.tags;
+          
           // Find birthday tag (format: birthday_DD_MM)
           const birthdayTag = tags.find((tag: string) => tag.startsWith("birthday_"));
           if (birthdayTag) {
@@ -163,12 +142,10 @@ function CustomerBirthdayBlock() {
             if (parts.length === 3) {
               setDay(parts[1]);
               setMonth(parts[2]);
-              console.log(`✅ Found existing birthday: ${parts[1]}/${parts[2]}`);
             }
-          } else {
-            console.log("No existing birthday tag found");
           }
         }
+      }
       } catch (e: any) {
         console.error("Error fetching customer tags:", e);
         setError(e?.message || "Error loading customer data");
@@ -178,7 +155,7 @@ function CustomerBirthdayBlock() {
     }
 
     fetchCustomerTags();
-  }, [customerId, regionConfig.proxyUrl, regionConfig.shopifyDomain]);
+  }, [sessionToken, regionConfig]);
 
   async function save() {
     setError(undefined);
@@ -209,7 +186,7 @@ function CustomerBirthdayBlock() {
     if ((dayVal && !monthVal) || (!dayVal && monthVal)) {
       setError("Please enter both day and month, or leave both empty");
       return;
-    }
+      }
 
     // Check if there's anything to save
     if (!dayVal && !monthVal) {
@@ -267,7 +244,7 @@ function CustomerBirthdayBlock() {
 
       console.log("Save successful!");
       setSaved("Information saved! Updating...");
-
+      
       // Refresh the tags from the server
       setTimeout(async () => {
         try {
@@ -293,7 +270,7 @@ function CustomerBirthdayBlock() {
           const customer = fetchResult?.data?.customer;
           if (customer?.tags) {
             const tags = customer.tags;
-
+            
             // Update birthday from tags
             const birthdayTag = tags.find((tag: string) => tag.startsWith("birthday_"));
             if (birthdayTag) {
@@ -303,7 +280,7 @@ function CustomerBirthdayBlock() {
                 setMonth(parts[2]);
               }
             }
-
+            
             setSaved("Birthday saved successfully!");
           }
         } catch (e) {
@@ -329,38 +306,6 @@ function CustomerBirthdayBlock() {
     setMonth(cleaned);
   };
 
-  const dayOptions = [
-    { value: "", label: "--" },
-    ...Array.from({ length: 31 }, (_, i) => {
-      const v = String(i + 1).padStart(2, "0");
-      return { value: v, label: v };
-    }),
-  ];
-
-  const monthOptions = [
-    { value: "", label: "--" },
-    ...(() => {
-      const MONTH_NAMES = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-      ];
-      return MONTH_NAMES.map((name, i) => {
-        const v = String(i + 1).padStart(2, "0");
-        return { value: v, label: name };
-      });
-    })(),
-  ].flat();
-
   if (loading) {
     return (
       <Banner>
@@ -379,28 +324,29 @@ function CustomerBirthdayBlock() {
 
         <Form onSubmit={save}>
           <BlockStack spacing="base">
-            <Grid
-              columns={['fill', 'fill']}
-              spacing="loose"
-            >
+            <BlockStack spacing="tight">
+              <TextField
+                label="Day"
+                value={day}
+                onChange={handleDayChange}
+                type="text"
+                inputMode="numeric"
+                placeholder="DD"
+                maxLength={2}
+                helpText="Enter day (1-31)"
+              />
 
-              <View>
-                <Select
-                  label="Day"
-                  value={day}
-                  onChange={(value) => setDay(value)}
-                  options={dayOptions}
-                />
-              </View>
-              <View>
-                <Select
-                  label="Month"
-                  value={month}
-                  onChange={(value) => setMonth(value)}
-                  options={monthOptions}
-                />
-              </View>
-            </Grid>
+              <TextField
+                label="Month"
+                value={month}
+                onChange={handleMonthChange}
+                type="text"
+                inputMode="numeric"
+                placeholder="MM"
+                maxLength={2}
+                helpText="Enter month (1-12)"
+              />
+            </BlockStack>
 
             {error && (
               <Banner status="critical">
