@@ -6,12 +6,12 @@ import {
   Form,
   Text,
   Select,
-  useShop,
-  reactExtension,
-  useApi,
   Grid,
   View,
+  reactExtension,
   useAuthenticatedAccountCustomer,
+  useSettings,
+  useTranslate,
 } from "@shopify/ui-extensions-react/customer-account";
 
 export default reactExtension(
@@ -19,85 +19,26 @@ export default reactExtension(
   () => <CustomerBirthdayBlock />
 );
 
-const { myshopifyDomain } = useShop();
-// Map account origins to Shopify store domains and proxy URLs
-const REGION_CONFIG: Record<string, { shopifyDomain: string; proxyUrl: string; region: string }> = {
-  "account-us.honeybirdette.com": {
-    shopifyDomain: "honey-birdette-usa.myshopify.com",
-    proxyUrl: "https://us.honeybirdette.com",
-    region: "US"
-  },
-  "account-eu.honeybirdette.com": {
-    shopifyDomain: "honey-birdette-eu.myshopify.com",
-    proxyUrl: "https://eu.honeybirdette.com",
-    region: "EU"
-  },
-  "account-au.honeybirdette.com": {
-    shopifyDomain: "honey-birdette-2.myshopify.com",
-    proxyUrl: "https://www.honeybirdette.com",
-    region: "AU"
-  },
-  "account-uk.honeybirdette.com": {
-    shopifyDomain: "honey-birdette-uk.myshopify.com",
-    proxyUrl: "https://uk.honeybirdette.com",
-    region: "UK"
-  },
-  "amd-checkout-2024.myshopify.com": {
-    shopifyDomain: "amd-checkout-2024.myshopify.com",
-    proxyUrl: "https://amd-checkout-2024.myshopify.com",
-    region: "DEV"
-  }
+// Fallback config if settings aren't configured
+const DEFAULT_CONFIG = {
+  region: "AU",
+  shopifyDomain: "honey-birdette-2.myshopify.com",
+  proxyUrl: "https://www.honeybirdette.com"
 };
-
-// Derive public shop URL from a myshopify domain (fallbacks to simple replacement)
-function shopUrlFromMyshopify(myshopifyDomain: string): string {
-  const map: Record<string, string> = {
-    "honey-birdette-usa.myshopify.com": "https://us.honeybirdette.com",
-    "honey-birdette-eu.myshopify.com": "https://eu.honeybirdette.com",
-    "honey-birdette-2.myshopify.com": "https://www.honeybirdette.com",
-    "honey-birdette-uk.myshopify.com": "https://uk.honeybirdette.com",
-    "amd-checkout-2024.myshopify.com": "https://amd-checkout-2024.myshopify.com",
-  };
-  return map[myshopifyDomain] || `https://${myshopifyDomain.replace('.myshopify.com', '.com')}`;
-};
-
-// Helper function to get the correct config based on current origin
-function getRegionConfig(): { shopifyDomain: string; proxyUrl: string; region: string } {
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    const config = REGION_CONFIG[hostname];
-
-    if (config) {
-      console.log(`Detected region: ${config.region}`);
-      console.log(`Shopify domain: ${config.shopifyDomain}`);
-      console.log(`Proxy URL: ${config.proxyUrl}`);
-      const computedProxyUrl = shopUrlFromMyshopify(config.shopifyDomain);
-      return { ...config, proxyUrl: computedProxyUrl };
-    }
-
-    // Fallback for localhost or unknown domains
-    if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-      console.warn('Running on localhost, using AU as default');
-    } else {
-      console.warn(`Unknown hostname: ${hostname}, using AU as default`);
-    }
-  }
-
-  const computedProxyUrl = shopUrlFromMyshopify(myshopifyDomain);
-
-  // Default fallback to AU
-  const fallbackShopifyDomain = "honey-birdette-2.myshopify.com";
-  return {
-    shopifyDomain: fallbackShopifyDomain,
-    proxyUrl: shopUrlFromMyshopify(fallbackShopifyDomain),
-    region: "AU",
-  };
-}
 
 function CustomerBirthdayBlock() {
-  const { sessionToken } = useApi();
   const authenticatedCustomer = useAuthenticatedAccountCustomer();
-  const regionConfig = getRegionConfig();
+  
+  // Read settings configured by merchant in Shopify admin
+  const settings = useSettings();
+  
+  // Get store configuration from settings
+  const storeConfig = {
+    region: settings.region || DEFAULT_CONFIG.region,
+    shopifyDomain: settings.shopify_domain || DEFAULT_CONFIG.shopifyDomain,
+    proxyUrl: settings.proxy_url || DEFAULT_CONFIG.proxyUrl,
+    showDebug: settings.show_debug !== undefined ? settings.show_debug : true // Default to true for testing
+  };
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -109,33 +50,41 @@ function CustomerBirthdayBlock() {
   const [customerId, setCustomerId] = useState<string>("");
   const [showDebug, setShowDebug] = useState(false);
   const [debug, setDebug] = useState<string>("");
+  const translate = useTranslate();
 
-  // Get customer ID directly from useAuthenticatedAccountCustomer hook
+  // Log configuration on mount
+  useEffect(() => {
+    console.log("🔧 Extension Configuration:");
+    console.log("   Region:", storeConfig.region);
+    console.log("   Shopify Domain:", storeConfig.shopifyDomain);
+    console.log("   Proxy URL:", storeConfig.proxyUrl);
+    console.log("   Settings:", settings);
+  }, [storeConfig.region, storeConfig.shopifyDomain, storeConfig.proxyUrl]);
+
+  // Get customer ID
   useEffect(() => {
     if (authenticatedCustomer?.id) {
-      // The hook returns the numeric ID directly (e.g., "2052958781512")
-      // Not the full GID format like "gid://shopify/Customer/2052958781512"
       const id = String(authenticatedCustomer.id);
       setCustomerId(id);
-      console.log("✅ Customer ID from useAuthenticatedAccountCustomer:", id);
+      console.log("✅ Customer ID:", id);
     }
   }, [authenticatedCustomer]);
 
-  // Fetch customer tags on mount (using backend Admin API)
+  // Fetch customer tags on mount
   useEffect(() => {
     async function fetchCustomerTags() {
       try {
-        // Wait for customer ID to be available
         if (!customerId) {
-          console.log("Waiting for customer ID before fetching tags...");
+          console.log("⏳ Waiting for customer ID...");
           return;
         }
 
-        console.log("Fetching tags from backend for customer:", customerId);
+        console.log("📥 Fetching birthday metafields for customer:", customerId);
+        console.log("   Region:", storeConfig.region);
+        console.log("   Shop:", storeConfig.shopifyDomain);
 
-        // Call backend endpoint to get tags (uses Admin API)
         const resp = await fetch(
-          `${regionConfig.proxyUrl}/apps/omeno-birthday/get-tags?customerId=${customerId}&shop=${regionConfig.shopifyDomain}`,
+          `${storeConfig.proxyUrl}/apps/omeno-birthday/get-tags?customerId=${customerId}&shop=${storeConfig.shopifyDomain}`,
           {
             method: "GET",
             headers: { "Content-Type": "application/json" },
@@ -144,33 +93,37 @@ function CustomerBirthdayBlock() {
 
         const result = await resp.json();
         const debugInfo = {
-          region: regionConfig.region,
-          shopifyDomain: regionConfig.shopifyDomain,
-          proxyUrl: regionConfig.proxyUrl,
+          region: storeConfig.region,
+          shopifyDomain: storeConfig.shopifyDomain,
+          proxyUrl: storeConfig.proxyUrl,
           customerId: customerId,
+          settings: settings,
           response: result
         };
         setDebug(JSON.stringify(debugInfo, null, 2));
-        console.log("Fetch customer tags result:", result);
+        console.log("📋 Birthday result:", result);
 
-        if (result.success && result.tags) {
-          const tags = result.tags;
-
-          // Find birthday tag (format: birthday_DD_MM)
-          const birthdayTag = tags.find((tag: string) => tag.startsWith("birthday_"));
-          if (birthdayTag) {
-            const parts = birthdayTag.split("_");
-            if (parts.length === 3) {
-              setDay(parts[1]);
-              setMonth(parts[2]);
-              console.log(`✅ Found existing birthday: ${parts[1]}/${parts[2]}`);
-            }
+        if (result.success && result.metafields) {
+          const metafields = result.metafields;
+          
+          // Read birthday from metafields
+          const birthdayDay = metafields.birthday_day;
+          const birthdayMonth = metafields.birthday_month;
+          
+          if (birthdayDay && birthdayMonth) {
+            // Pad with zeros for display
+            const paddedDay = String(birthdayDay).padStart(2, '0');
+            const paddedMonth = String(birthdayMonth).padStart(2, '0');
+            
+            setDay(paddedDay);
+            setMonth(paddedMonth);
+            console.log(`🎂 Found birthday: ${paddedDay}/${paddedMonth} (from metafields)`);
           } else {
-            console.log("No existing birthday tag found");
+            console.log("ℹ️ No birthday metafields found");
           }
         }
       } catch (e: any) {
-        console.error("Error fetching customer tags:", e);
+        console.error("❌ Error fetching birthday:", e);
         setError(e?.message || "Error loading customer data");
       } finally {
         setLoading(false);
@@ -178,7 +131,7 @@ function CustomerBirthdayBlock() {
     }
 
     fetchCustomerTags();
-  }, [customerId, regionConfig.proxyUrl, regionConfig.shopifyDomain]);
+  }, [customerId, storeConfig.proxyUrl, storeConfig.shopifyDomain, storeConfig.region]);
 
   async function save() {
     setError(undefined);
@@ -205,58 +158,49 @@ function CustomerBirthdayBlock() {
       }
     }
 
-    // Both or neither must be filled
+    // Both or neither
     if ((dayVal && !monthVal) || (!dayVal && monthVal)) {
-      setError("Please enter both day and month, or leave both empty");
+      setError("Please enter both day and month");
       return;
     }
 
     // Check if there's anything to save
     if (!dayVal && !monthVal) {
-      setSaved("No changes to save.");
+      setSaved("No changes to save");
       setTimeout(() => setSaved(undefined), 2000);
       return;
     }
 
     setSaving(true);
     try {
-      const tagsToAdd: string[] = [];
-
-      // Add birthday tag
       const paddedDay = dayVal.padStart(2, '0');
       const paddedMonth = monthVal.padStart(2, '0');
       const birthdayTag = `birthday_${paddedDay}_${paddedMonth}`;
-      tagsToAdd.push(birthdayTag);
 
-      console.log("Region:", regionConfig.region);
-      console.log("Proxy URL:", regionConfig.proxyUrl);
-      console.log("Shop:", regionConfig.shopifyDomain);
-      console.log("Customer ID:", customerId);
-      console.log("Adding tags:", tagsToAdd);
+      console.log("💾 Saving birthday:", birthdayTag);
+      console.log("   Region:", storeConfig.region);
+      console.log("   Shop:", storeConfig.shopifyDomain);
 
-      // Call app proxy to add the tags
-      // Include shop and customerId in body as fallback (for testing)
-      // When proxied through Shopify, these come from headers instead
-      const resp = await fetch(`${regionConfig.proxyUrl}/apps/omeno-birthday/add-tags`, {
+      const resp = await fetch(`${storeConfig.proxyUrl}/apps/omeno-birthday/add-tags`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tags: tagsToAdd,
-          shop: regionConfig.shopifyDomain,
+          tags: [birthdayTag],
+          shop: storeConfig.shopifyDomain,
           customerId: customerId,
         }),
       });
 
       const result = await resp.json();
       setDebug(JSON.stringify({
-        region: regionConfig.region,
-        request: { tags: tagsToAdd },
+        region: storeConfig.region,
+        shopifyDomain: storeConfig.shopifyDomain,
+        request: { tags: [birthdayTag] },
         response: result
       }, null, 2));
-      console.log("Response:", result);
 
       if (!resp.ok) {
-        setError(result?.error || "Failed to save information");
+        setError(result?.error || "Failed to save");
         return;
       }
 
@@ -265,69 +209,16 @@ function CustomerBirthdayBlock() {
         return;
       }
 
-      console.log("Save successful!");
-      setSaved("Information saved! Updating...");
-
-      // Refresh the tags from the server
-      setTimeout(async () => {
-        try {
-          const token = await sessionToken.get();
-          const fetchResp = await fetch("/account/api/2025-07/graphql.json", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              query: `
-                query GetCustomerTags {
-                  customer {
-                    tags
-                  }
-                }
-              `,
-            }),
-          });
-
-          const fetchResult = await fetchResp.json();
-          const customer = fetchResult?.data?.customer;
-          if (customer?.tags) {
-            const tags = customer.tags;
-
-            // Update birthday from tags
-            const birthdayTag = tags.find((tag: string) => tag.startsWith("birthday_"));
-            if (birthdayTag) {
-              const parts = birthdayTag.split("_");
-              if (parts.length === 3) {
-                setDay(parts[1]);
-                setMonth(parts[2]);
-              }
-            }
-
-            setSaved("Birthday saved successfully!");
-          }
-        } catch (e) {
-          console.error("Error refreshing:", e);
-        }
-        setTimeout(() => setSaved(undefined), 3000);
-      }, 2000);
+      console.log("✅ Birthday saved!");
+      setSaved(translate("birthdaySaved"));
+      setTimeout(() => setSaved(undefined), 3000);
     } catch (e: any) {
-      console.error("Exception during save:", e);
-      setError(e?.message || "Something went wrong while saving");
+      console.error("❌ Save error:", e);
+      setError(e?.message || "Something went wrong");
     } finally {
       setSaving(false);
     }
   }
-
-  const handleDayChange = (value: string) => {
-    const cleaned = value.replace(/[^0-9]/g, "").slice(0, 2);
-    setDay(cleaned);
-  };
-
-  const handleMonthChange = (value: string) => {
-    const cleaned = value.replace(/[^0-9]/g, "").slice(0, 2);
-    setMonth(cleaned);
-  };
 
   const dayOptions = [
     { value: "", label: "--" },
@@ -339,27 +230,19 @@ function CustomerBirthdayBlock() {
 
   const monthOptions = [
     { value: "", label: "--" },
-    ...(() => {
-      const MONTH_NAMES = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-      ];
-      return MONTH_NAMES.map((name, i) => {
-        const v = String(i + 1).padStart(2, "0");
-        return { value: v, label: name };
-      });
-    })(),
-  ].flat();
+    { value: "01", label: translate("january") },
+    { value: "02", label: translate("february") },
+    { value: "03", label: translate("march") },
+    { value: "04", label: translate("april") },
+    { value: "05", label: translate("may") },
+    { value: "06", label: translate("june") },
+    { value: "07", label: translate("july") },
+    { value: "08", label: translate("august") },
+    { value: "09", label: translate("september") },
+    { value: "10", label: translate("october") },
+    { value: "11", label: translate("november") },
+    { value: "12", label: translate("december") },
+  ];
 
   if (loading) {
     return (
@@ -370,23 +253,29 @@ function CustomerBirthdayBlock() {
   }
 
   return (
-    <Banner>
+    <View padding="base" cornerRadius="base" background="subdued">
       <BlockStack spacing="base">
-        <Text size="large" emphasis="bold">Your Birthday</Text>
-        <Text>We'll use this to send you a special birthday surprise!</Text>
-        <Text size="small" appearance="subdued">Region: {regionConfig.region}</Text>
-        <Text size="small" appearance="subdued">Customer ID: {customerId || "Loading..."}</Text>
+        <Text size="large" emphasis="bold">{translate("birthdayTitle")}</Text>
+        <Text>{translate("birthdayDescription")}</Text>
+
+         {storeConfig.showDebug && (
+        <Text size="small" appearance="subdued">
+          Region: {storeConfig.region}
+        </Text>
+        )}
+
+        {storeConfig.showDebug && (
+        <Text size="small" appearance="subdued">
+          Customer ID: {customerId || "Loading..."}
+        </Text>
+         )}
 
         <Form onSubmit={save}>
           <BlockStack spacing="base">
-            <Grid
-              columns={['fill', 'fill']}
-              spacing="loose"
-            >
-
+            <Grid columns={['fill', 'fill']} spacing="loose">
               <View>
                 <Select
-                  label="Day"
+                  label={translate("dayLabel")}
                   value={day}
                   onChange={(value) => setDay(value)}
                   options={dayOptions}
@@ -394,7 +283,7 @@ function CustomerBirthdayBlock() {
               </View>
               <View>
                 <Select
-                  label="Month"
+                  label={translate("monthLabel")}
                   value={month}
                   onChange={(value) => setMonth(value)}
                   options={monthOptions}
@@ -415,12 +304,14 @@ function CustomerBirthdayBlock() {
             )}
 
             <Button kind="primary" submit loading={saving} disabled={saving}>
-              {saving ? "Saving..." : "Save Birthday"}
+              {saving ? translate("saving") : translate("saveBirthday")}
             </Button>
 
-            <Button kind="secondary" onPress={() => setShowDebug((v) => !v)}>
-              {showDebug ? "Hide debug" : "Show debug"}
-            </Button>
+            {storeConfig.showDebug && (
+              <Button kind="secondary" onPress={() => setShowDebug((v) => !v)}>
+                {showDebug ? "Hide debug" : "Show debug"}
+              </Button>
+            )}
 
             {showDebug && debug && (
               <BlockStack spacing="tight">
@@ -431,6 +322,6 @@ function CustomerBirthdayBlock() {
           </BlockStack>
         </Form>
       </BlockStack>
-    </Banner>
+    </View>
   );
 }

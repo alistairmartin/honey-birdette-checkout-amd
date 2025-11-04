@@ -1,3 +1,21 @@
 {
-  "earnPoints": "You've earned 1,000 points from this order. You've been upgraded to Platinum tier."
+  "birthdayTitle": "Your Birthday",
+  "birthdayDescription": "We'll use this to send you a special birthday surprise!",
+  "dayLabel": "Day",
+  "monthLabel": "Month",
+  "saveBirthday": "Save Birthday",
+  "birthdaySaved": "Birthday saved successfully!",
+  "saving": "Saving...",
+  "january": "January",
+  "february": "February",
+  "march": "March",
+  "april": "April",
+  "may": "May",
+  "june": "June",
+  "july": "July",
+  "august": "August",
+  "september": "September",
+  "october": "October",
+  "november": "November",
+  "december": "December"
 }

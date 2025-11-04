@@ -1,3 +1,21 @@
 {
-  "earnPoints": "Vous avez gagné 1,000 points avec cette commande. Vous avez été promu au niveau Platine."
+  "birthdayTitle": "Quand est ton anniversaire, chérie ?",
+  "birthdayDescription": "Nous avons une petite surprise avec votre nom dessus.",
+  "dayLabel": "Jour",
+  "monthLabel": "Mois",
+  "saveBirthday": "Enregistrer l'anniversaire",
+  "birthdaySaved": "Anniversaire enregistré avec succès !",
+  "saving": "Enregistrement...",
+  "january": "Janvier",
+  "february": "Février",
+  "march": "Mars",
+  "april": "Avril",
+  "may": "Mai",
+  "june": "Juin",
+  "july": "Juillet",
+  "august": "Août",
+  "september": "Septembre",
+  "october": "Octobre",
+  "november": "Novembre",
+  "december": "Décembre"
 }

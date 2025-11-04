@@ -1,7 +1,7 @@
 api_version = "2025-07"
 
 [[extensions]]
-name = "omeno-birthday-banner"
+name = "Birthday Banner"
 handle = "omeno-birthday-banner"
 type = "ui_extension"
 uid = "2bd0aa92-06c2-54b2-6059-a86286eefb081514f1d3"
@@ -9,6 +9,14 @@ uid = "2bd0aa92-06c2-54b2-6059-a86286eefb081514f1d3"
 [[extensions.targeting]]
 module = "./src/OrderStatusBlock.tsx"
 target = "customer-account.profile.block.render"
+
+[[extensions.targeting]]
+module = "./src/OrderStatusBlock.tsx"
+target = "customer-account.order-status.block.render"
+
+[[extensions.targeting]]
+module = "./src/OrderStatusBlock.tsx"
+target = "customer-account.order-index.block.render"
 
 [extensions.capabilities]
 api_access = true
@@ -29,3 +37,27 @@ key = "customer_birthday_month"
 namespace = "custom"
 key = "tags"
 
+[extensions.settings]
+  [[extensions.settings.fields]]
+  key = "region"
+  type = "single_line_text_field"
+  name = "Store Region"
+  description = "The region this store belongs to (US, EU, AU, UK, or DEV)"
+  
+  [[extensions.settings.fields]]
+  key = "shopify_domain"
+  type = "single_line_text_field"
+  name = "Shopify Domain"
+  description = "The myshopify domain for this store (e.g., honey-birdette-2.myshopify.com)"
+  
+  [[extensions.settings.fields]]
+  key = "proxy_url"
+  type = "single_line_text_field"
+  name = "Proxy URL"
+  description = "The public URL for app proxy (e.g., https://www.honeybirdette.com)"
+
+  [[extensions.settings.fields]]
+  key = "show_debug"
+  type = "boolean"
+  name = "Show Debug Button"
+  description = "Show the debug button to customers (useful for testing)"
