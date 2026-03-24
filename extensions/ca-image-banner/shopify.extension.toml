@@ -1,0 +1,60 @@
+# Learn more about configuring your Customer account UI extension:
+# https://shopify.dev/api/customer-account-ui-extensions/unstable/configuration
+
+# The version of APIs your extension will receive. Learn more:
+# https://shopify.dev/docs/api/usage/versioning
+api_version = "2025-07"
+
+[[extensions]]
+name = "CA-Image Banner"
+handle = "ca-image-banner"
+type = "ui_extension"
+uid = "e564e782-effc-9b97-845c-78536e82d6cff2ab3954"
+
+# Controls where in Shopify your extension will be injected,
+# and the file that contains your extension’s source code. Learn more:
+# https://shopify.dev/docs/api/customer-account-ui-extensions/unstable/extension-targets-overview
+
+
+[[extensions.targeting]]
+module = "./src/OrderStatusBlock.tsx"
+target = "customer-account.profile.block.render"
+
+[[extensions.targeting]]
+module = "./src/OrderStatusBlock.tsx"
+target = "customer-account.order-status.block.render"
+
+[[extensions.targeting]]
+module = "./src/OrderStatusBlock.tsx"
+target = "customer-account.order-index.block.render"
+
+
+[extensions.capabilities]
+# Gives your extension access to directly query Shopify’s storefront API.
+# https://shopify.dev/docs/api/customer-account-ui-extensions/unstable/configuration#api-access
+api_access = true
+network_access = true
+
+[extensions.settings]
+  [[extensions.settings.fields]]
+  key = "desktop_image_url"
+  type = "single_line_text_field"
+  name = "Desktop image URL"
+  description = "Paste the desktop banner image URL."
+
+  [[extensions.settings.fields]]
+  key = "mobile_image_url"
+  type = "single_line_text_field"
+  name = "Mobile image URL"
+  description = "Paste the mobile banner image URL."
+
+  [[extensions.settings.fields]]
+  key = "link_url"
+  type = "single_line_text_field"
+  name = "Link URL"
+  description = "Optional. When set, the banner links to this URL."
+
+# Gives your extension access to make external network calls, using the
+# JavaScript `fetch()` API. Learn more:
+# https://shopify.dev/docs/api/customer-account-ui-extensions/unstable/configuration#network-access
+# network_access = true

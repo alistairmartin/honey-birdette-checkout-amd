@@ -27,10 +27,22 @@ api_access = true
 
 [extensions.settings]
   [[extensions.settings.fields]]
-  key = "url"
+  key = "desktop_image_url"
   type = "single_line_text_field"
-  name = "URL"
-  description = "Upload to Shopify Files, then add the URL here."
+  name = "Desktop image URL"
+  description = "Paste the desktop banner image URL."
+
+  [[extensions.settings.fields]]
+  key = "mobile_image_url"
+  type = "single_line_text_field"
+  name = "Mobile image URL"
+  description = "Paste the mobile banner image URL."
+
+  [[extensions.settings.fields]]
+  key = "link_url"
+  type = "single_line_text_field"
+  name = "Link URL"
+  description = "Optional. When set, the banner links to this URL."
 
 # Gives your extension access to make external network calls, using the
 # JavaScript `fetch()` API. Learn more:

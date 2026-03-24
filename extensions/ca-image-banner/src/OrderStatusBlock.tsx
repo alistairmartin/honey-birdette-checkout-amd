@@ -1,19 +1,27 @@
 import {
+  BlockStack,
   reactExtension,
-  useSettings,
   Image,
   Link,
-  BlockStack,
-} from "@shopify/ui-extensions-react/checkout";
+  useSettings,
+} from "@shopify/ui-extensions-react/customer-account";
 
-export default reactExtension("purchase.checkout.block.render", () => (
-  <Extension />
-));
+export default reactExtension(
+  "customer-account.order-status.block.render",
+  () => <PromotionBanner />
+);
 
+export const profileBlock = reactExtension(
+  "customer-account.profile.block.render",
+  () => <PromotionBanner />
+);
 
-//'https://cdn.shopify.com/s/files/1/0569/7873/5279/files/checkout.jpg';
+export const orderIndexBlock = reactExtension(
+  "customer-account.order-index.block.render",
+  () => <PromotionBanner />
+);
 
-function Extension() {
+function PromotionBanner() {
   const settings = useSettings();
 
   const desktopImageUrl =
