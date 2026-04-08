@@ -1,0 +1,19 @@
+query CartInput {
+  cart {
+    lines {
+      id
+      quantity
+      attribute(key: "BYO Bundle") {
+        value
+      }
+      merchandise {
+        ... on ProductVariant {
+          __typename
+          product {
+            hasAnyTag(tags: ["special-bundle"])
+          }
+        }
+      }
+    }
+  }
+}

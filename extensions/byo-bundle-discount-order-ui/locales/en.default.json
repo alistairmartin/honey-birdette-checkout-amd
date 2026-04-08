@@ -1,0 +1,4 @@
+{
+  "name": "BYO Bundle Discount (Order)",
+  "description": "Automatically applies 10% off the order subtotal when a customer adds 4 or more products tagged \"special-bundle\" with the \"BYO Bundle\" line item property."
+}

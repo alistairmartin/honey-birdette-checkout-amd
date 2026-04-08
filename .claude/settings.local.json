@@ -10,7 +10,11 @@
       "Bash(node -e \"const p = require\\('/Users/alistairmartin/Dropbox/checkout/honey-birdette-checkout-amd/node_modules/@shopify/ui-extensions-react/package.json'\\); console.log\\(JSON.stringify\\(p.exports['./admin'], null, 2\\)\\)\")",
       "Bash(node -e ':*)",
       "Bash(npm show:*)",
-      "Bash(node -e \" const d = JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); const pkg = d.packages['node_modules/@shopify/ui-extensions-react'] || d.packages['node_modules/@shopify/ui-extensions']; console.log\\(JSON.stringify\\(pkg?.version || 'not found'\\)\\); // Also check what resolved the 2024.4.2 const allPkgs = Object.entries\\(d.packages\\).filter\\(\\([k]\\) => k.includes\\('ui-extensions'\\) && !k.includes\\('node_modules/'\\) === false\\); allPkgs.slice\\(0,10\\).forEach\\(\\([k,v]\\) => console.log\\(k, v.version\\)\\); \")"
+      "Bash(node -e \" const d = JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); const pkg = d.packages['node_modules/@shopify/ui-extensions-react'] || d.packages['node_modules/@shopify/ui-extensions']; console.log\\(JSON.stringify\\(pkg?.version || 'not found'\\)\\); // Also check what resolved the 2024.4.2 const allPkgs = Object.entries\\(d.packages\\).filter\\(\\([k]\\) => k.includes\\('ui-extensions'\\) && !k.includes\\('node_modules/'\\) === false\\); allPkgs.slice\\(0,10\\).forEach\\(\\([k,v]\\) => console.log\\(k, v.version\\)\\); \")",
+      "Bash(npm install:*)",
+      "Bash(xargs cat:*)",
+      "Bash(shopify app:*)",
+      "Bash(python3 -c \"import uuid; print\\(str\\(uuid.uuid4\\(\\)\\).replace\\('-',''\\) \\)\")"
     ]
   }
 }

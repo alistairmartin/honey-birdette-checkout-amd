@@ -3,31 +3,60 @@ import {
   CartLinesDiscountsGenerateRunResult,
 } from '../generated/api';
 
-interface FunctionConfig {
-  tags?: string[];
-  message?: string;
+interface Rule {
+  tag: string;
+  message: string;
 }
 
-const DEFAULT_TAGS = ['stop-discount-code'];
-const DEFAULT_MESSAGE = 'Discount codes cannot be applied to this order.';
+interface FunctionConfig {
+  rules?: Rule[];
+}
+
+const DEFAULT_MESSAGE = 'Sorry Honey, discounts codes not allowed on Sale, Gift Cards or Swimwear items.';
 
 export function cartLinesDiscountsGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
-  const configValue = input.discount.metafield?.value;
+  // tags are injected via input query variables from the metafield
+  // rules carry the per-tag messages
+  const configValue = input.discount?.metafield?.value;
   const config: FunctionConfig = configValue ? JSON.parse(configValue) : {};
-  const activeTags = config.tags?.length ? config.tags : DEFAULT_TAGS;
-  const message = config.message ?? DEFAULT_MESSAGE;
+  const rules = config.rules ?? [];
 
-  const hasRestrictedProduct = input.cart.lines.some((line) => {
+  let matchedMessage = DEFAULT_MESSAGE;
+  const restrictedTitles: string[] = [];
+
+  input.cart.lines.forEach((line) => {
     const merchandise = line.merchandise;
-    if (merchandise.__typename === 'ProductVariant') {
-      return merchandise.product.hasTags.some(
-        ({tag, hasTag}) => hasTag && activeTags.includes(tag),
-      );
+    if ('product' in merchandise) {
+      const matchedTag = merchandise.product.hasTags.find(({hasTag}) => hasTag);
+      if (matchedTag) {
+        const rule = rules.find((r) => r.tag === matchedTag.tag);
+        if (rule) matchedMessage = rule.message;
+        const title = merchandise.product.title;
+        if (title && !restrictedTitles.includes(title)) {
+          restrictedTitles.push(title);
+        }
+      }
     }
-    return false;
   });
+
+  const hasRestrictedProduct = restrictedTitles.length > 0;
+
+  if (hasRestrictedProduct && restrictedTitles.length > 0) {
+    const fittingTitles: string[] = [];
+    for (const title of restrictedTitles) {
+      const candidate = `${matchedMessage} (${[...fittingTitles, title].join(', ')})`;
+      if (candidate.length <= 120) {
+        fittingTitles.push(title);
+      } else {
+        break;
+      }
+    }
+    if (fittingTitles.length > 0) {
+      matchedMessage = `${matchedMessage} (${fittingTitles.join(', ')})`;
+    }
+  }
 
   if (!hasRestrictedProduct) {
     return {operations: []};
@@ -45,7 +74,7 @@ export function cartLinesDiscountsGenerateRun(
     operations: [
       {
         enteredDiscountCodesReject: {
-          message,
+          message: matchedMessage,
           codes: codesToReject,
         },
       },

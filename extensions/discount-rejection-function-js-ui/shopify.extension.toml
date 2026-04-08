@@ -1,0 +1,16 @@
+api_version = "2026-01"
+
+[[extensions]]
+name = "t:name"
+description = "t:description"
+handle = "discount-rejection-function-js-ui"
+uid = "529345fc-8850-4006-a267-053adde40cc4"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/DiscountFunctionSettings.jsx"
+target = "admin.discount-details.function-settings.render"
+
+[[extensions.metafields]]
+namespace = "$app"
+key = "function-configuration"

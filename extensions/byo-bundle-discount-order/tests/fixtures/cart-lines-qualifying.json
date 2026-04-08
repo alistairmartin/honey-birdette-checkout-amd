@@ -1,0 +1,82 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "attribute": { "value": "true" },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasAnyTag": true
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "attribute": { "value": "true" },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasAnyTag": true
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/2",
+            "quantity": 1,
+            "attribute": { "value": "true" },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasAnyTag": true
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/3",
+            "quantity": 1,
+            "attribute": { "value": "true" },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasAnyTag": true
+              }
+            }
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "orderDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "BUILD YOUR ROUTINE",
+                "targets": [
+                  {
+                    "orderSubtotal": {
+                      "excludedCartLineIds": []
+                    }
+                  }
+                ],
+                "value": {
+                  "percentage": {
+                    "value": 10.0
+                  }
+                }
+              }
+            ],
+            "selectionStrategy": "FIRST"
+          }
+        }
+      ]
+    }
+  }
+}

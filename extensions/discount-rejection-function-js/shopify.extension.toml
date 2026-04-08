@@ -12,6 +12,13 @@ description = "t:description"
   input_query = "src/cart_lines_discounts_generate_run.graphql"
   export = "cart-lines-discounts-generate-run"
 
+[extensions.ui]
+  handle = "discount-rejection-ui-v2"
+
+  [extensions.input.variables]
+  namespace = "$app"
+  key = "function-configuration"
+
   [extensions.build]
   command = ""
   path = "dist/function.wasm"

@@ -1,21 +1,11 @@
-query CartInput {
+query CartInput($tags: [String!]) {
   cart {
     lines {
       merchandise {
         ... on ProductVariant {
           product {
-            hasTags(tags: [
-              "stop-discount-code",
-              "no-discount",
-              "blocked",
-              "no-promo",
-              "exclude-discount",
-              "no-code",
-              "restricted",
-              "stop-promo",
-              "no-discount-codes",
-              "promo-excluded"
-            ]) {
+            title
+            hasTags(tags: $tags) {
               tag
               hasTag
             }
@@ -25,7 +15,7 @@ query CartInput {
     }
   }
   discount {
-    metafield(namespace: "discount-rejection", key: "config") {
+    metafield(namespace: "$app", key: "function-configuration") {
       value
     }
   }

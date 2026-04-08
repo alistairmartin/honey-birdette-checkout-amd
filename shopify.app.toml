@@ -12,7 +12,7 @@ dev_store_url = "amd-checkout-2024.myshopify.com"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products, write_customers, customer_read_customers, customer_write_customers"
+scopes = "write_products, write_customers, customer_read_customers, customer_write_customers, write_discounts"
 
 [auth]
 redirect_urls = [
@@ -26,6 +26,12 @@ api_version = "2025-10"
 
 [pos]
 embedded = false
+
+[discount.metafields.app.function-configuration]
+type = "json"
+name = "Function configuration"
+access.admin = "merchant_read_write"
+access.storefront = "none"
 
 
 [metafields]

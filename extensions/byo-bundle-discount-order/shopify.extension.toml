@@ -1,0 +1,20 @@
+api_version = "2026-01"
+
+[[extensions]]
+name = "t:name"
+handle = "byo-bundle-discount-order"
+type = "function"
+uid = "byo-bundle-discount-order-uid-placeholder"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "cart.lines.discounts.generate.run"
+  input_query = "src/cart_lines_discounts_generate_run.graphql"
+  export = "cart-lines-discounts-generate-run"
+
+[extensions.ui]
+  handle = "byo-bundle-discount-order-ui"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"
