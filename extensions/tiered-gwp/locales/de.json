@@ -1,0 +1,22 @@
+{
+  "heading": "Gratis-Geschenk beim Einkauf",
+  "viewAllGifts": "ALLE GESCHENKE ANSEHEN",
+  "youreOnTier0": "SIE SIND AUF STUFE 0",
+  "youreOnTier": "SIE SIND AUF STUFE {{tier}}",
+  "spendMoreToUnlock": "Geben Sie {{amount}} mehr aus, um Ihr Geschenk freizuschalten",
+  "spendMoreForNextTier": "Geben Sie {{amount}} mehr aus, um die nächste Stufe freizuschalten",
+  "tierUnlocked": "Stufe {{tier}} freigeschaltet!",
+  "tierUnlockedChoose": "Stufe {{tier}} freigeschaltet — wählen Sie Ihr Gratisgeschenk!",
+  "change": "Ändern",
+  "changeFreeGiftAccessibility": "Gratisgeschenk-Auswahl ändern",
+  "loadingGifts": "Verfügbare Geschenke werden geladen…",
+  "noGiftsAvailable": "Keine Geschenke für diese Stufe verfügbar.",
+  "free": "GRATIS",
+  "was": "Im Wert von",
+  "add": "HINZUFÜGEN",
+  "addGiftAccessibility": "{{title}} als Gratisgeschenk hinzufügen",
+  "allGifts": "ENTDECKEN SIE IHRE GESCHENKAUSWAHL",
+  "tier": "Stufe {{number}}",
+  "noProductsConfigured": "Keine Produkte für diese Stufe konfiguriert.",
+  "addError": "Beim Hinzufügen Ihres Gratisgeschenks ist ein Problem aufgetreten. Bitte versuchen Sie es erneut."
+}

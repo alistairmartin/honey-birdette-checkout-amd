@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:shopify.dev)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e \"const m = require\\('./node_modules/@shopify/ui-extensions-react/admin/index.js'\\); console.log\\(Object.keys\\(m\\).filter\\(k => k[0] === k[0].toUpperCase\\(\\)\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(node --input-type=module)",
+      "Bash(node -e \"const p = require\\('/Users/alistairmartin/Dropbox/checkout/honey-birdette-checkout-amd/node_modules/@shopify/ui-extensions-react/package.json'\\); console.log\\(p.version\\); console.log\\(JSON.stringify\\(p.exports ? Object.keys\\(p.exports\\) : 'no exports field', null, 2\\)\\)\")",
+      "Bash(node -e \"const p = require\\('/Users/alistairmartin/Dropbox/checkout/honey-birdette-checkout-amd/node_modules/@shopify/ui-extensions-react/package.json'\\); console.log\\(JSON.stringify\\(p.exports['./admin'], null, 2\\)\\)\")",
+      "Bash(node -e ':*)",
+      "Bash(npm show:*)",
+      "Bash(node -e \" const d = JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); const pkg = d.packages['node_modules/@shopify/ui-extensions-react'] || d.packages['node_modules/@shopify/ui-extensions']; console.log\\(JSON.stringify\\(pkg?.version || 'not found'\\)\\); // Also check what resolved the 2024.4.2 const allPkgs = Object.entries\\(d.packages\\).filter\\(\\([k]\\) => k.includes\\('ui-extensions'\\) && !k.includes\\('node_modules/'\\) === false\\); allPkgs.slice\\(0,10\\).forEach\\(\\([k,v]\\) => console.log\\(k, v.version\\)\\); \")"
+    ]
+  }
+}

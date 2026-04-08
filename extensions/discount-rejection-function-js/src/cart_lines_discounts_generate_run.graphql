@@ -1,0 +1,36 @@
+query CartInput {
+  cart {
+    lines {
+      merchandise {
+        ... on ProductVariant {
+          product {
+            hasTags(tags: [
+              "stop-discount-code",
+              "no-discount",
+              "blocked",
+              "no-promo",
+              "exclude-discount",
+              "no-code",
+              "restricted",
+              "stop-promo",
+              "no-discount-codes",
+              "promo-excluded"
+            ]) {
+              tag
+              hasTag
+            }
+          }
+        }
+      }
+    }
+  }
+  discount {
+    metafield(namespace: "discount-rejection", key: "config") {
+      value
+    }
+  }
+  enteredDiscountCodes {
+    code
+    rejectable
+  }
+}

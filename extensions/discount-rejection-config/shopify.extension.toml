@@ -1,0 +1,15 @@
+api_version = "2026-01"
+
+[[extensions]]
+name = "Discount Rejection Config"
+handle = "discount-rejection-config"
+uid = "6051ade1-1126-6d2c-148c-bbb2fd974bf083faa992"
+type = "ui_extension"
+
+[[extensions.targeting]]
+target = "admin.discounts.create.render"
+module = "./src/create.tsx"
+
+[[extensions.targeting]]
+target = "admin.discounts.details.render"
+module = "./src/details.tsx"

@@ -1,0 +1,56 @@
+{
+  "payload": {
+    "export": "cart-validations-generate-run",
+    "target": "cart.validations.generate.run",
+    "input": {
+      "cart": {
+        "lines": [
+          {
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "isGwp": false
+              }
+            },
+            "cost": {
+              "totalAmount": {
+                "amount": "150.00",
+                "currencyCode": "AUD"
+              }
+            }
+          },
+          {
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "isGwp": true
+              }
+            },
+            "cost": {
+              "totalAmount": {
+                "amount": "0.00",
+                "currencyCode": "AUD"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "validationAdd": {
+            "errors": [
+              {
+                "message": "You need to spend at least $300 to qualify for a free gift. Please add more items or remove your free gift to proceed.",
+                "target": "$.cart"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

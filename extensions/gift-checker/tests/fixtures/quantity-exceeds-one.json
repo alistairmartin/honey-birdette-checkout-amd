@@ -1,0 +1,71 @@
+{
+  "payload": {
+    "export": "cart-validations-generate-run",
+    "target": "cart.validations.generate.run",
+    "input": {
+      "cart": {
+        "lines": [
+          {
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "isGwp": false
+              }
+            },
+            "cost": {
+              "totalAmount": {
+                "amount": "350.00",
+                "currencyCode": "AUD"
+              }
+            }
+          },
+          {
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "isGwp": true
+              }
+            },
+            "cost": {
+              "totalAmount": {
+                "amount": "0.00",
+                "currencyCode": "AUD"
+              }
+            }
+          },
+          {
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "isGwp": true
+              }
+            },
+            "cost": {
+              "totalAmount": {
+                "amount": "0.00",
+                "currencyCode": "AUD"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "validationAdd": {
+            "errors": [
+              {
+                "message": "Only one free gift is allowed per order. Please remove the extra gift to proceed.",
+                "target": "$.cart"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

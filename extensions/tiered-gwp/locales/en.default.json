@@ -1,6 +1,22 @@
 {
-  "welcome": "Welcome to the {{target}} extension!",
-  "iWouldLikeAFreeGiftWithMyOrder": "I would like to receive a free gift with my order",
-  "addAFreeGiftToMyOrder": "Add a free gift to my order",
-  "metafieldChangesAreNotSupported": "Cart metafield changes are not supported in this checkout"
+  "heading": "Free Gift With Purchase",
+  "viewAllGifts": "VIEW ALL GIFTS",
+  "youreOnTier0": "YOU'RE ON TIER 0",
+  "youreOnTier": "YOU'RE ON TIER {{tier}}",
+  "spendMoreToUnlock": "Spend {{amount}} more to unlock your gift",
+  "spendMoreForNextTier": "Spend {{amount}} more to unlock the next tier",
+  "tierUnlocked": "Tier {{tier}} unlocked!",
+  "tierUnlockedChoose": "Tier {{tier}} unlocked — choose your free gift!",
+  "change": "Change",
+  "changeFreeGiftAccessibility": "Change free gift selection",
+  "loadingGifts": "Loading available gifts…",
+  "noGiftsAvailable": "No gifts available for this tier.",
+  "free": "FREE",
+  "was": "Valued at",
+  "add": "ADD",
+  "addGiftAccessibility": "Add {{title}} as your free gift",
+  "allGifts": "EXPLORE YOUR GIFT SELECTION",
+  "tier": "Tier {{number}}",
+  "noProductsConfigured": "No products configured for this tier.",
+  "addError": "There was an issue adding your free gift. Please try again."
 }

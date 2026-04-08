@@ -1,6 +1,22 @@
 {
-  "welcome": "Bienvenue dans l'extension {{target}}!",
-  "iWouldLikeAFreeGiftWithMyOrder": "Je souhaite recevoir un cadeau gratuit avec ma commande",
-  "addAFreeGiftToMyOrder": "Ajouter un cadeau gratuit à ma commande",
-  "metafieldChangesAreNotSupported": "Les modifications de métachamps de panier ne sont pas prises en charge dans cette commande"
+  "heading": "Cadeau Gratuit avec votre Achat",
+  "viewAllGifts": "VOIR TOUS LES CADEAUX",
+  "youreOnTier0": "CONTINUEZ VOS ACHATS POUR VOTRE CADEAU GRATUIT",
+  "youreOnTier": "VOUS ÊTES AU NIVEAU {{tier}}",
+  "spendMoreToUnlock": "Dépensez {{amount}} de plus pour débloquer votre cadeau",
+  "spendMoreForNextTier": "Dépensez {{amount}} de plus pour débloquer le niveau suivant",
+  "tierUnlocked": "Niveau {{tier}} débloqué !",
+  "tierUnlockedChoose": "Niveau {{tier}} débloqué — choisissez votre cadeau gratuit !",
+  "change": "Changer",
+  "changeFreeGiftAccessibility": "Changer la sélection de cadeau gratuit",
+  "loadingGifts": "Chargement des cadeaux disponibles…",
+  "noGiftsAvailable": "Aucun cadeau disponible pour ce niveau.",
+  "free": "GRATUIT",
+  "was": "Valeur",
+  "add": "AJOUTER",
+  "addGiftAccessibility": "Ajouter {{title}} comme cadeau gratuit",
+  "allGifts": "EXPLOREZ VOTRE SÉLECTION DE CADEAUX",
+  "tier": "Niveau {{number}}",
+  "noProductsConfigured": "Aucun produit configuré pour ce niveau.",
+  "addError": "Un problème est survenu lors de l'ajout de votre cadeau gratuit. Veuillez réessayer."
 }
