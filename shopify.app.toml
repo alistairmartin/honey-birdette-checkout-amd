@@ -3,7 +3,7 @@
 client_id = "1ff77f37375f9a6603f22ecd67e5e832"
 name = "Honey Birdette Checkout (AMD)"
 handle = "honey-birdette-checkout-amd"
-application_url = "https://williams-motion-times-focused.trycloudflare.com"
+application_url = "https://honey-birdette-checkout-amd.onrender.com"
 embedded = true
 
 [build]
@@ -16,13 +16,13 @@ scopes = "write_products, write_customers, customer_read_customers, customer_wri
 
 [auth]
 redirect_urls = [
-  "https://williams-motion-times-focused.trycloudflare.com/auth/callback",
-  "https://williams-motion-times-focused.trycloudflare.com/auth/shopify/callback",
-  "https://williams-motion-times-focused.trycloudflare.com/api/auth/callback"
+  "https://honey-birdette-checkout-amd.onrender.com/auth/callback",
+  "https://honey-birdette-checkout-amd.onrender.com/auth/shopify/callback",
+  "https://honey-birdette-checkout-amd.onrender.com/api/auth/callback"
 ]
 
 [webhooks]
-api_version = "2025-10"
+api_version = "2026-01"
 
 [pos]
 embedded = false
@@ -35,7 +35,7 @@ access.storefront = "none"
 
 
 [metafields]
-api_version = "2025-10"
+api_version = "2026-01"
 
 [customer.metafields.app.customer_birthday_day]
 name = "Birthday Day"

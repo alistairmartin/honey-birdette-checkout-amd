@@ -1,8 +1,37 @@
-# Shopify App Template - Remix
+# Honey Birdette Checkout (AMD)
 
-This is a template for building a [Shopify app](https://shopify.dev/docs/apps/getting-started) using the [Remix](https://remix.run) framework.
+Shopify app for Honey Birdette: a set of checkout UI extensions and Shopify
+Functions (banners, upsells, discount rules, validation) plus an embedded admin
+app. Built on the [Shopify Remix app template](https://shopify.dev/docs/api/shopify-app-remix).
 
-Rather than cloning this repo, you can use your preferred package manager and the Shopify CLI with [these steps](https://shopify.dev/docs/apps/getting-started/create).
+## Admin tools
+
+- **Client info cleanup** — `app/routes/app.client-info-cleanup.jsx`. Removes the
+  `_client_info` note attribute from orders created in the last 4 days. Dry-run +
+  apply, processes orders in resumable batches, with cost-based throttle
+  handling. Open it from the app's nav menu in a store's admin.
+
+## Stack / versions
+
+| Package | Version |
+| --- | --- |
+| `@shopify/shopify-api` | 13 |
+| `@shopify/shopify-app-remix` | 4 |
+| `@shopify/shopify-app-session-storage-prisma` | 9 |
+| `@shopify/polaris` | 13 |
+| `@shopify/app-bridge-react` | 4 |
+| Prisma | 6 |
+| Remix | 2 |
+| Admin API version | `2026-01` |
+
+The admin API is pinned to `2026-01` (in `app/shopify.server.js`) — the latest
+version `shopify-api@13` supports end-to-end, including REST resources.
+
+**Hosting and the full deploy procedure are in [DEPLOY.md](DEPLOY.md).**
+
+---
+
+The reference sections below come from the generic Shopify Remix template.
 
 Visit the [`shopify.dev` documentation](https://shopify.dev/docs/api/shopify-app-remix) for more details on the Remix app package.
 
@@ -105,6 +134,11 @@ Please read the [documentation for @shopify/shopify-app-remix](https://www.npmjs
 This template uses [Prisma](https://www.prisma.io/) to store session data, by default using an [SQLite](https://www.sqlite.org/index.html) database.
 The database is defined as a Prisma schema in `prisma/schema.prisma`.
 
+> This app keeps SQLite, but `schema.prisma` reads the connection string from
+> `DATABASE_URL`. Locally that is `file:dev.sqlite`; in production (Render) it
+> points at a SQLite file on a persistent disk (`file:/data/prod.sqlite`) so
+> sessions survive restarts. See [DEPLOY.md](DEPLOY.md).
+
 This use of SQLite works in production if your app runs as a single instance.
 The database that works best for you depends on the data your app needs and how it is queried.
 You can run your database of choice on a server yourself or host it with a SaaS company.
@@ -143,7 +177,11 @@ pnpm run build
 
 ## Hosting
 
-When you're ready to set up your app in production, you can follow [our deployment documentation](https://shopify.dev/docs/apps/deployment/web) to host your app on a cloud provider like [Heroku](https://www.heroku.com/) or [Fly.io](https://fly.io/).
+This app is set up to deploy to **Render** via `render.yaml` (Docker web service
++ a persistent disk for SQLite). The step-by-step procedure — Render setup,
+`shopify app deploy`, scopes, protected customer data — is in [DEPLOY.md](DEPLOY.md).
+
+The generic guidance below also applies. When you're ready to set up your app in production, you can follow [our deployment documentation](https://shopify.dev/docs/apps/deployment/web) to host your app on a cloud provider like [Heroku](https://www.heroku.com/) or [Fly.io](https://fly.io/).
 
 When you reach the step for [setting up environment variables](https://shopify.dev/docs/apps/deployment/web#set-env-vars), you also need to set the variable `NODE_ENV=production`.
 

@@ -1,3 +1,15 @@
+node_modules
+**/node_modules
 .cache
 build
-node_modules
+.git
+.env
+.shopify
+# The Remix server image does not need the checkout extensions, archived
+# code, scripts, or large assets — keep the image small.
+extensions
+archive
+old-scripts
+*.png
+prisma/dev.sqlite
+prisma/dev.sqlite-journal

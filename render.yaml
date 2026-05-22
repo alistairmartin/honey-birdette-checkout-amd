@@ -1,0 +1,30 @@
+# Render Blueprint for the Honey Birdette Checkout (AMD) embedded admin app.
+# Deploy: Render dashboard -> New -> Blueprint -> connect this repo -> Apply.
+# Spec: https://render.com/docs/blueprint-spec
+#
+# The service URL will be https://<name>.onrender.com. If Render appends a
+# suffix because the name is taken, update SHOPIFY_APP_URL below AND the
+# application_url / redirect_urls in shopify.app.toml to match, then redeploy.
+services:
+  - type: web
+    name: honey-birdette-checkout-amd
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter            # Starter is required to attach a persistent disk
+    region: singapore        # closest Render region to the AU store
+    autoDeploy: false        # deploy manually so it never races a `shopify app deploy`
+    disk:
+      name: sqlite-data
+      mountPath: /data       # DATABASE_URL points here so sessions survive restarts
+      sizeGB: 1
+    envVars:
+      - key: SHOPIFY_API_KEY
+        value: 1ff77f37375f9a6603f22ecd67e5e832  # public client_id, safe to commit
+      - key: SHOPIFY_API_SECRET
+        sync: false          # set in the Render dashboard (Partners -> app -> API secret key)
+      - key: SHOPIFY_APP_URL
+        value: https://honey-birdette-checkout-amd.onrender.com
+      - key: DATABASE_URL
+        value: file:/data/prod.sqlite
+      - key: NODE_ENV
+        value: production
