@@ -1,0 +1,16 @@
+query CartValidationsGenerateRunInput {
+  cart {
+    lines {
+      quantity
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          product {
+            title
+            hasAnyTag(tags: ["limit-1"])
+          }
+        }
+      }
+    }
+  }
+}

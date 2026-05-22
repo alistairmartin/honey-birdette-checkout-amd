@@ -1,0 +1,28 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {"subtotalAmount": {"currencyCode": "AUD"}},
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {"hasTags": []}
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["ORDER"],
+        "metafield": {"value": "{\"bundles\":[]}"}
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}

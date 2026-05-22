@@ -13,7 +13,7 @@ description = "t:description"
   export = "cart-lines-discounts-generate-run"
 
 [extensions.ui]
-  handle = "discount-rejection-ui-v2"
+  handle = "discount-rejection-function-ui"
 
   [extensions.input.variables]
   namespace = "$app"

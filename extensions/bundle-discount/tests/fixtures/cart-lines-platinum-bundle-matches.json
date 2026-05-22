@@ -1,0 +1,99 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {"subtotalAmount": {"currencyCode": "AUD"}},
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasTags": [
+                  {"tag": "promo-bundle--antibac", "hasTag": true},
+                  {"tag": "promo-bundle--silk-deluxe", "hasTag": false},
+                  {"tag": "promo-bundle--o", "hasTag": false},
+                  {"tag": "promo-bundle--edible-lubricant", "hasTag": false}
+                ]
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasTags": [
+                  {"tag": "promo-bundle--antibac", "hasTag": false},
+                  {"tag": "promo-bundle--silk-deluxe", "hasTag": true},
+                  {"tag": "promo-bundle--o", "hasTag": false},
+                  {"tag": "promo-bundle--edible-lubricant", "hasTag": false}
+                ]
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/2",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasTags": [
+                  {"tag": "promo-bundle--antibac", "hasTag": false},
+                  {"tag": "promo-bundle--silk-deluxe", "hasTag": false},
+                  {"tag": "promo-bundle--o", "hasTag": true},
+                  {"tag": "promo-bundle--edible-lubricant", "hasTag": false}
+                ]
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/3",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasTags": [
+                  {"tag": "promo-bundle--antibac", "hasTag": false},
+                  {"tag": "promo-bundle--silk-deluxe", "hasTag": false},
+                  {"tag": "promo-bundle--o", "hasTag": false},
+                  {"tag": "promo-bundle--edible-lubricant", "hasTag": true}
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["ORDER"],
+        "metafield": {
+          "value": "{\"tags\":[\"promo-bundle--antibac\",\"promo-bundle--silk-deluxe\",\"promo-bundle--o\",\"promo-bundle--edible-lubricant\"],\"bundles\":[{\"id\":\"plat\",\"name\":\"Platinum Bundle\",\"tags\":[\"promo-bundle--antibac\",\"promo-bundle--silk-deluxe\",\"promo-bundle--o\",\"promo-bundle--edible-lubricant\"],\"discountAmounts\":{\"AUD\":20,\"NZD\":22,\"USD\":14,\"CAD\":19,\"EUR\":12,\"GBP\":11,\"AED\":51}},{\"id\":\"prem\",\"name\":\"Premium Bundle\",\"tags\":[\"promo-bundle--antibac\",\"promo-bundle--silk-deluxe\"],\"discountAmounts\":{\"AUD\":5,\"NZD\":5.5,\"USD\":3.5,\"CAD\":4.5,\"EUR\":3,\"GBP\":2.5,\"AED\":13}}]}"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "orderDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Platinum Bundle",
+                "targets": [
+                  {
+                    "orderSubtotal": {"excludedCartLineIds": []}
+                  }
+                ],
+                "value": {"fixedAmount": {"amount": 20.0}}
+              }
+            ],
+            "selectionStrategy": "FIRST"
+          }
+        }
+      ]
+    }
+  }
+}

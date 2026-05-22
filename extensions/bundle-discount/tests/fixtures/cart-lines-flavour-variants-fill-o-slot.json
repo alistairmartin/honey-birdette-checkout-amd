@@ -1,0 +1,81 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {"subtotalAmount": {"currencyCode": "NZD"}},
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasTags": [
+                  {"tag": "promo-bundle--antibac", "hasTag": true},
+                  {"tag": "promo-bundle--silk-deluxe", "hasTag": false},
+                  {"tag": "promo-bundle--o", "hasTag": false}
+                ]
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasTags": [
+                  {"tag": "promo-bundle--antibac", "hasTag": false},
+                  {"tag": "promo-bundle--silk-deluxe", "hasTag": true},
+                  {"tag": "promo-bundle--o", "hasTag": false}
+                ]
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/2",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasTags": [
+                  {"tag": "promo-bundle--antibac", "hasTag": false},
+                  {"tag": "promo-bundle--silk-deluxe", "hasTag": false},
+                  {"tag": "promo-bundle--o", "hasTag": true}
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["ORDER"],
+        "metafield": {
+          "value": "{\"tags\":[\"promo-bundle--antibac\",\"promo-bundle--silk-deluxe\",\"promo-bundle--o\"],\"bundles\":[{\"id\":\"delux\",\"name\":\"Delux Bundle\",\"tags\":[\"promo-bundle--antibac\",\"promo-bundle--silk-deluxe\",\"promo-bundle--o\"],\"discountAmounts\":{\"AUD\":10,\"NZD\":11,\"USD\":7,\"CAD\":9.5,\"EUR\":6,\"GBP\":5.5,\"AED\":26}},{\"id\":\"prem\",\"name\":\"Premium Bundle\",\"tags\":[\"promo-bundle--antibac\",\"promo-bundle--silk-deluxe\"],\"discountAmounts\":{\"AUD\":5,\"NZD\":5.5,\"USD\":3.5,\"CAD\":4.5,\"EUR\":3,\"GBP\":2.5,\"AED\":13}}]}"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "orderDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Delux Bundle",
+                "targets": [
+                  {
+                    "orderSubtotal": {"excludedCartLineIds": []}
+                  }
+                ],
+                "value": {"fixedAmount": {"amount": 11.0}}
+              }
+            ],
+            "selectionStrategy": "FIRST"
+          }
+        }
+      ]
+    }
+  }
+}

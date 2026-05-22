@@ -1,0 +1,20 @@
+query CartDeliveryOptionsTransformRunInput {
+  deliveryCustomization {
+    metafield(namespace: "$app:update-us-shipping-po-and-afo-boxes", key: "function-configuration") {
+      jsonValue
+    }
+  }
+  cart {
+    deliveryGroups {
+      deliveryAddress {
+        address1
+        city
+        zip
+      }
+      deliveryOptions {
+        handle
+        title
+      }
+    }
+  }
+}

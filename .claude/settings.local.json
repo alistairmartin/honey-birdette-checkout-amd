@@ -14,7 +14,14 @@
       "Bash(npm install:*)",
       "Bash(xargs cat:*)",
       "Bash(shopify app:*)",
-      "Bash(python3 -c \"import uuid; print\\(str\\(uuid.uuid4\\(\\)\\).replace\\('-',''\\) \\)\")"
+      "Bash(python3 -c \"import uuid; print\\(str\\(uuid.uuid4\\(\\)\\).replace\\('-',''\\) \\)\")",
+      "Bash(npm view:*)",
+      "Read(//private/tmp/**)",
+      "Bash(npm pack:*)",
+      "Bash(tar -tzf shopify-ui-extensions-2026.4.0-rc.3.tgz)",
+      "Bash(tar -tzf /tmp/shopify-ui-extensions-2026.4.0-rc.3.tgz)",
+      "Bash(tar -xzf /tmp/shopify-ui-extensions-2026.4.0-rc.3.tgz -C /tmp/)",
+      "Read(//tmp/package/build/**)"
     ]
   }
 }

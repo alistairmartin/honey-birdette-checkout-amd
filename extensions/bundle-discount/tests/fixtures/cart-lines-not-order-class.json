@@ -1,0 +1,32 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {"subtotalAmount": {"currencyCode": "AUD"}},
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasTags": [{"tag": "promo-bundle--antibac", "hasTag": true}]
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["PRODUCT"],
+        "metafield": {
+          "value": "{\"tags\":[\"promo-bundle--antibac\"],\"bundles\":[{\"id\":\"a\",\"name\":\"Premium\",\"tags\":[\"promo-bundle--antibac\"],\"discountAmounts\":{\"AUD\":5}}]}"
+        }
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}

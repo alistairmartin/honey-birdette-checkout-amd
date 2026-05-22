@@ -1,0 +1,21 @@
+query CartValidationsGenerateRunInput {
+  cart {
+    lines {
+      merchandise {
+        ... on ProductVariant {
+          product {
+            isGiftCard
+          }
+        }
+      }
+      cost {
+        subtotalAmount {
+          amount
+        }
+        totalAmount {
+          amount
+        }
+      }
+    }
+  }
+}

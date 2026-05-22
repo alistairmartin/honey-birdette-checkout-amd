@@ -1,0 +1,29 @@
+query CartInput($tags: [String!]) {
+  cart {
+    cost {
+      subtotalAmount {
+        currencyCode
+      }
+    }
+    lines {
+      id
+      quantity
+      merchandise {
+        ... on ProductVariant {
+          product {
+            hasTags(tags: $tags) {
+              tag
+              hasTag
+            }
+          }
+        }
+      }
+    }
+  }
+  discount {
+    discountClasses
+    metafield(namespace: "$app", key: "function-configuration") {
+      value
+    }
+  }
+}

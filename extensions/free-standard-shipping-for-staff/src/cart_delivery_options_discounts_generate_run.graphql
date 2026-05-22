@@ -1,0 +1,23 @@
+query DeliveryInput {
+  cart {
+    buyerIdentity {
+      email
+      customer {
+        hasStaffTag: hasAnyTag(tags: ["Honey Birdette Staff"])
+      }
+    }
+    deliveryGroups {
+      id
+      deliveryOptions {
+        handle
+        title
+      }
+    }
+  }
+  discount {
+    discountClasses
+    metafield(namespace: "$app", key: "function-configuration") {
+      value
+    }
+  }
+}

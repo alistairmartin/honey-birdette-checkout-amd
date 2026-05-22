@@ -1,0 +1,18 @@
+query CartInput {
+  cart {
+    buyerIdentity {
+      email
+    }
+    lines {
+      id
+      cost {
+        subtotalAmount {
+          amount
+        }
+      }
+    }
+  }
+  discount {
+    discountClasses
+  }
+}

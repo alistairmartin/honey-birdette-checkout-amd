@@ -1,0 +1,25 @@
+api_version = "2026-01"
+
+[[extensions]]
+name = "t:name"
+handle = "reject-discount-codes-for-staff-function"
+type = "function"
+uid = "9ba80c25-207b-9de7-6b47-525daafa96badd627ad6"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "cart.lines.discounts.generate.run"
+  input_query = "src/cart_lines_discounts_generate_run.graphql"
+  export = "cart-lines-discounts-generate-run"
+
+  [[extensions.targeting]]
+  target = "cart.delivery-options.discounts.generate.run"
+  input_query = "src/cart_delivery_options_discounts_generate_run.graphql"
+  export = "cart-delivery-options-discounts-generate-run"
+
+  [extensions.ui]
+  handle = "discount-rejection-function-ui"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

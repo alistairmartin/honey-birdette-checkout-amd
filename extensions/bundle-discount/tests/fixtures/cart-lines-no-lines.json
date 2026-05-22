@@ -1,0 +1,19 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {"subtotalAmount": {"currencyCode": "AUD"}},
+        "lines": []
+      },
+      "discount": {
+        "discountClasses": ["ORDER"],
+        "metafield": null
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}

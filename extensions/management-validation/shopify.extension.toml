@@ -1,0 +1,18 @@
+[[extensions]]
+name = "Validation"
+handle = "management-validation"
+type = "editor_extension_collection"
+uid = "bc05f686-397b-4a7d-19bb-180281758c8acd24b6de"
+# Add the handles of the extensions you want in this collection here
+includes=["reject-discount-codes-for-staff", "consent-to-checkout", "limit-1-ui", "block-toys-and-bondage"]
+
+# You can also add extensions to the collection this way
+#[[extensions.include]]
+#handle=""
+
+# A second editor extension collection added in the same extension toml config
+# [[extensions]]
+# name = "t:collection_two_name"
+# type = "editor_extension_collection"
+# handle = "management-validation"
+# includes=[]

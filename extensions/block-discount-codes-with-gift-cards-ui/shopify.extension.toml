@@ -1,0 +1,18 @@
+api_version = "2025-10"
+[[extensions]]
+# change the merchant-facing name of the extension in locales/en.default.json
+name = "t:name"
+# your validation function's shopify.extension.toml will require a reference
+# within [extensions.ui] to this handle:
+#
+#   [extensions.ui]
+#   handle = "block-discount-codes-with-gift-cards-ui"
+handle = "block-discount-codes-with-gift-cards-ui"
+type = "ui_extension"
+uid = "a18269fc-02d4-ff32-2a00-a4c04dfbd45fbea09c52"
+
+[[extensions.targeting]]
+module = "./src/ValidationSettings.jsx"
+target = "admin.settings.validation.render"
+
+

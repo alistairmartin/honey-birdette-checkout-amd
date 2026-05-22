@@ -1,0 +1,48 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {"subtotalAmount": {"currencyCode": "AED"}},
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasTags": [
+                  {"tag": "promo-bundle--antibac", "hasTag": true},
+                  {"tag": "promo-bundle--silk-deluxe", "hasTag": false}
+                ]
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": {
+                "hasTags": [
+                  {"tag": "promo-bundle--antibac", "hasTag": false},
+                  {"tag": "promo-bundle--silk-deluxe", "hasTag": true}
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["ORDER"],
+        "metafield": {
+          "value": "{\"tags\":[\"promo-bundle--antibac\",\"promo-bundle--silk-deluxe\"],\"bundles\":[{\"id\":\"prem\",\"name\":\"Premium Bundle\",\"tags\":[\"promo-bundle--antibac\",\"promo-bundle--silk-deluxe\"],\"discountAmounts\":{\"AUD\":5}}]}"
+        }
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}

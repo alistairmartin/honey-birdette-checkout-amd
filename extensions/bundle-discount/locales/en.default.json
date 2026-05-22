@@ -1,0 +1,4 @@
+{
+  "name": "Bundle Discount",
+  "description": "Apply a fixed-amount order discount when the cart contains one of every product in a configured bundle."
+}
