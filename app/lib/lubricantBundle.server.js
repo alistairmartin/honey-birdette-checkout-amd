@@ -555,11 +555,13 @@ export async function setupOrRepairBundleDefinition(admin) {
 
 const GET_CART_TRANSFORM_METAFIELD = `#graphql
   query GetCartTransformMetafield($id: ID!) {
-    cartTransform(id: $id) {
-      id
-      metafield(namespace: "$app", key: "bundle-index") {
-        value
-        updatedAt
+    node(id: $id) {
+      ... on CartTransform {
+        id
+        metafield(namespace: "$app", key: "bundle-index") {
+          value
+          updatedAt
+        }
       }
     }
   }
@@ -574,7 +576,7 @@ export async function inspectBundleIndex(admin) {
     variables: {id: cartTransformId},
   });
   const json = await response.json();
-  const metafield = json?.data?.cartTransform?.metafield;
+  const metafield = json?.data?.node?.metafield;
   let parsed = null;
   if (metafield?.value) {
     try {
