@@ -6,7 +6,7 @@
   "spendMoreToUnlock": "Dépensez {{amount}} de plus pour débloquer votre cadeau",
   "spendMoreForNextTier": "Dépensez {{amount}} de plus pour débloquer le niveau suivant",
   "tierUnlocked": "Niveau {{tier}} débloqué !",
-  "tierUnlockedChoose": "Niveau {{tier}} débloqué — choisissez votre cadeau gratuit !",
+  "tierUnlockedChoose": "Niveau {{tier}} débloqué - choisissez votre cadeau gratuit !",
   "change": "Changer",
   "changeFreeGiftAccessibility": "Changer la sélection de cadeau gratuit",
   "loadingGifts": "Chargement des cadeaux disponibles…",

@@ -5,7 +5,7 @@ EXPOSE 3000
 WORKDIR /app
 COPY . .
 
-# Install ALL dependencies — the build needs devDependencies (vite, typescript).
+# Install ALL dependencies - the build needs devDependencies (vite, typescript).
 # NODE_ENV is intentionally left unset here so npm does not skip devDependencies.
 RUN npm install
 

@@ -246,7 +246,7 @@ export default function ClientInfoCleanup() {
               Scans every order created in the last {DAYS} days and removes the{" "}
               <code>{ATTRIBUTE_KEY}</code> note attribute. All other attributes
               on each order are preserved. This cleans the store whose admin
-              you are currently in — open the app in each store to clean it.
+              you are currently in - open the app in each store to clean it.
             </Text>
             <InlineStack gap="300">
               <Button onClick={() => start(false)} disabled={running} loading={running && !apply}>
@@ -259,7 +259,7 @@ export default function ClientInfoCleanup() {
                 variant="primary"
                 tone="critical"
               >
-                Apply — remove attribute
+                Apply - remove attribute
               </Button>
             </InlineStack>
           </BlockStack>
@@ -283,8 +283,8 @@ export default function ClientInfoCleanup() {
               <Text as="p" variant="bodyMd">
                 {totals.affected} order(s) have <code>{ATTRIBUTE_KEY}</code>
                 {apply
-                  ? ` — ${totals.updated} updated.`
-                  : " (dry run — nothing changed)."}
+                  ? ` - ${totals.updated} updated.`
+                  : " (dry run - nothing changed)."}
               </Text>
             </BlockStack>
           </Card>

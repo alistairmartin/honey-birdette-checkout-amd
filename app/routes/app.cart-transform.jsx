@@ -20,15 +20,17 @@ import {
   syncBundleIndexToCartTransform,
   verifyBundleDefinition,
   setupOrRepairBundleDefinition,
+  inspectBundleIndex,
 } from "../lib/lubricantBundle.server";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
-  const [cartTransformId, definition] = await Promise.all([
+  const [cartTransformId, definition, bundleIndex] = await Promise.all([
     getCartTransformId(admin),
     verifyBundleDefinition(admin),
+    inspectBundleIndex(admin),
   ]);
-  return json({ cartTransformId, definition });
+  return json({ cartTransformId, definition, bundleIndex });
 };
 
 export const action = async ({ request }) => {
@@ -79,7 +81,7 @@ function definitionStatusLabel(definition) {
 }
 
 export default function CartTransformPage() {
-  const { cartTransformId, definition } = useLoaderData();
+  const { cartTransformId, definition, bundleIndex } = useLoaderData();
   const fetcher = useFetcher();
   const submitting = fetcher.state !== "idle";
   const lastResult = fetcher.data;
@@ -124,7 +126,7 @@ export default function CartTransformPage() {
               {definition.mismatches.length ? (
                 <BlockStack gap="100">
                   <Text as="p" variant="bodyMd" tone="critical">
-                    Type mismatches (will NOT be auto-fixed — rename or recreate manually):
+                    Type mismatches (will NOT be auto-fixed - rename or recreate manually):
                   </Text>
                   {definition.mismatches.map((m) => (
                     <Text key={m.key} as="p" variant="bodySm" tone="subdued">
@@ -178,7 +180,7 @@ export default function CartTransformPage() {
                 visually merged under a parent bundle product at checkout.
                 Installation is one-time per shop. After install, the bundle
                 index is kept in sync automatically whenever a{" "}
-                <code>lubricant_bundle</code> metaobject changes — but you can
+                <code>lubricant_bundle</code> metaobject changes - but you can
                 also force a manual resync below.
               </Text>
 
@@ -237,6 +239,62 @@ export default function CartTransformPage() {
             </BlockStack>
           </Card>
         </Layout.Section>
+
+        {cartTransformId ? (
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack gap="200" align="start" blockAlign="center">
+                  <Text as="h2" variant="headingMd">
+                    Current bundle index (what the function sees)
+                  </Text>
+                  {bundleIndex?.value ? (
+                    <Badge tone="success">
+                      {`${bundleIndex.parsed?.bundles?.length ?? 0} bundle(s)`}
+                    </Badge>
+                  ) : (
+                    <Badge tone="critical">Empty</Badge>
+                  )}
+                </InlineStack>
+
+                {bundleIndex?.updatedAt ? (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Last written: {bundleIndex.updatedAt}
+                  </Text>
+                ) : null}
+
+                {!bundleIndex?.value ? (
+                  <Text as="p" variant="bodyMd" tone="critical">
+                    The cart transform metafield is empty. Click "Resync bundle
+                    index" above to populate it from your{" "}
+                    <code>lubricant_bundle</code> metaobjects.
+                  </Text>
+                ) : null}
+
+                {bundleIndex?.parsed?.bundles?.length === 0 ? (
+                  <Text as="p" variant="bodyMd" tone="critical">
+                    Index has zero bundles. Likely cause: no{" "}
+                    <code>lubricant_bundle</code> entries have{" "}
+                    <code>parent_product</code> set (bundles missing a parent
+                    product are skipped from the cart transform index).
+                  </Text>
+                ) : null}
+
+                {bundleIndex?.parsed ? (
+                  <Box
+                    padding="300"
+                    background="bg-surface-secondary"
+                    borderRadius="200"
+                  >
+                    <Text as="pre" variant="bodySm">
+                      {JSON.stringify(bundleIndex.parsed, null, 2)}
+                    </Text>
+                  </Box>
+                ) : null}
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        ) : null}
 
         {lastResult ? (
           <Layout.Section>

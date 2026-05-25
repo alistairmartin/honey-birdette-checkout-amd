@@ -553,6 +553,44 @@ export async function setupOrRepairBundleDefinition(admin) {
   };
 }
 
+const GET_CART_TRANSFORM_METAFIELD = `#graphql
+  query GetCartTransformMetafield($id: ID!) {
+    cartTransform(id: $id) {
+      id
+      metafield(namespace: "$app", key: "bundle-index") {
+        value
+        updatedAt
+      }
+    }
+  }
+`;
+
+export async function inspectBundleIndex(admin) {
+  const cartTransformId = await getCartTransformId(admin);
+  if (!cartTransformId) {
+    return {cartTransformId: null, value: null, parsed: null};
+  }
+  const response = await admin.graphql(GET_CART_TRANSFORM_METAFIELD, {
+    variables: {id: cartTransformId},
+  });
+  const json = await response.json();
+  const metafield = json?.data?.cartTransform?.metafield;
+  let parsed = null;
+  if (metafield?.value) {
+    try {
+      parsed = JSON.parse(metafield.value);
+    } catch {
+      parsed = "<<unparseable JSON>>";
+    }
+  }
+  return {
+    cartTransformId,
+    value: metafield?.value ?? null,
+    updatedAt: metafield?.updatedAt ?? null,
+    parsed,
+  };
+}
+
 export async function uninstallCartTransform(admin) {
   const [installation, cartTransformId] = await Promise.all([
     getAppInstallation(admin),

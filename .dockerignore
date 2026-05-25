@@ -6,7 +6,7 @@ build
 .env
 .shopify
 # The Remix server image does not need the checkout extensions, archived
-# code, scripts, or large assets — keep the image small.
+# code, scripts, or large assets - keep the image small.
 extensions
 archive
 old-scripts

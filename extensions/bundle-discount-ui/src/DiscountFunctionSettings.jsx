@@ -177,7 +177,7 @@ function App() {
 
           <s-text>
             Each bundle requires one cart item per tag. Any product carrying
-            the tag fills that slot — useful when customers can pick between
+            the tag fills that slot - useful when customers can pick between
             flavours or variants. When a cart qualifies for multiple bundles,
             the highest-discount bundle is applied first and its items are
             consumed before lower bundles are evaluated. Discounts are charged

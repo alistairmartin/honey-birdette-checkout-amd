@@ -1,14 +1,14 @@
 # Deploying the Checkout (AMD) admin app + running the `_client_info` cleanup
 
 This app is a Shopify **embedded admin app** (Remix). The checkout *extensions*
-run on Shopify's infrastructure, but the embedded admin pages — including the
-**Client info cleanup** tool — need a live server at the app's `application_url`.
+run on Shopify's infrastructure, but the embedded admin pages - including the
+**Client info cleanup** tool - need a live server at the app's `application_url`.
 Right now that URL is a dead `trycloudflare` dev tunnel, which is why the
 interface "doesn't work". This guide hosts it on Render with a stable URL.
 
 ## What's already done in the repo
 
-- New route `app/routes/app.client-info-cleanup.jsx` — scans orders from the
+- New route `app/routes/app.client-info-cleanup.jsx` - scans orders from the
   last 4 days and removes the `_client_info` note attribute (dry-run + apply,
   resumable in batches, with cost-based throttle handling).
 - `write_orders` added to `[access_scopes]` in `shopify.app.toml`.
@@ -26,7 +26,7 @@ interface "doesn't work". This guide hosts it on Render with a stable URL.
 2. Render dashboard → **New → Blueprint** → select this repo. Render reads
    `render.yaml` and creates the `honey-birdette-checkout-amd` web service with a
    1 GB persistent disk at `/data`.
-3. Set the one secret it asks for: **`SHOPIFY_API_SECRET`** — from Shopify
+3. Set the one secret it asks for: **`SHOPIFY_API_SECRET`** - from Shopify
    Partners → this app → *Client credentials* → API secret key.
 4. Apply / deploy. Confirm the live URL is
    `https://honey-birdette-checkout-amd.onrender.com`.
@@ -60,8 +60,8 @@ and API versions.
 
 In each store's admin, open the app → **Client info cleanup** in the nav:
 
-1. **Dry run** — counts orders that have `_client_info`, changes nothing.
-2. **Apply — remove attribute** — re-runs and removes the attribute, preserving
+1. **Dry run** - counts orders that have `_client_info`, changes nothing.
+2. **Apply - remove attribute** - re-runs and removes the attribute, preserving
    every other note attribute on each order.
 
 The tool processes orders in ~25-second batches and resumes automatically, so it

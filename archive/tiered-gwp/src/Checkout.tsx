@@ -251,7 +251,7 @@ function TieredGWP() {
   // GWP enforcement: runs whenever cart or qualification changes.
   // Rules:
   //  1. Remove any GWP line for a tier the customer hasn't unlocked.
-  //  2. A customer may only have 1 free gift at a time — remove any extras beyond the first.
+  //  2. A customer may only have 1 free gift at a time - remove any extras beyond the first.
   //  3. If the remaining GWP line somehow has quantity > 1, reduce it to 1.
   useEffect(() => {
     const gwpLines = cartLines.filter(line =>
@@ -260,7 +260,7 @@ function TieredGWP() {
     if (gwpLines.length === 0) return;
 
     (async () => {
-      // Step 1 — remove wrong-tier lines
+      // Step 1 - remove wrong-tier lines
       for (const line of gwpLines) {
         const attr = line.attributes?.find(a => a.key === GWP_TIER_ATTR);
         const tierNum = parseInt(attr!.value, 10);
@@ -269,7 +269,7 @@ function TieredGWP() {
         }
       }
 
-      // Step 2 — among correct-tier lines keep only the first, remove duplicates
+      // Step 2 - among correct-tier lines keep only the first, remove duplicates
       const correctTierLines = gwpLines.filter(line => {
         const attr = line.attributes?.find(a => a.key === GWP_TIER_ATTR);
         return parseInt(attr!.value, 10) === highestUnlocked + 1;
@@ -278,7 +278,7 @@ function TieredGWP() {
         await applyCartLinesChange({ type: "removeCartLine", id: correctTierLines[i].id, quantity: correctTierLines[i].quantity });
       }
 
-      // Step 3 — if the surviving line has quantity > 1, clamp to 1
+      // Step 3 - if the surviving line has quantity > 1, clamp to 1
       if (correctTierLines.length > 0 && correctTierLines[0].quantity > 1) {
         await applyCartLinesChange({ type: "updateCartLine", id: correctTierLines[0].id, quantity: 1 });
       }
@@ -360,7 +360,7 @@ function TieredGWP() {
   if (tiers.length === 0) return null;
   if (regularLines.length === 0) return null;
 
-  // Language gate — only active on honey-birdette-eu store
+  // Language gate - only active on honey-birdette-eu store
   const languageSetting = (settings.language as string | undefined)?.toUpperCase();
   if (languageSetting && shop.myshopifyDomain.includes("honey-birdette-eu")) {
     const buyerLang = language.isoCode.toLowerCase().split("-")[0];
@@ -387,7 +387,7 @@ function TieredGWP() {
         <TextBlock appearance="subdued">{settings.description as string}</TextBlock>
       )}
 
-      {/* "View all gifts" button — opens tier/product overview modal */}
+      {/* "View all gifts" button - opens tier/product overview modal */}
       <View inlineAlignment="start">
         <Button
           kind="secondary"
@@ -397,7 +397,7 @@ function TieredGWP() {
         </Button>
       </View>
 
-      {/* Progress bar toward next tier — hidden once a gift has been added to cart */}
+      {/* Progress bar toward next tier - hidden once a gift has been added to cart */}
       {nextLockedTier && !currentTierGiftInCart && (() => {
         const prevThreshold = highestUnlocked >= 0 ? getMinSpend(tiers[highestUnlocked]) : 0;
         const nextThreshold = getMinSpend(nextLockedTier);
@@ -460,7 +460,7 @@ function TieredGWP() {
 
         return (
           <BlockStack key={index} spacing="tight" background="subdued" padding="base">
-            {/* Tier unlocked heading — swaps to added_to_cart_message once a gift is selected */}
+            {/* Tier unlocked heading - swaps to added_to_cart_message once a gift is selected */}
             <InlineLayout columns={["auto", "fill"]} spacing="tight" blockAlignment="center">
               <Icon source="checkmark" />
               <Text emphasis="bold">
@@ -480,7 +480,7 @@ function TieredGWP() {
             )}
 
             {giftLine ? (
-              /* Selected state — show chosen gift with Change button */
+              /* Selected state - show chosen gift with Change button */
               <View padding="tight" border="base" cornerRadius="base">
                 <InlineLayout columns={["auto", "fill", "auto"]} spacing="base" blockAlignment="center">
                   <View maxInlineSize={64}>
@@ -546,7 +546,7 @@ function TieredGWP() {
 }
 
 // ---------------------------------------------------------------------------
-// GiftProductCard — shown in the picker before a gift is chosen
+// GiftProductCard - shown in the picker before a gift is chosen
 // ---------------------------------------------------------------------------
 
 function GiftProductCard({
@@ -620,7 +620,7 @@ function GiftProductCard({
 }
 
 // ---------------------------------------------------------------------------
-// AllGiftsModal — overview of every tier and its products
+// AllGiftsModal - overview of every tier and its products
 // ---------------------------------------------------------------------------
 
 function AllGiftsModal({

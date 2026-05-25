@@ -2,6 +2,6 @@
   "name": "Free Standard Shipping for Staff",
   "description": "Free Standard Shipping for Staff",
   "enableLabel": "Enable free standard shipping for staff",
-  "description": "Automatically applies free standard shipping (2–5 Days) for customers with a @honeybirdette.com or @honeybirdette.com.au email address.",
+  "description": "Automatically applies free standard shipping (2-5 Days) for customers with a @honeybirdette.com or @honeybirdette.com.au email address.",
   "error": "Unable to update discount. Please try again."
 }

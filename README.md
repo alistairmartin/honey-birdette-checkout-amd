@@ -6,7 +6,7 @@ app. Built on the [Shopify Remix app template](https://shopify.dev/docs/api/shop
 
 ## Admin tools
 
-- **Client info cleanup** — `app/routes/app.client-info-cleanup.jsx`. Removes the
+- **Client info cleanup** - `app/routes/app.client-info-cleanup.jsx`. Removes the
   `_client_info` note attribute from orders created in the last 4 days. Dry-run +
   apply, processes orders in resumable batches, with cost-based throttle
   handling. Open it from the app's nav menu in a store's admin.
@@ -24,7 +24,7 @@ app. Built on the [Shopify Remix app template](https://shopify.dev/docs/api/shop
 | Remix | 2 |
 | Admin API version | `2026-01` |
 
-The admin API is pinned to `2026-01` (in `app/shopify.server.js`) — the latest
+The admin API is pinned to `2026-01` (in `app/shopify.server.js`) - the latest
 version `shopify-api@13` supports end-to-end, including REST resources.
 
 **Hosting and the full deploy procedure are in [DEPLOY.md](DEPLOY.md).**
@@ -178,8 +178,8 @@ pnpm run build
 ## Hosting
 
 This app is set up to deploy to **Render** via `render.yaml` (Docker web service
-+ a persistent disk for SQLite). The step-by-step procedure — Render setup,
-`shopify app deploy`, scopes, protected customer data — is in [DEPLOY.md](DEPLOY.md).
++ a persistent disk for SQLite). The step-by-step procedure - Render setup,
+`shopify app deploy`, scopes, protected customer data - is in [DEPLOY.md](DEPLOY.md).
 
 The generic guidance below also applies. When you're ready to set up your app in production, you can follow [our deployment documentation](https://shopify.dev/docs/apps/deployment/web) to host your app on a cloud provider like [Heroku](https://www.heroku.com/) or [Fly.io](https://fly.io/).
 

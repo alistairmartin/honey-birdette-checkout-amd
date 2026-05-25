@@ -6,7 +6,7 @@
   "spendMoreToUnlock": "Geben Sie {{amount}} mehr aus, um Ihr Geschenk freizuschalten",
   "spendMoreForNextTier": "Geben Sie {{amount}} mehr aus, um die nächste Stufe freizuschalten",
   "tierUnlocked": "Stufe {{tier}} freigeschaltet!",
-  "tierUnlockedChoose": "Stufe {{tier}} freigeschaltet — wählen Sie Ihr Gratisgeschenk!",
+  "tierUnlockedChoose": "Stufe {{tier}} freigeschaltet - wählen Sie Ihr Gratisgeschenk!",
   "change": "Ändern",
   "changeFreeGiftAccessibility": "Gratisgeschenk-Auswahl ändern",
   "loadingGifts": "Verfügbare Geschenke werden geladen…",

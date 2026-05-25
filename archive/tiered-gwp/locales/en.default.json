@@ -6,7 +6,7 @@
   "spendMoreToUnlock": "Spend {{amount}} more to unlock your gift",
   "spendMoreForNextTier": "Spend {{amount}} more to unlock the next tier",
   "tierUnlocked": "Tier {{tier}} unlocked!",
-  "tierUnlockedChoose": "Tier {{tier}} unlocked — choose your free gift!",
+  "tierUnlockedChoose": "Tier {{tier}} unlocked - choose your free gift!",
   "change": "Change",
   "changeFreeGiftAccessibility": "Change free gift selection",
   "loadingGifts": "Loading available gifts…",
