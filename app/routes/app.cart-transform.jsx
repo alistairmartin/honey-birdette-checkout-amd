@@ -23,14 +23,42 @@ import {
   inspectBundleIndex,
 } from "../lib/lubricantBundle.server";
 
+async function safeCall(fn, label) {
+  try {
+    const value = await fn();
+    console.log(`[cart-transform loader] ${label} ok`);
+    return { value, error: null };
+  } catch (err) {
+    const message = err?.message ?? String(err);
+    console.error(`[cart-transform loader] ${label} FAILED: ${message}`);
+    console.error(err?.stack ?? "(no stack)");
+    return { value: null, error: message };
+  }
+}
+
+const EMPTY_DEFINITION = { exists: false, missing: [], mismatches: [] };
+const EMPTY_BUNDLE_INDEX = {
+  cartTransformId: null,
+  value: null,
+  updatedAt: null,
+  parsed: null,
+};
+
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
-  const [cartTransformId, definition, bundleIndex] = await Promise.all([
-    getCartTransformId(admin),
-    verifyBundleDefinition(admin),
-    inspectBundleIndex(admin),
+  const [cartTransformCall, definitionCall, bundleIndexCall] = await Promise.all([
+    safeCall(() => getCartTransformId(admin), "getCartTransformId"),
+    safeCall(() => verifyBundleDefinition(admin), "verifyBundleDefinition"),
+    safeCall(() => inspectBundleIndex(admin), "inspectBundleIndex"),
   ]);
-  return json({ cartTransformId, definition, bundleIndex });
+  return json({
+    cartTransformId: cartTransformCall.value,
+    cartTransformError: cartTransformCall.error,
+    definition: definitionCall.value ?? EMPTY_DEFINITION,
+    definitionError: definitionCall.error,
+    bundleIndex: bundleIndexCall.value ?? EMPTY_BUNDLE_INDEX,
+    bundleIndexError: bundleIndexCall.error,
+  });
 };
 
 export const action = async ({ request }) => {
@@ -81,16 +109,52 @@ function definitionStatusLabel(definition) {
 }
 
 export default function CartTransformPage() {
-  const { cartTransformId, definition, bundleIndex } = useLoaderData();
+  const {
+    cartTransformId,
+    cartTransformError,
+    definition,
+    definitionError,
+    bundleIndex,
+    bundleIndexError,
+  } = useLoaderData();
   const fetcher = useFetcher();
   const submitting = fetcher.state !== "idle";
   const lastResult = fetcher.data;
   const submittingIntent = fetcher.formData?.get("intent");
 
+  const loaderErrors = [
+    cartTransformError && { label: "getCartTransformId", error: cartTransformError },
+    definitionError && { label: "verifyBundleDefinition", error: definitionError },
+    bundleIndexError && { label: "inspectBundleIndex", error: bundleIndexError },
+  ].filter(Boolean);
+
   return (
     <Page>
       <TitleBar title="Lubricant bundle setup" />
       <Layout>
+        {loaderErrors.length ? (
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="200">
+                <Text as="h3" variant="headingSm" tone="critical">
+                  Loader errors
+                </Text>
+                {loaderErrors.map((e) => (
+                  <Box
+                    key={e.label}
+                    padding="300"
+                    background="bg-surface-critical"
+                    borderRadius="200"
+                  >
+                    <Text as="pre" variant="bodySm">
+                      {e.label}: {e.error}
+                    </Text>
+                  </Box>
+                ))}
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        ) : null}
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
