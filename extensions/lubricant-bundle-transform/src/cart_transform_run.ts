@@ -28,6 +28,23 @@ interface ResolvedBundle {
 
 const NO_CHANGES: CartTransformRunResult = {operations: []};
 
+const CURRENCY_SYMBOL: Record<string, string> = {
+  AUD: "$",
+  USD: "$",
+  NZD: "$",
+  CAD: "$",
+  GBP: "£",
+  EUR: "€",
+  AED: "د.إ ",
+};
+
+function formatMoney(amount: number, currencyCode: string | null): string {
+  const safeAmount = amount.toFixed(2);
+  if (!currencyCode) return safeAmount;
+  const symbol = CURRENCY_SYMBOL[currencyCode];
+  return symbol ? `${symbol}${safeAmount}` : `${currencyCode} ${safeAmount}`;
+}
+
 export function cartTransformRun(
   input: CartTransformRunInput,
 ): CartTransformRunResult {
@@ -152,11 +169,22 @@ export function cartTransformRun(
         price = {percentageDecrease: {value: percent}};
       }
 
+      const attributes =
+        childrenSum > 0
+          ? [
+              {
+                key: "Original Price",
+                value: formatMoney(childrenSum, currencyCode),
+              },
+            ]
+          : [];
+
       operations.push({
         linesMerge: {
           cartLines,
           parentVariantId: bundle.parentVariantId,
           title: bundle.name,
+          attributes,
           ...(price ? {price} : {}),
         },
       });
