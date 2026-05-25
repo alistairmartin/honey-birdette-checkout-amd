@@ -94,33 +94,39 @@ export function cartTransformRun(
         ? rawOpt2
         : bundle.option2VariantIds[0] ?? null;
 
-    const expandedCartItems = [
-      ...bundle.fixedVariantIds.map((variantId) => ({
-        merchandiseId: variantId,
-        quantity: 1,
-        price: {adjustment: {fixedPricePerUnit: {amount: "0.00"}}},
-      })),
-      ...(opt1VariantId
-        ? [
-            {
-              merchandiseId: opt1VariantId,
-              quantity: 1,
-              price: {adjustment: {fixedPricePerUnit: {amount: "0.00"}}},
-            },
-          ]
-        : []),
-      ...(opt2VariantId
-        ? [
-            {
-              merchandiseId: opt2VariantId,
-              quantity: 1,
-              price: {adjustment: {fixedPricePerUnit: {amount: "0.00"}}},
-            },
-          ]
-        : []),
+    // Build the list of child variant IDs to expand into.
+    const childVariantIds: string[] = [
+      ...bundle.fixedVariantIds,
+      ...(opt1VariantId ? [opt1VariantId] : []),
+      ...(opt2VariantId ? [opt2VariantId] : []),
     ];
 
-    if (!expandedCartItems.length) continue;
+    if (!childVariantIds.length) continue;
+
+    // lineExpand sets the parent cart line's cost to the sum of the
+    // expanded children's costs. Distribute the parent variant's actual
+    // per-unit price evenly across the children so the line total matches
+    // what the customer was shown on the PDP. Last child absorbs any
+    // rounding remainder so the sum is exact to the cent.
+    const parentAmount = Number(line.cost?.amountPerQuantity?.amount ?? 0);
+    const numChildren = childVariantIds.length;
+    const evenShareCents = Math.floor((parentAmount * 100) / numChildren);
+    const evenShare = (evenShareCents / 100).toFixed(2);
+    const remainderCents =
+      Math.round(parentAmount * 100) - evenShareCents * numChildren;
+    const lastShare = ((evenShareCents + remainderCents) / 100).toFixed(2);
+
+    const expandedCartItems = childVariantIds.map((variantId, index) => ({
+      merchandiseId: variantId,
+      quantity: 1,
+      price: {
+        adjustment: {
+          fixedPricePerUnit: {
+            amount: index === numChildren - 1 ? lastShare : evenShare,
+          },
+        },
+      },
+    }));
 
     operations.push({
       lineExpand: {
