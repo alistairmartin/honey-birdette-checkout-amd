@@ -1,0 +1,20 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "t:name"
+handle = "bundle-discount-v2"
+type = "function"
+uid = "68d819a7-e669-d5fb-256d-14b6fe2bf7b58d1c59f7"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "cart.lines.discounts.generate.run"
+  input_query = "src/cart_lines_discounts_generate_run.graphql"
+  export = "cart-lines-discounts-generate-run"
+
+  [extensions.ui]
+  handle = "bundle-discount-v2-ui"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

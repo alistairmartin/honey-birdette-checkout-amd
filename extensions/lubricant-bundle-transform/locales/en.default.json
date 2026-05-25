@@ -1,0 +1,4 @@
+{
+  "name": "Lubricant Bundle Transform",
+  "description": "Visually merges matching cart lines into a parent bundle line based on Lubricant Bundle metaobjects."
+}

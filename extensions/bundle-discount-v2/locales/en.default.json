@@ -1,0 +1,4 @@
+{
+  "name": "Lubricant Bundle Discount",
+  "description": "Apply a fixed-amount order discount when the cart matches a Lubricant Bundle metaobject (required products plus any configured options)."
+}
