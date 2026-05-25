@@ -305,6 +305,24 @@ const CART_TRANSFORM_CREATE = `#graphql
   }
 `;
 
+const CART_TRANSFORM_DELETE = `#graphql
+  mutation CartTransformDelete($id: ID!) {
+    cartTransformDelete(id: $id) {
+      deletedId
+      userErrors { field message }
+    }
+  }
+`;
+
+const METAFIELDS_DELETE = `#graphql
+  mutation MetafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+    metafieldsDelete(metafields: $metafields) {
+      deletedMetafields { key namespace ownerId }
+      userErrors { field message }
+    }
+  }
+`;
+
 async function getAppInstallation(admin) {
   const response = await admin.graphql(GET_APP_INSTALLATION);
   const json = await response.json();
@@ -367,6 +385,204 @@ export async function installCartTransform(admin) {
   });
 
   return {cartTransformId, created: true};
+}
+
+// --------------------------------------------------------------------------
+// Metaobject definition setup + verify (merchant-owned)
+// --------------------------------------------------------------------------
+
+export const EXPECTED_FIELDS = [
+  {key: "products", name: "Products", type: "list.product_reference", required: true},
+  {key: "option_1", name: "Option 1", type: "list.product_reference", required: false},
+  {key: "option_2", name: "Option 2", type: "list.product_reference", required: false},
+  {key: "parent_product", name: "Parent product", type: "product_reference", required: false},
+  ...SUPPORTED_CURRENCIES.map((code) => ({
+    key: moneyFieldKey(code),
+    name: `Discount ${code}`,
+    type: "money",
+    required: false,
+  })),
+];
+
+const GET_DEFINITION_BY_TYPE = `#graphql
+  query GetBundleDefinition($type: String!) {
+    metaobjectDefinitionByType(type: $type) {
+      id
+      type
+      name
+      fieldDefinitions {
+        key
+        name
+        required
+        type { name }
+      }
+    }
+  }
+`;
+
+const CREATE_DEFINITION = `#graphql
+  mutation CreateBundleDefinition($definition: MetaobjectDefinitionCreateInput!) {
+    metaobjectDefinitionCreate(definition: $definition) {
+      metaobjectDefinition { id type }
+      userErrors { field message code }
+    }
+  }
+`;
+
+const UPDATE_DEFINITION = `#graphql
+  mutation UpdateBundleDefinition($id: ID!, $definition: MetaobjectDefinitionUpdateInput!) {
+    metaobjectDefinitionUpdate(id: $id, definition: $definition) {
+      metaobjectDefinition { id type }
+      userErrors { field message code }
+    }
+  }
+`;
+
+export async function getBundleDefinition(admin) {
+  const response = await admin.graphql(GET_DEFINITION_BY_TYPE, {
+    variables: {type: METAOBJECT_TYPE},
+  });
+  const json = await response.json();
+  return json?.data?.metaobjectDefinitionByType ?? null;
+}
+
+export async function verifyBundleDefinition(admin) {
+  const def = await getBundleDefinition(admin);
+  if (!def) {
+    return {
+      exists: false,
+      missing: EXPECTED_FIELDS.map((f) => f.key),
+      mismatches: [],
+    };
+  }
+
+  const byKey = new Map();
+  for (const fd of def.fieldDefinitions ?? []) {
+    byKey.set(fd.key, fd);
+  }
+
+  const missing = [];
+  const mismatches = [];
+  for (const expected of EXPECTED_FIELDS) {
+    const found = byKey.get(expected.key);
+    if (!found) {
+      missing.push(expected.key);
+      continue;
+    }
+    const actualType = found.type?.name;
+    if (actualType !== expected.type) {
+      mismatches.push({
+        key: expected.key,
+        expected: expected.type,
+        actual: actualType,
+      });
+    }
+  }
+
+  return {exists: true, definitionId: def.id, missing, mismatches};
+}
+
+export async function setupOrRepairBundleDefinition(admin) {
+  const existing = await getBundleDefinition(admin);
+
+  if (!existing) {
+    const response = await admin.graphql(CREATE_DEFINITION, {
+      variables: {
+        definition: {
+          type: METAOBJECT_TYPE,
+          name: "Lubricant Bundle",
+          fieldDefinitions: EXPECTED_FIELDS.map((f) => ({
+            key: f.key,
+            name: f.name,
+            type: f.type,
+          })),
+        },
+      },
+    });
+    const json = await response.json();
+    const errors = json?.data?.metaobjectDefinitionCreate?.userErrors ?? [];
+    if (errors.length) {
+      throw new Error(
+        `metaobjectDefinitionCreate failed: ${errors.map((e) => `${e.field?.join(".")}: ${e.message}`).join("; ")}`,
+      );
+    }
+    return {action: "created", definitionId: json?.data?.metaobjectDefinitionCreate?.metaobjectDefinition?.id};
+  }
+
+  const byKey = new Map();
+  for (const fd of existing.fieldDefinitions ?? []) {
+    byKey.set(fd.key, fd);
+  }
+
+  const toCreate = EXPECTED_FIELDS.filter((f) => !byKey.has(f.key));
+  if (!toCreate.length) {
+    return {action: "noop", definitionId: existing.id};
+  }
+
+  const response = await admin.graphql(UPDATE_DEFINITION, {
+    variables: {
+      id: existing.id,
+      definition: {
+        fieldDefinitions: toCreate.map((f) => ({
+          create: {key: f.key, name: f.name, type: f.type},
+        })),
+      },
+    },
+  });
+  const json = await response.json();
+  const errors = json?.data?.metaobjectDefinitionUpdate?.userErrors ?? [];
+  if (errors.length) {
+    throw new Error(
+      `metaobjectDefinitionUpdate failed: ${errors.map((e) => `${e.field?.join(".")}: ${e.message}`).join("; ")}`,
+    );
+  }
+  return {
+    action: "repaired",
+    definitionId: existing.id,
+    addedFields: toCreate.map((f) => f.key),
+  };
+}
+
+export async function uninstallCartTransform(admin) {
+  const installation = await getAppInstallation(admin);
+  const cartTransformId = installation?.metafield?.value ?? null;
+  if (!cartTransformId) {
+    return {uninstalled: false, reason: "not installed"};
+  }
+
+  const response = await admin.graphql(CART_TRANSFORM_DELETE, {
+    variables: {id: cartTransformId},
+  });
+  const json = await response.json();
+  const errors = json?.data?.cartTransformDelete?.userErrors ?? [];
+  // If the cart transform record was already gone server-side, treat as success
+  // for cleanup purposes; we still want to clear the stale metafield pointer.
+  if (errors.length) {
+    const nonFatal = errors.every((e) =>
+      String(e.message ?? "").toLowerCase().includes("not found"),
+    );
+    if (!nonFatal) {
+      throw new Error(
+        `cartTransformDelete failed: ${errors.map((e) => e.message).join(", ")}`,
+      );
+    }
+  }
+
+  if (installation?.id) {
+    await admin.graphql(METAFIELDS_DELETE, {
+      variables: {
+        metafields: [
+          {
+            ownerId: installation.id,
+            namespace: FUNCTION_CONFIG_NAMESPACE,
+            key: CART_TRANSFORM_ID_KEY,
+          },
+        ],
+      },
+    });
+  }
+
+  return {uninstalled: true, cartTransformId};
 }
 
 export async function syncBundleIndexToCartTransform(admin) {
