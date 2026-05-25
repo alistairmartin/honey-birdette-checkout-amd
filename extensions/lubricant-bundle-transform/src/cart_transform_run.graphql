@@ -17,6 +17,12 @@ query CartTransformRunInput {
           }
         }
       }
+      bundleOption1: attribute(key: "_bundle_option_1") {
+        value
+      }
+      bundleOption2: attribute(key: "_bundle_option_2") {
+        value
+      }
     }
   }
   cartTransform {

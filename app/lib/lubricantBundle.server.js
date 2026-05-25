@@ -101,6 +101,13 @@ export function flattenMetaobject(metaobject) {
   const refIds = (key) => refNodes(key).map((n) => n?.id).filter(Boolean);
   const refTitles = (key) =>
     refNodes(key).map((n) => n?.title).filter(Boolean);
+  // The cart transform's lineExpand operation needs variant IDs (merchandiseId),
+  // not product IDs. The metaobject GraphQL already fetches `variants(first: 1)`
+  // for each product reference; we surface the first variant per product here.
+  const refVariantIds = (key) =>
+    refNodes(key)
+      .map((n) => n?.variants?.nodes?.[0]?.id)
+      .filter(Boolean);
 
   const discountAmounts = emptyDiscountAmounts();
   for (const code of SUPPORTED_CURRENCIES) {
@@ -126,10 +133,13 @@ export function flattenMetaobject(metaobject) {
     id: metaobject.id,
     name: metaobject.displayName ?? "",
     productIds: refIds("products"),
+    productVariantIds: refVariantIds("products"),
     productTitles: refTitles("products"),
     option1Ids: refIds("option_1"),
+    option1VariantIds: refVariantIds("option_1"),
     option1Titles: refTitles("option_1"),
     option2Ids: refIds("option_2"),
+    option2VariantIds: refVariantIds("option_2"),
     option2Titles: refTitles("option_2"),
     parentProductId: parentProduct?.id ?? null,
     parentProductTitle: parentProduct?.title ?? null,
@@ -664,14 +674,17 @@ export async function syncBundleIndexToCartTransform(admin) {
 
   const flattened = await fetchAllBundles(admin);
   const bundles = flattened
-    .filter((b) => b.parentVariantId && b.productIds.length)
+    .filter((b) => b.parentVariantId && b.productVariantIds.length)
     .map((b) => ({
       id: b.id,
       name: b.name,
       parentVariantId: b.parentVariantId,
       productIds: b.productIds,
+      productVariantIds: b.productVariantIds,
       option1Ids: b.option1Ids,
+      option1VariantIds: b.option1VariantIds,
       option2Ids: b.option2Ids,
+      option2VariantIds: b.option2VariantIds,
       discountAmounts: b.discountAmounts,
     }));
 

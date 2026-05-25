@@ -9,8 +9,11 @@ interface BundleIndexEntry {
   name?: string;
   parentVariantId?: string;
   productIds?: string[];
+  productVariantIds?: string[];
   option1Ids?: string[];
+  option1VariantIds?: string[];
   option2Ids?: string[];
+  option2VariantIds?: string[];
   discountAmounts?: Record<string, number>;
 }
 
@@ -21,29 +24,12 @@ interface BundleIndex {
 interface ResolvedBundle {
   name?: string;
   parentVariantId: string;
-  slots: string[][];
-  sortKey: number;
-  discountAmounts: Record<string, number>;
+  fixedVariantIds: string[];
+  option1VariantIds: string[];
+  option2VariantIds: string[];
 }
 
 const NO_CHANGES: CartTransformRunResult = {operations: []};
-
-const CURRENCY_SYMBOL: Record<string, string> = {
-  AUD: "$",
-  USD: "$",
-  NZD: "$",
-  CAD: "$",
-  GBP: "£",
-  EUR: "€",
-  AED: "د.إ ",
-};
-
-function formatMoney(amount: number, currencyCode: string | null): string {
-  const safeAmount = amount.toFixed(2);
-  if (!currencyCode) return safeAmount;
-  const symbol = CURRENCY_SYMBOL[currencyCode];
-  return symbol ? `${symbol}${safeAmount}` : `${currencyCode} ${safeAmount}`;
-}
 
 export function cartTransformRun(
   input: CartTransformRunInput,
@@ -60,139 +46,89 @@ export function cartTransformRun(
     return NO_CHANGES;
   }
 
-  const bundles: ResolvedBundle[] = (index.bundles ?? [])
-    .map<ResolvedBundle | null>((b) => {
-      if (!b.parentVariantId) return null;
-      const productIds = Array.isArray(b.productIds) ? b.productIds : [];
-      if (!productIds.length) return null;
+  // Resolve bundles, indexed by parentVariantId for quick lookup.
+  const bundlesByParent = new Map<string, ResolvedBundle>();
+  for (const b of index.bundles ?? []) {
+    if (!b.parentVariantId) continue;
+    const fixedVariantIds = Array.isArray(b.productVariantIds)
+      ? b.productVariantIds
+      : [];
+    if (!fixedVariantIds.length) continue;
 
-      const slots: string[][] = productIds.map((pid) => [pid]);
-      if (Array.isArray(b.option1Ids) && b.option1Ids.length) {
-        slots.push(b.option1Ids);
-      }
-      if (Array.isArray(b.option2Ids) && b.option2Ids.length) {
-        slots.push(b.option2Ids);
-      }
-
-      const discountAmounts = b.discountAmounts ?? {};
-      const audAmount = discountAmounts.AUD ?? 0;
-      return {
-        name: b.name,
-        parentVariantId: b.parentVariantId,
-        slots,
-        sortKey: audAmount,
-        discountAmounts,
-      };
-    })
-    .filter((b): b is ResolvedBundle => b !== null)
-    .sort((a, b) => b.sortKey - a.sortKey);
-
-  if (!bundles.length) return NO_CHANGES;
-
-  // Currency comes from any line's per-unit cost; all lines in a cart share
-  // the same currency.
-  const currencyCode =
-    input.cart.lines[0]?.cost?.amountPerQuantity?.currencyCode ?? null;
-
-  const lineAvail = new Map<string, number>();
-  const lineProductId = new Map<string, string | null>();
-  const linePerUnitCost = new Map<string, number>();
-
-  for (const line of input.cart.lines) {
-    lineAvail.set(line.id, line.quantity);
-    const merchandise = line.merchandise;
-    if ("product" in merchandise && merchandise.product) {
-      lineProductId.set(line.id, merchandise.product.id);
-    } else {
-      lineProductId.set(line.id, null);
-    }
-    const perUnit = Number(line.cost?.amountPerQuantity?.amount ?? 0);
-    linePerUnitCost.set(line.id, isFinite(perUnit) ? perUnit : 0);
+    bundlesByParent.set(b.parentVariantId, {
+      name: b.name,
+      parentVariantId: b.parentVariantId,
+      fixedVariantIds,
+      option1VariantIds: Array.isArray(b.option1VariantIds)
+        ? b.option1VariantIds
+        : [],
+      option2VariantIds: Array.isArray(b.option2VariantIds)
+        ? b.option2VariantIds
+        : [],
+    });
   }
+
+  if (!bundlesByParent.size) return NO_CHANGES;
 
   const operations: Operation[] = [];
 
-  for (const bundle of bundles) {
-    while (true) {
-      const consumedThisRound = new Map<string, number>();
-      let satisfied = true;
+  for (const line of input.cart.lines) {
+    const merchandise = line.merchandise;
+    if (!("id" in merchandise) || !merchandise.id) continue;
 
-      for (const slot of bundle.slots) {
-        const slotSet = new Set(slot);
-        let pickedLine: string | null = null;
-        for (const line of input.cart.lines) {
-          const remaining =
-            (lineAvail.get(line.id) ?? 0) -
-            (consumedThisRound.get(line.id) ?? 0);
-          if (remaining <= 0) continue;
-          const pid = lineProductId.get(line.id);
-          if (!pid || !slotSet.has(pid)) continue;
-          pickedLine = line.id;
-          break;
-        }
-        if (!pickedLine) {
-          satisfied = false;
-          break;
-        }
-        consumedThisRound.set(
-          pickedLine,
-          (consumedThisRound.get(pickedLine) ?? 0) + 1,
-        );
-      }
+    const bundle = bundlesByParent.get(merchandise.id);
+    if (!bundle) continue;
 
-      if (!satisfied) break;
+    // Customer's chosen option variants are stored as line item properties.
+    // If the chosen value isn't in the allowed list, fall back to the first
+    // option to keep the bundle valid (defensive against tampering).
+    const rawOpt1 = line.bundleOption1?.value ?? null;
+    const rawOpt2 = line.bundleOption2?.value ?? null;
 
-      const cartLines = Array.from(consumedThisRound.entries()).map(
-        ([cartLineId, quantity]) => ({cartLineId, quantity}),
-      );
+    const opt1VariantId =
+      rawOpt1 && bundle.option1VariantIds.includes(rawOpt1)
+        ? rawOpt1
+        : bundle.option1VariantIds[0] ?? null;
+    const opt2VariantId =
+      rawOpt2 && bundle.option2VariantIds.includes(rawOpt2)
+        ? rawOpt2
+        : bundle.option2VariantIds[0] ?? null;
 
-      // Sum the per-unit cost of the consumed children to determine the
-      // pre-discount bundle total. We use amountPerQuantity (not the full
-      // line subtotal) because a single cart line may have a higher quantity
-      // than we're consuming for this bundle.
-      let childrenSum = 0;
-      for (const {cartLineId, quantity} of cartLines) {
-        const perUnit = linePerUnitCost.get(cartLineId) ?? 0;
-        childrenSum += perUnit * quantity;
-      }
+    const expandedCartItems = [
+      ...bundle.fixedVariantIds.map((variantId) => ({
+        merchandiseId: variantId,
+        quantity: 1,
+        price: {adjustment: {fixedPricePerUnit: {amount: "0.00"}}},
+      })),
+      ...(opt1VariantId
+        ? [
+            {
+              merchandiseId: opt1VariantId,
+              quantity: 1,
+              price: {adjustment: {fixedPricePerUnit: {amount: "0.00"}}},
+            },
+          ]
+        : []),
+      ...(opt2VariantId
+        ? [
+            {
+              merchandiseId: opt2VariantId,
+              quantity: 1,
+              price: {adjustment: {fixedPricePerUnit: {amount: "0.00"}}},
+            },
+          ]
+        : []),
+    ];
 
-      const discountForCurrency = currencyCode
-        ? Number(bundle.discountAmounts?.[currencyCode] ?? 0)
-        : 0;
+    if (!expandedCartItems.length) continue;
 
-      let price: {percentageDecrease: {value: number}} | undefined;
-      if (discountForCurrency > 0 && childrenSum > 0) {
-        const rawPercent = (discountForCurrency / childrenSum) * 100;
-        const capped = Math.min(100, Math.max(0, rawPercent));
-        // 4 decimal places balances precision against MoneyV2 rounding noise.
-        const percent = Math.round(capped * 10000) / 10000;
-        price = {percentageDecrease: {value: percent}};
-      }
-
-      const attributes =
-        childrenSum > 0
-          ? [
-              {
-                key: "Original Price",
-                value: formatMoney(childrenSum, currencyCode),
-              },
-            ]
-          : [];
-
-      operations.push({
-        linesMerge: {
-          cartLines,
-          parentVariantId: bundle.parentVariantId,
-          title: bundle.name,
-          attributes,
-          ...(price ? {price} : {}),
-        },
-      });
-
-      for (const [lid, qty] of consumedThisRound) {
-        lineAvail.set(lid, (lineAvail.get(lid) ?? 0) - qty);
-      }
-    }
+    operations.push({
+      lineExpand: {
+        cartLineId: line.id,
+        expandedCartItems,
+        title: bundle.name,
+      },
+    });
   }
 
   if (!operations.length) return NO_CHANGES;
