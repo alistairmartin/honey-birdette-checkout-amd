@@ -23,6 +23,7 @@ interface ResolvedBundle {
   parentVariantId: string;
   slots: string[][];
   sortKey: number;
+  discountAmounts: Record<string, number>;
 }
 
 const NO_CHANGES: CartTransformRunResult = {operations: []};
@@ -56,12 +57,14 @@ export function cartTransformRun(
         slots.push(b.option2Ids);
       }
 
-      const audAmount = b.discountAmounts?.AUD ?? 0;
+      const discountAmounts = b.discountAmounts ?? {};
+      const audAmount = discountAmounts.AUD ?? 0;
       return {
         name: b.name,
         parentVariantId: b.parentVariantId,
         slots,
         sortKey: audAmount,
+        discountAmounts,
       };
     })
     .filter((b): b is ResolvedBundle => b !== null)
@@ -69,8 +72,14 @@ export function cartTransformRun(
 
   if (!bundles.length) return NO_CHANGES;
 
+  // Currency comes from any line's per-unit cost; all lines in a cart share
+  // the same currency.
+  const currencyCode =
+    input.cart.lines[0]?.cost?.amountPerQuantity?.currencyCode ?? null;
+
   const lineAvail = new Map<string, number>();
   const lineProductId = new Map<string, string | null>();
+  const linePerUnitCost = new Map<string, number>();
 
   for (const line of input.cart.lines) {
     lineAvail.set(line.id, line.quantity);
@@ -80,6 +89,8 @@ export function cartTransformRun(
     } else {
       lineProductId.set(line.id, null);
     }
+    const perUnit = Number(line.cost?.amountPerQuantity?.amount ?? 0);
+    linePerUnitCost.set(line.id, isFinite(perUnit) ? perUnit : 0);
   }
 
   const operations: Operation[] = [];
@@ -118,11 +129,35 @@ export function cartTransformRun(
         ([cartLineId, quantity]) => ({cartLineId, quantity}),
       );
 
+      // Sum the per-unit cost of the consumed children to determine the
+      // pre-discount bundle total. We use amountPerQuantity (not the full
+      // line subtotal) because a single cart line may have a higher quantity
+      // than we're consuming for this bundle.
+      let childrenSum = 0;
+      for (const {cartLineId, quantity} of cartLines) {
+        const perUnit = linePerUnitCost.get(cartLineId) ?? 0;
+        childrenSum += perUnit * quantity;
+      }
+
+      const discountForCurrency = currencyCode
+        ? Number(bundle.discountAmounts?.[currencyCode] ?? 0)
+        : 0;
+
+      let price: {percentageDecrease: {value: number}} | undefined;
+      if (discountForCurrency > 0 && childrenSum > 0) {
+        const rawPercent = (discountForCurrency / childrenSum) * 100;
+        const capped = Math.min(100, Math.max(0, rawPercent));
+        // 4 decimal places balances precision against MoneyV2 rounding noise.
+        const percent = Math.round(capped * 10000) / 10000;
+        price = {percentageDecrease: {value: percent}};
+      }
+
       operations.push({
         linesMerge: {
           cartLines,
           parentVariantId: bundle.parentVariantId,
           title: bundle.name,
+          ...(price ? {price} : {}),
         },
       });
 
