@@ -339,7 +339,17 @@ async function findCartTransformFunctionId(admin) {
 
 export async function getCartTransformId(admin) {
   const installation = await getAppInstallation(admin);
-  return installation?.metafield?.value ?? null;
+  const raw = installation?.metafield?.value;
+  if (!raw) return null;
+  // The metafield is typed `json`, so the stored value is JSON-encoded.
+  // Parse defensively: fall back to the raw string if it was ever written
+  // as plain text (older versions, manual edits).
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "string" ? parsed : raw;
+  } catch {
+    return raw;
+  }
 }
 
 export async function installCartTransform(admin) {
@@ -544,8 +554,10 @@ export async function setupOrRepairBundleDefinition(admin) {
 }
 
 export async function uninstallCartTransform(admin) {
-  const installation = await getAppInstallation(admin);
-  const cartTransformId = installation?.metafield?.value ?? null;
+  const [installation, cartTransformId] = await Promise.all([
+    getAppInstallation(admin),
+    getCartTransformId(admin),
+  ]);
   if (!cartTransformId) {
     return {uninstalled: false, reason: "not installed"};
   }
