@@ -35,6 +35,13 @@ const GET_BUNDLE_QUERY = `#graphql
       fields {
         key
         value
+        reference {
+          ... on Product {
+            id
+            title
+            variants(first: 1) { nodes { id } }
+          }
+        }
         references(first: 100) {
           nodes {
             ... on Product {
@@ -60,6 +67,13 @@ const LIST_BUNDLES_QUERY = `#graphql
         fields {
           key
           value
+          reference {
+            ... on Product {
+              id
+              title
+              variants(first: 1) { nodes { id } }
+            }
+          }
           references(first: 100) {
             nodes {
               ... on Product {
@@ -100,7 +114,12 @@ export function flattenMetaobject(metaobject) {
     }
   }
 
-  const parentProduct = refNodes("parent_product")[0];
+  // parent_product is a single product_reference (not a list), so its data
+  // lives on `reference` (singular), not `references` (plural connection).
+  const parentProduct =
+    fieldByKey.get("parent_product")?.reference ??
+    refNodes("parent_product")[0] ??
+    null;
   const parentVariantId = parentProduct?.variants?.nodes?.[0]?.id ?? null;
 
   return {
