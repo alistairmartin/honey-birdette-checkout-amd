@@ -86,6 +86,11 @@ function App() {
           {error ? <s-banner tone="critical">{error}</s-banner> : null}
 
           <s-text>
+            Needs to be an automatic discount. The title is not seen by the
+            customer. Set combinations to not combine with anything.
+          </s-text>
+
+          <s-text>
             Reject discount codes when the cart contains a product with any of
             these tags.
           </s-text>

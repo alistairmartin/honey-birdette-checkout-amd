@@ -26,6 +26,7 @@ export default function App() {
         <Link to="/app/additional">Additional page</Link>
         <Link to="/app/client-info-cleanup">Client info cleanup</Link>
         <Link to="/app/cart-transform">Cart transform</Link>
+        <Link to="/app/lingerie-set-sync">Lingerie set sync</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>
