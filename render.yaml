@@ -28,3 +28,27 @@ services:
         value: file:/data/prod.sqlite
       - key: NODE_ENV
         value: production
+      # Kibo Checker. All 4 regions (AU/US/UK/EU) in one JSON blob keyed by
+      # myshopify domain - each region has its own Kibo instance/credentials.
+      # See app/lib/kibo.server.js for the shape. Set in the Render dashboard.
+      - key: KIBO_REGIONS
+        sync: false
+      # Shared secret the cron job presents to /api/kibo-sweep.
+      - key: KIBO_SWEEP_SECRET
+        sync: false
+
+  # Hourly reconciliation sweep across ALL configured regions. A separate service
+  # can't share the web disk, so it calls /api/kibo-sweep over HTTP.
+  - type: cron
+    name: kibo-sweep
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    schedule: "0 * * * *"        # top of every hour
+    region: singapore
+    autoDeploy: false
+    dockerCommand: node ./scripts/kibo-sweep-cron.mjs
+    envVars:
+      - key: APP_URL
+        value: https://honey-birdette-checkout-amd.onrender.com
+      - key: KIBO_SWEEP_SECRET
+        sync: false              # must match the web service's value

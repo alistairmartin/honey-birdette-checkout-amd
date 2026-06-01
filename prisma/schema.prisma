@@ -34,3 +34,25 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+// One row per Shopify order that the reconciliation sweep found missing in Kibo.
+// Sweeps upsert on (shop, shopifyOrderId), so re-running never duplicates a row.
+// status: PENDING | EXISTS_IN_KIBO | REIMPORTED | REIMPORT_FAILED | IGNORED
+model KiboFailedOrder {
+  id               String   @id @default(cuid())
+  shop             String
+  shopifyOrderId   String
+  shopifyOrderName String
+  orderCreatedAt   DateTime
+  detectedAt       DateTime @default(now())
+  lastCheckedAt    DateTime @default(now())
+  reason           String
+  suggestion       String
+  status           String   @default("PENDING")
+  kiboOrderId      String?
+  attempts         Int      @default(0)
+  lastError        String?
+
+  @@unique([shop, shopifyOrderId])
+  @@index([shop, status])
+}

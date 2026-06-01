@@ -362,7 +362,7 @@ useEffect(() => {
   }, [showError]);
 
   // “Add to cart” button callback
-  async function handleAddToCart(variantId, isGiftboxParam?: boolean) {
+  async function handleAddToCart(variantId, isGiftboxParam?: boolean, compareAtAmount?: string | number | null) {
     setAdding(true);
     // Block adding gift box when Pickup / Pickup Point is selected
     if (isGiftboxParam && pickupSelected) {
@@ -370,11 +370,27 @@ useEffect(() => {
       setAdding(false);
       return;
     }
+
+    const compareAtNum = Number(compareAtAmount);
+    const hasCompareAt = Number.isFinite(compareAtNum) && compareAtNum > 0;
+    const compareAtCents = hasCompareAt ? Math.round(compareAtNum * 100) : 0;
+
+    const attributes = [
+      { key: "_checkout_upsell", value: "true" },
+      { key: "_addSource", value: "Checkout" },
+      ...(hasCompareAt
+        ? [
+            { key: "__originPrice", value: String(compareAtCents) },
+            { key: "Original Price", value: i18n.formatCurrency(compareAtNum) },
+          ]
+        : []),
+    ];
+
     const result = await applyCartLinesChange({
       type: "addCartLine",
       merchandiseId: variantId,
       quantity: 1,
-      attributes: [{ key: "_checkout_upsell", value: "true" }],
+      attributes,
     });
     setAdding(false);
 
@@ -397,6 +413,9 @@ useEffect(() => {
               id
               title
               price {
+                amount
+              }
+              compareAtPrice {
                 amount
               }
               product {
@@ -694,6 +713,7 @@ function VariantCard({
   const product = variant?.product || {};
   const variantTitle = variant?.title || "";
   const priceAmount = variant?.price?.amount || "0.00";
+  const compareAtAmount = variant?.compareAtPrice?.amount || null;
   const imageUrl = product?.images?.nodes?.[0]?.url || "";
   const translate = useTranslate();
 
@@ -705,8 +725,6 @@ function VariantCard({
     return null;
   }
 
-  // Format the price (If GWP is true, optionally skip or show 'FREE')
-  let formattedPrice = i18n.formatCurrency(priceAmount).replace(/\.00$/, "");
   const currencySymbols = {
     EUR: '€',
     USD: '$',
@@ -715,9 +733,18 @@ function VariantCard({
     GBP: '£',
     CAD: 'C$'
   };
-  let priceWithSymbol = formattedPrice
+  const stripCurrency = (s) => s
     .replace(/\b(EUR|USD|AUD|NZD|GBP|CAD)\b/g, (match) => currencySymbols[match])
     .replace(/\s+/g, '');
+
+  // Format the price (If GWP is true, optionally skip or show 'FREE')
+  let priceWithSymbol = stripCurrency(i18n.formatCurrency(priceAmount).replace(/\.00$/, ""));
+
+  const compareAtNum = Number(compareAtAmount);
+  const isOnSale = !isGWP && Number.isFinite(compareAtNum) && compareAtNum > Number(priceAmount);
+  const compareAtWithSymbol = isOnSale
+    ? stripCurrency(i18n.formatCurrency(compareAtAmount).replace(/\.00$/, ""))
+    : null;
 
   if (isGWP) {
     // For GWP, you might set formattedPrice = "FREE" or similar:
@@ -770,6 +797,12 @@ function VariantCard({
 
           <TextBlock appearance="subdued">
             <Text appearance="subdued">{priceWithSymbol}</Text>
+            {compareAtWithSymbol && (
+              <>
+                <Text appearance="subdued">{' '}</Text>
+                <Text appearance="subdued" accessibilityRole="deletion">{compareAtWithSymbol}</Text>
+              </>
+            )}
           </TextBlock>
 
           {/* Insert helper text when giftbox is disabled */}
@@ -795,7 +828,7 @@ function VariantCard({
               <Button
                 kind={isGWP ? "secondary" : "secondary" }
                 loading={adding}
-                onPress={() => handleAddToCart(variant.id, isGiftbox)}
+                onPress={() => handleAddToCart(variant.id, isGiftbox, isGWP ? null : compareAtAmount)}
               >
                 {isGWP ? translate('add-free-gift') : translate('add-to-cart') }
               </Button>

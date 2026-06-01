@@ -1,0 +1,25 @@
+# Learn more about configuring your checkout UI extension:
+# https://shopify.dev/api/checkout-extensions/checkout/configuration
+
+# The version of APIs your extension will receive. Learn more:
+# https://shopify.dev/docs/api/usage/versioning
+api_version = "2025-07"
+
+[[extensions]]
+name = "Remove Client Info"
+handle = "remove-client-info"
+uid = "59f301f1-4baf-4583-aa1c-3023c5df368e"
+type = "ui_extension"
+
+# Controls where in Shopify your extension will be injected,
+# and the file that contains your extension's source code. Learn more:
+# https://shopify.dev/docs/api/checkout-ui-extensions/unstable/extension-targets-overview
+
+[[extensions.targeting]]
+module = "./src/Checkout.tsx"
+target = "purchase.checkout.block.render"
+
+[extensions.capabilities]
+# Gives your extension access to directly query Shopify's storefront API.
+# https://shopify.dev/docs/api/checkout-ui-extensions/unstable/configuration#api-access
+api_access = true

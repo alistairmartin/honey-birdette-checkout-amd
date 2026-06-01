@@ -27,6 +27,7 @@ export default function App() {
         <Link to="/app/client-info-cleanup">Client info cleanup</Link>
         <Link to="/app/cart-transform">Cart transform</Link>
         <Link to="/app/lingerie-set-sync">Lingerie set sync</Link>
+        <Link to="/app/kibo-checker">Kibo Checker</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>
