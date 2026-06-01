@@ -44,6 +44,9 @@ export async function loader({ request }) {
     pendingCount,
     kiboConfigured: isConfigured(shop),
     missingEnv: missingEnv(shop),
+    // Reimport is built but off by default - this page is identify-only until
+    // KIBO_REIMPORT_ENABLED=true is set on the server.
+    reimportEnabled: process.env.KIBO_REIMPORT_ENABLED === "true",
   });
 }
 
@@ -65,6 +68,14 @@ export async function action({ request }) {
   }
 
   if (intent === "reimport") {
+    // Identify-only mode: reimport stays disabled until explicitly enabled.
+    if (process.env.KIBO_REIMPORT_ENABLED !== "true") {
+      return json({
+        intent,
+        ok: false,
+        message: "Reimport is disabled (identify-only mode).",
+      });
+    }
     const result = await reimport({ admin, shop, recordId: form.get("recordId") });
     return json({ intent, ...result });
   }
@@ -73,7 +84,7 @@ export async function action({ request }) {
 }
 
 export default function KiboChecker() {
-  const { shop, orders, pendingCount, kiboConfigured, missingEnv } =
+  const { shop, orders, pendingCount, kiboConfigured, missingEnv, reimportEnabled } =
     useLoaderData();
   const revalidator = useRevalidator();
 
@@ -165,15 +176,18 @@ export default function KiboChecker() {
             >
               Re-check
             </Button>
-            <Button
-              size="slim"
-              variant="primary"
-              onClick={() => rowAction("reimport", o.id)}
-              loading={isBusy && rowFetcher.formData?.get("intent") === "reimport"}
-              disabled={!kiboConfigured || isBusy || !canReimport}
-            >
-              Reimport
-            </Button>
+            {/* Reimport is built but hidden until KIBO_REIMPORT_ENABLED=true. */}
+            {reimportEnabled && (
+              <Button
+                size="slim"
+                variant="primary"
+                onClick={() => rowAction("reimport", o.id)}
+                loading={isBusy && rowFetcher.formData?.get("intent") === "reimport"}
+                disabled={!kiboConfigured || isBusy || !canReimport}
+              >
+                Reimport
+              </Button>
+            )}
           </InlineStack>
         </IndexTable.Cell>
       </IndexTable.Row>
@@ -189,9 +203,10 @@ export default function KiboChecker() {
             <Text as="p" variant="bodyMd">
               Finds orders that exist in Shopify but never imported into Kibo
               (it lists recent Shopify orders and asks Kibo which it has). Each
-              failure shows a likely reason and a suggested fix. Reimport
-              re-checks Kibo first, so an order the warehouse already keyed in by
-              hand is never duplicated.
+              one shows a likely reason and a suggested fix so you can follow up.
+              {reimportEnabled
+                ? " Reimport re-checks Kibo first, so an order the warehouse already keyed in by hand is never duplicated."
+                : " This is identify-only for now - reimport is disabled."}
             </Text>
             <InlineStack gap="300" blockAlign="center">
               <Button

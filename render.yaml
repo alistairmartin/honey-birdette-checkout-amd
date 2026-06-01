@@ -36,6 +36,10 @@ services:
       # Shared secret the cron job presents to /api/kibo-sweep.
       - key: KIBO_SWEEP_SECRET
         sync: false
+      # Identify-only by default. Set to "true" to enable the Reimport action
+      # (also needs the Kibo "Order create/import" behaviour granted).
+      - key: KIBO_REIMPORT_ENABLED
+        value: "false"
 
   # Hourly reconciliation sweep across ALL configured regions. A separate service
   # can't share the web disk, so it calls /api/kibo-sweep over HTTP.

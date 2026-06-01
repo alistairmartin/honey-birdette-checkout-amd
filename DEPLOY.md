@@ -70,11 +70,16 @@ survives request timeouts on large order volumes. Repeat per store.
 ## 5. Kibo Checker
 
 The **Kibo Checker** page (app nav) finds orders that exist in Shopify but never
-imported into Kibo, shows a likely reason + fix, and reimports them - re-checking
-Kibo first so an order the warehouse already keyed in by hand is never
-duplicated. Detection is a reconciliation sweep (list recent Shopify orders, ask
-Kibo which it has), run hourly by a Render cron **and** on demand via the page's
-"Run sweep now" button.
+imported into Kibo and shows a likely reason + fix. Detection is a reconciliation
+sweep (list recent Shopify orders, ask Kibo which it has), run hourly by a Render
+cron **and** on demand via the page's "Run sweep now" button.
+
+**Identify-only by default.** The reimport capability is built but disabled
+(`KIBO_REIMPORT_ENABLED` unset/`false`) - the page only surfaces missing orders.
+The Kibo app therefore only needs **Order read** access for now. To turn reimport
+on later: set `KIBO_REIMPORT_ENABLED=true` on the web service **and** grant the
+Kibo app the **Order create/import** behaviour. Reimport re-checks Kibo first, so
+an order the warehouse already keyed in by hand is never duplicated.
 
 ### Multi-region config
 

@@ -113,6 +113,9 @@ export async function action({ request }) {
   let updated = 0;
   let done = false;
   const errors = [];
+  // Per-order record of what carried _client_info, with the character count of
+  // its value, so the UI can list exactly which orders are affected.
+  const affectedOrders = [];
 
   try {
     while (true) {
@@ -121,11 +124,12 @@ export async function action({ request }) {
 
       for (const order of orders.nodes) {
         scanned++;
-        const hasAttr = order.customAttributes.some(
+        const attr = order.customAttributes.find(
           (a) => a.key === ATTRIBUTE_KEY,
         );
-        if (!hasAttr) continue;
+        if (!attr) continue;
         affected++;
+        affectedOrders.push({ name: order.name, chars: (attr.value || "").length });
         if (!apply) continue;
 
         // customAttributes is replace-all: re-submit every attribute except
@@ -165,6 +169,7 @@ export async function action({ request }) {
       pageScanned: scanned,
       pageAffected: affected,
       pageUpdated: updated,
+      affectedOrders,
       errors,
       fatalError: err?.message || String(err),
     });
@@ -177,6 +182,7 @@ export async function action({ request }) {
     pageScanned: scanned,
     pageAffected: affected,
     pageUpdated: updated,
+    affectedOrders,
     errors,
     fatalError: null,
   });
@@ -190,6 +196,7 @@ export default function ClientInfoCleanup() {
   const [finished, setFinished] = useState(false);
   const [batches, setBatches] = useState(0);
   const [totals, setTotals] = useState({ scanned: 0, affected: 0, updated: 0 });
+  const [affectedOrders, setAffectedOrders] = useState([]);
   const [errors, setErrors] = useState([]);
   const [fatal, setFatal] = useState(null);
 
@@ -206,6 +213,8 @@ export default function ClientInfoCleanup() {
       updated: t.updated + data.pageUpdated,
     }));
     setBatches((b) => b + 1);
+    if (data.affectedOrders?.length)
+      setAffectedOrders((o) => [...o, ...data.affectedOrders]);
     if (data.errors?.length) setErrors((e) => [...e, ...data.errors]);
     if (data.fatalError) setFatal(data.fatalError);
 
@@ -228,6 +237,7 @@ export default function ClientInfoCleanup() {
     setApply(applyMode);
     setBatches(0);
     setTotals({ scanned: 0, affected: 0, updated: 0 });
+    setAffectedOrders([]);
     setErrors([]);
     setFatal(null);
     fetcher.submit(
@@ -286,6 +296,28 @@ export default function ClientInfoCleanup() {
                   ? ` - ${totals.updated} updated.`
                   : " (dry run - nothing changed)."}
               </Text>
+            </BlockStack>
+          </Card>
+        )}
+
+        {affectedOrders.length > 0 && (
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h2" variant="headingMd">
+                Affected orders ({affectedOrders.length})
+              </Text>
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Character count of each order's <code>{ATTRIBUTE_KEY}</code> value.
+              </Text>
+              <Box paddingBlockStart="200">
+                <List>
+                  {affectedOrders.map((o, i) => (
+                    <List.Item key={i}>
+                      {o.name} - {o.chars} char(s)
+                    </List.Item>
+                  ))}
+                </List>
+              </Box>
             </BlockStack>
           </Card>
         )}
