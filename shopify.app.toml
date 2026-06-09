@@ -12,7 +12,7 @@ dev_store_url = "amd-checkout-2024.myshopify.com"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products, write_customers, customer_read_customers, customer_write_customers, write_discounts, write_orders, read_metaobjects, write_cart_transforms, write_metaobject_definitions"
+scopes = "write_products, write_customers, customer_read_customers, customer_write_customers, write_discounts, write_orders, read_metaobjects, write_cart_transforms, write_metaobject_definitions, write_delivery_customizations"
 
 [auth]
 redirect_urls = [
