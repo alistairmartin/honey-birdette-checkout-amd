@@ -1,0 +1,28 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-transform-run",
+    "target": "cart.delivery-options.transform.run",
+    "input": {
+      "cart": {
+        "deliveryGroups": [
+          {
+            "deliveryAddress": {
+              "address1": "123 Main Street",
+              "city": "Austin",
+              "zip": "78701"
+            },
+            "deliveryOptions": [
+              { "handle": "standard-delivery", "title": "Standard Delivery (3-7 Days)" },
+              { "handle": "standard-delivery-po-box", "title": "Standard Delivery PO/AFO/FPO Boxes (3-7 Days)" }
+            ]
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        { "deliveryOptionHide": { "deliveryOptionHandle": "standard-delivery-po-box" } }
+      ]
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "rfcLabel": "RFC (identifiant fiscal mexicain)",
+  "rfcHelp": "Requis pour la facturation des commandes expédiées au Mexique. 12 caractères pour les entreprises, 13 pour les particuliers.",
+  "rfcInvalid": "Saisissez un RFC valide (12 ou 13 lettres et chiffres)."
+}

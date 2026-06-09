@@ -31,7 +31,19 @@ const GET_BUNDLE_QUERY = `#graphql
         value
         references(first: 100) {
           nodes {
-            ... on Product { id title }
+            ... on Product {
+              id
+              title
+              featuredMedia { preview { image { url } } }
+              variants(first: 10) {
+                nodes {
+                  sku
+                  price
+                  image { url }
+                }
+              }
+              priceRangeV2 { minVariantPrice { amount currencyCode } }
+            }
           }
         }
       }
@@ -52,15 +64,25 @@ function flattenMetaobject(metaobject) {
     fieldByKey.set(f.key, f);
   }
 
-  const refIds = (key) =>
+  const refProducts = (key) =>
     (fieldByKey.get(key)?.references?.nodes ?? [])
-      .map((n) => n?.id)
-      .filter(Boolean);
-
-  const refTitles = (key) =>
-    (fieldByKey.get(key)?.references?.nodes ?? [])
-      .map((n) => n?.title)
-      .filter(Boolean);
+      .filter((n) => n?.id)
+      .map((n) => {
+        const variants = n.variants?.nodes ?? [];
+        // Prefer a variant value, fall back to the product-level value.
+        const variantSku = variants.find((v) => v?.sku)?.sku ?? "";
+        const variantImage = variants.find((v) => v?.image?.url)?.image?.url ?? "";
+        const variantPrice = variants.find((v) => v?.price)?.price ?? "";
+        const productImage = n.featuredMedia?.preview?.image?.url ?? "";
+        return {
+          id: n.id,
+          title: n.title ?? "",
+          sku: variantSku,
+          imageUrl: variantImage || productImage,
+          price: variantPrice || (n.priceRangeV2?.minVariantPrice?.amount ?? ""),
+          currency: n.priceRangeV2?.minVariantPrice?.currencyCode ?? "",
+        };
+      });
 
   const discountAmounts = emptyDiscountAmounts();
   for (const code of SUPPORTED_CURRENCIES) {
@@ -74,40 +96,107 @@ function flattenMetaobject(metaobject) {
     }
   }
 
+  const products = refProducts("products");
+  const option1 = refProducts("option_1");
+  const option2 = refProducts("option_2");
+
   return {
     id: metaobject.id,
     name: metaobject.displayName ?? "",
-    productIds: refIds("products"),
-    productTitles: refTitles("products"),
-    option1Ids: refIds("option_1"),
-    option1Titles: refTitles("option_1"),
-    option2Ids: refIds("option_2"),
-    option2Titles: refTitles("option_2"),
+    products,
+    option1,
+    option2,
+    productIds: products.map((p) => p.id),
+    option1Ids: option1.map((p) => p.id),
+    option2Ids: option2.map((p) => p.id),
     discountAmounts,
   };
+}
+
+function normalizeItems(list, idsFallback, titlesFallback) {
+  if (Array.isArray(list)) {
+    return list
+      .filter((p) => p?.id)
+      .map((p) => ({
+        id: p.id,
+        title: p.title ?? "",
+        sku: p.sku ?? "",
+        imageUrl: p.imageUrl ?? "",
+        price: p.price ?? "",
+        currency: p.currency ?? "",
+      }));
+  }
+  // Fall back to older payloads that stored ids/titles in parallel arrays.
+  const ids = Array.isArray(idsFallback) ? idsFallback : [];
+  const titles = Array.isArray(titlesFallback) ? titlesFallback : [];
+  return ids.map((id, i) => ({
+    id,
+    title: titles[i] ?? "",
+    sku: "",
+    imageUrl: "",
+    price: "",
+    currency: "",
+  }));
 }
 
 function parseMetafield(value) {
   try {
     const parsed = JSON.parse(value || "{}");
     if (Array.isArray(parsed.bundles)) {
-      return parsed.bundles.map((b) => ({
-        id: b.id,
-        name: b.name ?? "",
-        productIds: Array.isArray(b.productIds) ? b.productIds : [],
-        productTitles: Array.isArray(b.productTitles) ? b.productTitles : [],
-        option1Ids: Array.isArray(b.option1Ids) ? b.option1Ids : [],
-        option1Titles: Array.isArray(b.option1Titles) ? b.option1Titles : [],
-        option2Ids: Array.isArray(b.option2Ids) ? b.option2Ids : [],
-        option2Titles: Array.isArray(b.option2Titles) ? b.option2Titles : [],
-        discountAmounts: {
-          ...emptyDiscountAmounts(),
-          ...(b.discountAmounts ?? {}),
-        },
-      }));
+      return parsed.bundles.map((b) => {
+        const products = normalizeItems(b.products, b.productIds, b.productTitles);
+        const option1 = normalizeItems(b.option1, b.option1Ids, b.option1Titles);
+        const option2 = normalizeItems(b.option2, b.option2Ids, b.option2Titles);
+        return {
+          id: b.id,
+          name: b.name ?? "",
+          products,
+          option1,
+          option2,
+          productIds: products.map((p) => p.id),
+          option1Ids: option1.map((p) => p.id),
+          option2Ids: option2.map((p) => p.id),
+          discountAmounts: {
+            ...emptyDiscountAmounts(),
+            ...(b.discountAmounts ?? {}),
+          },
+        };
+      });
     }
   } catch {}
   return [];
+}
+
+function ProductRow({product}) {
+  const legacyId = product.id.split("/").pop();
+  const priceLabel = product.price
+    ? `${product.currency ? `${product.currency} ` : ""}${product.price}`
+    : "";
+  const meta = [
+    `SKU: ${product.sku || "n/a"}`,
+    priceLabel,
+  ]
+    .filter(Boolean)
+    .join("  ·  ");
+
+  return (
+    <s-stack direction="inline" gap="small" alignItems="center">
+      {product.imageUrl ? (
+        <s-thumbnail src={product.imageUrl} alt={product.title} size="small" />
+      ) : (
+        <s-thumbnail alt={product.title} size="small" />
+      )}
+      <s-stack gap="none">
+        <s-link
+          href={`shopify://admin/products/${legacyId}`}
+          target="_blank"
+        >
+          {product.title || "Untitled product"}
+        </s-link>
+        <s-text tone="subdued">{meta}</s-text>
+      </s-stack>
+    </s-stack>
+  );
 }
 
 function App() {
@@ -129,9 +218,13 @@ function App() {
   const [error, setError] = useState();
 
   useEffect(() => {
+    // This function only emits order discounts, so force the discount to be
+    // order-only. Appending "order" to existing classes left a stray "product"
+    // class behind, which surfaced as "Product and order discount".
     const classes = discounts?.discountClasses?.value ?? [];
-    if (!classes.includes("order")) {
-      discounts?.updateDiscountClasses?.([...classes, "order"]);
+    const isOrderOnly = classes.length === 1 && classes[0] === "order";
+    if (!isOrderOnly) {
+      discounts?.updateDiscountClasses?.(["order"]);
     }
   }, []);
 
@@ -263,31 +356,31 @@ function App() {
                   Edit bundle in Shopify admin
                 </s-link>
 
-                <s-stack gap="extraSmall">
-                  <s-text emphasis="bold">Products (all required)</s-text>
-                  {bundle.productTitles.length ? (
-                    bundle.productTitles.map((t, i) => (
-                      <s-text key={i}>• {t}</s-text>
+                <s-stack gap="small">
+                  <s-heading>Products (all required)</s-heading>
+                  {bundle.products.length ? (
+                    bundle.products.map((p) => (
+                      <ProductRow key={p.id} product={p} />
                     ))
                   ) : (
                     <s-text tone="critical">No products set on this bundle.</s-text>
                   )}
                 </s-stack>
 
-                {bundle.option1Titles.length ? (
-                  <s-stack gap="extraSmall">
-                    <s-text emphasis="bold">Option 1 (customer picks one)</s-text>
-                    {bundle.option1Titles.map((t, i) => (
-                      <s-text key={i}>• {t}</s-text>
+                {bundle.option1.length ? (
+                  <s-stack gap="small">
+                    <s-heading>Option 1 (customer picks one)</s-heading>
+                    {bundle.option1.map((p) => (
+                      <ProductRow key={p.id} product={p} />
                     ))}
                   </s-stack>
                 ) : null}
 
-                {bundle.option2Titles.length ? (
-                  <s-stack gap="extraSmall">
-                    <s-text emphasis="bold">Option 2 (customer picks one)</s-text>
-                    {bundle.option2Titles.map((t, i) => (
-                      <s-text key={i}>• {t}</s-text>
+                {bundle.option2.length ? (
+                  <s-stack gap="small">
+                    <s-heading>Option 2 (customer picks one)</s-heading>
+                    {bundle.option2.map((p) => (
+                      <ProductRow key={p.id} product={p} />
                     ))}
                   </s-stack>
                 ) : null}

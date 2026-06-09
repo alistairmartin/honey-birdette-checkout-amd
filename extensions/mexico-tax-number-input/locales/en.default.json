@@ -1,0 +1,5 @@
+{
+  "rfcLabel": "RFC (Mexico tax ID)",
+  "rfcHelp": "Required for tax invoicing on orders shipped to Mexico. 12 characters for companies, 13 for individuals.",
+  "rfcInvalid": "Enter a valid RFC (12 or 13 letters and numbers)."
+}

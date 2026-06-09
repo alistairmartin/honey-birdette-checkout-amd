@@ -1,10 +1,10 @@
-api_version = "2026-01"
+api_version = "2026-04"
 
 [[extensions]]
 name = "t:name"
-handle = "update-us-shipping-po-and-afo-boxes"
+handle = "update-po-apo-fpo-boxes"
 type = "function"
-uid = "37138a01-be7d-2851-cbb7-d89a1a9db06bf094e9ca"
+uid = "a9d41362-5e87-6cbd-b49c-bd537895210068cbfcf4"
 description = "t:description"
 
   [[extensions.targeting]]
@@ -16,6 +16,8 @@ description = "t:description"
   command = ""
   path = "dist/function.wasm"
 
+  # Points the admin "Add delivery customization" flow at the app's management
+  # page. The function takes no config, so create and details share one route.
   [extensions.ui.paths]
-  create = "/"
-  details = "/"
+  create = "/app/po-box-delivery"
+  details = "/app/po-box-delivery"

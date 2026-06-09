@@ -1,0 +1,28 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-transform-run",
+    "target": "cart.delivery-options.transform.run",
+    "input": {
+      "cart": {
+        "deliveryGroups": [
+          {
+            "deliveryAddress": {
+              "address1": "Unit 2050 Box 4190",
+              "city": "APO",
+              "zip": "09277"
+            },
+            "deliveryOptions": [
+              { "handle": "free-priority-shipping", "title": "Free Priority Shipping" },
+              { "handle": "free-standard-delivery-po-box", "title": "Free Standard Delivery PO/AFO/FPO Boxes (3-7 Days)" }
+            ]
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        { "deliveryOptionHide": { "deliveryOptionHandle": "free-priority-shipping" } }
+      ]
+    }
+  }
+}

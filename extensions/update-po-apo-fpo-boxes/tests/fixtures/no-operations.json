@@ -3,8 +3,8 @@
     "export": "cart-delivery-options-transform-run",
     "target": "cart.delivery-options.transform.run",
     "input": {
-      "deliveryCustomization": {
-        "metafield": null
+      "cart": {
+        "deliveryGroups": []
       }
     },
     "output": {

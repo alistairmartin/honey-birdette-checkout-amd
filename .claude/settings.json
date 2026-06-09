@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/alistairmartin/Dropbox/honey-birdette-plby/src/components/libs/**)",
+      "Bash(cd /Users/alistairmartin/Dropbox/honey-birdette-plby && echo \"=== shopify-product lib ===\" && find src -name \"shopify-product*\" && echo \"=== storefront-graphql-helper ===\" && find src -name \"storefront-graphql-helper*\")",
+      "Read(//Users/alistairmartin/Dropbox/honey-birdette-plby/**)",
+      "Bash(cd extensions/checkout-recommendations && cat shopify.d.ts && echo \"=== node_modules ===\" && ls node_modules/@shopify/ 2>/dev/null && echo \"=== top-level node_modules ===\" && ls ../../node_modules/@shopify/ 2>/dev/null | head -50)",
+      "Read(//Users/alistairmartin/Dropbox/node_modules/**)",
+      "Bash(sed -n '1,60p' ./build/ts/surfaces/checkout/components/Stack.d.ts)",
+      "Bash(sed -n '1,60p' ./build/ts/surfaces/checkout/components/Image.d.ts)",
+      "Bash(sed -n '1,50p' ./build/ts/surfaces/checkout/components/ScrollBox.d.ts)",
+      "Bash(awk 'NR>=3300 && NR<=3460 && /^\"[a-z]/' ./build/ts/surfaces/checkout/components/components-shared.d.ts)",
+      "Bash(awk 'NR>=3300 && NR<=3470' ./build/ts/surfaces/checkout/components/components-shared.d.ts)",
+      "Bash(awk 'NR>=3315 && NR<=3340' ./build/ts/surfaces/checkout/components/components-shared.d.ts)",
+      "Bash(grep -n \"SizeUnits\\\\b\\\\|type SizeUnits\\\\|SizeUnitsOrAuto\\\\|type.*Pixels\\\\|PxUnit\\\\|\\\\`\\\\${number}px\\\\`\" ./build/ts/surfaces/checkout/components/components-shared.d.ts)",
+      "Bash(grep -n \"SkeletonParagraphProps\\\\$1\" ./build/ts/surfaces/checkout/components/components-shared.d.ts)",
+      "Bash(grep -rA3 \"applyAttributeChange\" extensions/checkout-recommendations/node_modules/@shopify/ui-extensions/build/ts/surfaces/checkout/api/standard/standard.d.ts)",
+      "Bash(npx --no-install tsc -p tsconfig.json --noEmit)",
+      "Bash(grep -rA8 \"interface MetafieldRemoveCartChange\" extensions/checkout-recommendations/node_modules/@shopify/ui-extensions/build/ts)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(npx remix *)"
+    ]
+  }
+}
