@@ -7,10 +7,12 @@ import {
   Text,
   Card,
   Button,
+  ButtonGroup,
   BlockStack,
   Box,
   InlineStack,
   Badge,
+  Tabs,
   TextField,
   Select,
   Checkbox,
@@ -18,6 +20,8 @@ import {
   Divider,
   Thumbnail,
   Banner,
+  EmptyState,
+  Modal,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -28,14 +32,16 @@ import {
   BASE_METAOBJECT_TYPE,
   DEFAULT_HEADING,
   DEFAULT_MAX_PRODUCTS,
+  DEFAULT_MOTIVATOR_TEXT,
 } from "../lib/checkoutRecommendations.shared";
 
 // Checkout Recommendations: a single settings object stored in the shop
 // metafield $app:checkout-recommendations / config and read by the
 // checkout-recommendations extension. Base recommendations come from the
 // mini_cart_recommendations metaobjects; this page owns the migrated block
-// settings plus the extra rules (free-shipping gap-fill today; loyalty and
-// promo to follow).
+// settings (Settings tab) plus the extra rules. Today the live rule is the
+// Price Range Motivator (a GWP-style builder + saved list); loyalty and promo
+// rules are scaffolded as tabs for later.
 
 function formatMoney(amount, currencyCode) {
   const n = Number(amount);
@@ -70,8 +76,8 @@ const VARIANT_INFO_QUERY = `#graphql
 // All variant gids referenced anywhere in the config, for thumbnail enrichment.
 function collectVariantGids(config) {
   const gids = new Set(config.manual_upsells ?? []);
-  for (const code of SUPPORTED_CURRENCIES) {
-    for (const gid of config.gap_fill?.products?.[code] ?? []) gids.add(gid);
+  for (const m of config.motivators ?? []) {
+    for (const gid of m.products ?? []) gids.add(gid);
   }
   return Array.from(gids);
 }
@@ -130,95 +136,19 @@ export const action = async ({ request }) => {
 };
 
 // --------------------------------------------------------------------------
-// Builder state <-> config
+// Helpers (client)
 // --------------------------------------------------------------------------
 
-function emptyFreeShipping() {
-  return SUPPORTED_CURRENCIES.reduce((acc, code) => {
-    acc[code] = { standard: "", express: "" };
-    return acc;
-  }, {});
+function newId() {
+  return `m_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function emptyGapWithin() {
-  return SUPPORTED_CURRENCIES.reduce((acc, code) => {
-    acc[code] = "";
-    return acc;
-  }, {});
-}
-
-function emptyGapProducts() {
-  return SUPPORTED_CURRENCIES.reduce((acc, code) => {
-    acc[code] = [];
-    return acc;
-  }, {});
-}
-
-// Build the builder state from a stored config + variantInfo (for display).
-function builderFromConfig(config, variantInfo) {
-  const decorate = (gid) => ({
+function decorateProduct(gid, variantInfo) {
+  return {
     variantGid: gid,
     title: variantInfo[gid]?.title ?? "",
     imageUrl: variantInfo[gid]?.imageUrl ?? "",
     price: variantInfo[gid]?.price ?? "",
-  });
-
-  const freeShipping = emptyFreeShipping();
-  for (const code of SUPPORTED_CURRENCIES) {
-    const entry = config.free_shipping?.[code] ?? {};
-    freeShipping[code] = {
-      standard: entry.standard != null ? String(entry.standard) : "",
-      express: entry.express != null ? String(entry.express) : "",
-    };
-  }
-
-  const within = emptyGapWithin();
-  const products = emptyGapProducts();
-  for (const code of SUPPORTED_CURRENCIES) {
-    const w = config.gap_fill?.within?.[code];
-    within[code] = w != null ? String(w) : "";
-    products[code] = (config.gap_fill?.products?.[code] ?? []).map(decorate);
-  }
-
-  return {
-    heading: config.heading ?? DEFAULT_HEADING,
-    max_products: config.max_products != null ? String(config.max_products) : String(DEFAULT_MAX_PRODUCTS),
-    manual_upsells: (config.manual_upsells ?? []).map(decorate),
-    free_shipping: freeShipping,
-    gap_fill: {
-      enabled: config.gap_fill?.enabled !== false,
-      currency: "AUD",
-      within,
-      products,
-    },
-  };
-}
-
-// Build the config object to persist (display fields stripped; server normalizes).
-function configFromBuilder(state) {
-  const free_shipping = {};
-  for (const code of SUPPORTED_CURRENCIES) {
-    const entry = state.free_shipping[code] ?? {};
-    const out = {};
-    if (entry.standard !== "") out.standard = Number(entry.standard);
-    if (entry.express !== "") out.express = Number(entry.express);
-    if (Object.keys(out).length) free_shipping[code] = out;
-  }
-
-  const within = {};
-  const products = {};
-  for (const code of SUPPORTED_CURRENCIES) {
-    if (state.gap_fill.within[code] !== "") within[code] = Number(state.gap_fill.within[code]);
-    const list = (state.gap_fill.products[code] ?? []).map((p) => p.variantGid).filter(Boolean);
-    if (list.length) products[code] = list;
-  }
-
-  return {
-    heading: state.heading.trim() || DEFAULT_HEADING,
-    max_products: Number(state.max_products) || DEFAULT_MAX_PRODUCTS,
-    manual_upsells: state.manual_upsells.map((p) => p.variantGid).filter(Boolean),
-    free_shipping,
-    gap_fill: { enabled: state.gap_fill.enabled, within, products },
   };
 }
 
@@ -245,6 +175,97 @@ function productToVariantPick(product) {
   };
 }
 
+const EMPTY_FREE_SHIPPING = () =>
+  SUPPORTED_CURRENCIES.reduce((acc, code) => {
+    acc[code] = { standard: "", express: "" };
+    return acc;
+  }, {});
+
+// Settings (global block settings) state from a stored config.
+function settingsFromConfig(config, variantInfo) {
+  const freeShipping = EMPTY_FREE_SHIPPING();
+  for (const code of SUPPORTED_CURRENCIES) {
+    const entry = config.free_shipping?.[code] ?? {};
+    freeShipping[code] = {
+      standard: entry.standard != null ? String(entry.standard) : "",
+      express: entry.express != null ? String(entry.express) : "",
+    };
+  }
+  return {
+    heading: config.heading ?? DEFAULT_HEADING,
+    max_products:
+      config.max_products != null ? String(config.max_products) : String(DEFAULT_MAX_PRODUCTS),
+    manual_upsells: (config.manual_upsells ?? []).map((gid) => decorateProduct(gid, variantInfo)),
+    free_shipping: freeShipping,
+  };
+}
+
+// Motivators list state from a stored config (products decorated for display).
+function motivatorsFromConfig(config, variantInfo) {
+  return (config.motivators ?? []).map((m) => ({
+    id: m.id || newId(),
+    name: m.name ?? "",
+    enabled: m.enabled !== false,
+    currency: m.currency ?? "AUD",
+    min: m.min != null ? String(m.min) : "",
+    max: m.max != null ? String(m.max) : "",
+    text: m.text ?? DEFAULT_MOTIVATOR_TEXT,
+    products: (m.products ?? []).map((gid) => decorateProduct(gid, variantInfo)),
+    updatedAt: m.updatedAt ?? null,
+  }));
+}
+
+const EMPTY_MOTIVATOR = () => ({
+  id: null,
+  name: "",
+  enabled: true,
+  currency: "AUD",
+  min: "",
+  max: "",
+  text: DEFAULT_MOTIVATOR_TEXT,
+  products: [],
+  updatedAt: null,
+});
+
+// Assemble the full config object to persist (display fields stripped; the
+// server normalizes/drops anything incomplete).
+function buildConfig(settings, motivators) {
+  const free_shipping = {};
+  for (const code of SUPPORTED_CURRENCIES) {
+    const entry = settings.free_shipping[code] ?? {};
+    const out = {};
+    if (entry.standard !== "") out.standard = Number(entry.standard);
+    if (entry.express !== "") out.express = Number(entry.express);
+    if (Object.keys(out).length) free_shipping[code] = out;
+  }
+  return {
+    heading: settings.heading.trim() || DEFAULT_HEADING,
+    max_products: Number(settings.max_products) || DEFAULT_MAX_PRODUCTS,
+    manual_upsells: settings.manual_upsells.map((p) => p.variantGid).filter(Boolean),
+    free_shipping,
+    motivators: motivators.map((m) => ({
+      id: m.id,
+      name: m.name.trim(),
+      enabled: m.enabled,
+      currency: m.currency,
+      min: m.min !== "" ? Number(m.min) : undefined,
+      max: m.max !== "" ? Number(m.max) : undefined,
+      text: m.text.trim() || DEFAULT_MOTIVATOR_TEXT,
+      products: m.products.map((p) => p.variantGid).filter(Boolean),
+      updatedAt: m.updatedAt || undefined,
+    })),
+  };
+}
+
+function formatTimestamp(iso) {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
 function PickedProductRow({ pick, onRemove }) {
   return (
     <InlineStack gap="300" blockAlign="center" wrap={false}>
@@ -268,12 +289,31 @@ function PickedProductRow({ pick, onRemove }) {
   );
 }
 
+// --------------------------------------------------------------------------
+// Page
+// --------------------------------------------------------------------------
+
+const TABS = [
+  { id: "price-range", content: "Price Range Motivator", panelID: "price-range-panel" },
+  { id: "loyalty", content: "Loyalty level-up", panelID: "loyalty-panel" },
+  { id: "promo", content: "Promo alignment", panelID: "promo-panel" },
+  { id: "settings", content: "Settings", panelID: "settings-panel" },
+];
+
 export default function CheckoutRecommendationsPage() {
   const { config, variantInfo } = useLoaderData();
   const shopify = useAppBridge();
   const fetcher = useFetcher();
 
-  const [builder, setBuilder] = useState(() => builderFromConfig(config, variantInfo));
+  const [selectedTab, setSelectedTab] = useState(0);
+  const [settings, setSettings] = useState(() => settingsFromConfig(config, variantInfo));
+  const [motivators, setMotivators] = useState(() => motivatorsFromConfig(config, variantInfo));
+
+  // Price Range Motivator sub-view + builder draft.
+  const [motivatorView, setMotivatorView] = useState("saved"); // "saved" | "builder"
+  const [draft, setDraft] = useState(EMPTY_MOTIVATOR);
+  const [editingId, setEditingId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const isSaving = fetcher.state === "submitting" || fetcher.state === "loading";
   const lastResult = fetcher.data;
@@ -285,10 +325,20 @@ export default function CheckoutRecommendationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastResult]);
 
-  const update = (key, value) => setBuilder((prev) => ({ ...prev, [key]: value }));
+  // Persist the whole config (settings + the given motivators array).
+  const persist = useCallback(
+    (nextMotivators, nextSettings = settings) => {
+      const formData = new FormData();
+      formData.set("configJson", JSON.stringify(buildConfig(nextSettings, nextMotivators)));
+      fetcher.submit(formData, { method: "POST" });
+    },
+    [fetcher, settings],
+  );
 
+  // ---- Settings tab ----
+  const updateSetting = (key, value) => setSettings((prev) => ({ ...prev, [key]: value }));
   const updateFreeShipping = (code, tier, value) =>
-    setBuilder((prev) => ({
+    setSettings((prev) => ({
       ...prev,
       free_shipping: {
         ...prev.free_shipping,
@@ -296,29 +346,16 @@ export default function CheckoutRecommendationsPage() {
       },
     }));
 
-  const updateGapWithin = (code, value) =>
-    setBuilder((prev) => ({
-      ...prev,
-      gap_fill: { ...prev.gap_fill, within: { ...prev.gap_fill.within, [code]: value } },
-    }));
-
-  const setGapCurrency = (code) =>
-    setBuilder((prev) => ({ ...prev, gap_fill: { ...prev.gap_fill, currency: code } }));
-
-  const setGapEnabled = (value) =>
-    setBuilder((prev) => ({ ...prev, gap_fill: { ...prev.gap_fill, enabled: value } }));
-
-  // ---- Manual upsells ----
   const addManualUpsell = useCallback(async () => {
     const selection = await shopify.resourcePicker({
       type: "product",
-      multiple: MANUAL_UPSELL_SLOTS - builder.manual_upsells.length,
+      multiple: Math.max(1, MANUAL_UPSELL_SLOTS - settings.manual_upsells.length),
       action: "select",
       filter: { variants: true, archived: false },
     });
     if (!selection?.length) return;
     const picks = selection.map(productToVariantPick).filter(Boolean);
-    setBuilder((prev) => {
+    setSettings((prev) => {
       const existing = new Set(prev.manual_upsells.map((p) => p.variantGid));
       const merged = [...prev.manual_upsells];
       for (const p of picks) {
@@ -326,17 +363,20 @@ export default function CheckoutRecommendationsPage() {
       }
       return { ...prev, manual_upsells: merged };
     });
-  }, [shopify, builder.manual_upsells.length]);
+  }, [shopify, settings.manual_upsells.length]);
 
   const removeManualUpsell = (gid) =>
-    setBuilder((prev) => ({
+    setSettings((prev) => ({
       ...prev,
       manual_upsells: prev.manual_upsells.filter((p) => p.variantGid !== gid),
     }));
 
-  // ---- Gap-fill products (per currency) ----
-  const addGapProduct = useCallback(async () => {
-    const code = builder.gap_fill.currency;
+  const saveSettings = () => persist(motivators, settings);
+
+  // ---- Motivator builder ----
+  const updateDraft = (key, value) => setDraft((prev) => ({ ...prev, [key]: value }));
+
+  const addDraftProduct = useCallback(async () => {
     const selection = await shopify.resourcePicker({
       type: "product",
       multiple: true,
@@ -345,40 +385,86 @@ export default function CheckoutRecommendationsPage() {
     });
     if (!selection?.length) return;
     const picks = selection.map(productToVariantPick).filter(Boolean);
-    setBuilder((prev) => {
-      const current = prev.gap_fill.products[code] ?? [];
-      const existing = new Set(current.map((p) => p.variantGid));
-      const merged = [...current];
+    setDraft((prev) => {
+      const existing = new Set(prev.products.map((p) => p.variantGid));
+      const merged = [...prev.products];
       for (const p of picks) if (!existing.has(p.variantGid)) merged.push(p);
-      return {
-        ...prev,
-        gap_fill: { ...prev.gap_fill, products: { ...prev.gap_fill.products, [code]: merged } },
-      };
+      return { ...prev, products: merged };
     });
-  }, [shopify, builder.gap_fill.currency]);
+  }, [shopify]);
 
-  const removeGapProduct = (code, gid) =>
-    setBuilder((prev) => ({
-      ...prev,
-      gap_fill: {
-        ...prev.gap_fill,
-        products: {
-          ...prev.gap_fill.products,
-          [code]: (prev.gap_fill.products[code] ?? []).filter((p) => p.variantGid !== gid),
-        },
-      },
-    }));
+  const removeDraftProduct = (gid) =>
+    setDraft((prev) => ({ ...prev, products: prev.products.filter((p) => p.variantGid !== gid) }));
 
-  const generatedConfig = useMemo(() => configFromBuilder(builder), [builder]);
-
-  const save = () => {
-    const formData = new FormData();
-    formData.set("configJson", JSON.stringify(generatedConfig));
-    fetcher.submit(formData, { method: "POST" });
+  const newMotivator = () => {
+    setDraft(EMPTY_MOTIVATOR());
+    setEditingId(null);
+    setMotivatorView("builder");
   };
 
-  const gapCurrency = builder.gap_fill.currency;
-  const gapProductsForCurrency = builder.gap_fill.products[gapCurrency] ?? [];
+  const editMotivator = (m) => {
+    setDraft({ ...m });
+    setEditingId(m.id);
+    setMotivatorView("builder");
+  };
+
+  const duplicateMotivator = (m) => {
+    setDraft({ ...m, id: null, name: m.name ? `${m.name} (copy)` : "", updatedAt: null });
+    setEditingId(null);
+    setMotivatorView("builder");
+    shopify.toast.show("Duplicated - save to keep the copy");
+  };
+
+  const validateDraft = () => {
+    if (!draft.name.trim()) return "Add a name for this motivator.";
+    if (draft.max === "" || !(Number(draft.max) > 0)) return "Set a positive max range (target).";
+    if (draft.min !== "" && Number(draft.min) >= Number(draft.max))
+      return "Min range must be below max range.";
+    if (draft.products.length === 0) return "Add at least one product.";
+    return null;
+  };
+
+  const saveMotivator = () => {
+    const error = validateDraft();
+    if (error) {
+      shopify.toast.show(error, { isError: true });
+      return;
+    }
+    const stamped = {
+      ...draft,
+      id: draft.id || newId(),
+      updatedAt: new Date().toISOString(),
+    };
+    setMotivators((prev) => {
+      const exists = prev.some((m) => m.id === stamped.id);
+      const next = exists
+        ? prev.map((m) => (m.id === stamped.id ? stamped : m))
+        : [stamped, ...prev];
+      persist(next);
+      return next;
+    });
+    setEditingId(stamped.id);
+    setDraft(stamped);
+  };
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    setMotivators((prev) => {
+      const next = prev.filter((m) => m.id !== deleteTarget.id);
+      persist(next);
+      return next;
+    });
+    if (editingId === deleteTarget.id) {
+      setEditingId(null);
+      setDraft(EMPTY_MOTIVATOR());
+    }
+    setDeleteTarget(null);
+  };
+
+  const draftConfigPreview = useMemo(
+    () => buildConfig(settings, motivators),
+    [settings, motivators],
+  );
 
   return (
     <Page>
@@ -387,224 +473,358 @@ export default function CheckoutRecommendationsPage() {
         <Banner tone="info">
           <p>
             Base recommendations come from your <b>{BASE_METAOBJECT_TYPE}</b> metaobjects (the same
-            source as the theme mini-cart). The settings and rules below layer on top of that and are
-            read by the checkout-recommendations extension.
+            source as the theme mini-cart). The rules and settings below layer on top and are read by
+            the checkout-recommendations extension.
           </p>
         </Banner>
 
-        <Layout>
-          <Layout.Section>
-            <BlockStack gap="500">
-              {/* General */}
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    General
-                  </Text>
-                  <FormLayout>
-                    <TextField
-                      label="Heading"
-                      value={builder.heading}
-                      onChange={(v) => update("heading", v)}
-                      autoComplete="off"
-                      placeholder={DEFAULT_HEADING}
-                      helpText="Shown above the recommendations in checkout."
-                    />
-                    <TextField
-                      label="Maximum products"
-                      type="number"
-                      min={1}
-                      value={builder.max_products}
-                      onChange={(v) => update("max_products", v)}
-                      autoComplete="off"
-                      helpText={`Maximum number of recommendations to show (defaults to ${DEFAULT_MAX_PRODUCTS}).`}
-                    />
-                  </FormLayout>
-                </BlockStack>
-              </Card>
+        <Card padding="0">
+          <Tabs tabs={TABS} selected={selectedTab} onSelect={setSelectedTab} />
+        </Card>
 
-              {/* Manual upsells */}
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Manual upsells
-                  </Text>
-                  <Text as="p" variant="bodyMd" tone="subdued">
-                    Up to {MANUAL_UPSELL_SLOTS} products shown first, before the metaobject and
-                    Shopify recommendations. The first (default) variant is added to cart.
-                  </Text>
-                  <BlockStack gap="300">
-                    {builder.manual_upsells.map((pick) => (
-                      <PickedProductRow
-                        key={pick.variantGid}
-                        pick={pick}
-                        onRemove={() => removeManualUpsell(pick.variantGid)}
-                      />
-                    ))}
-                  </BlockStack>
-                  <InlineStack>
+        {/* ---- Price Range Motivator ---- */}
+        {selectedTab === 0 && (
+          <BlockStack gap="400">
+            <Card>
+              <BlockStack gap="200">
+                <Text as="h2" variant="headingMd">
+                  Price Range Motivator
+                </Text>
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  When a customer&apos;s cart subtotal falls inside a motivator&apos;s range, show a
+                  custom message and recommend products priced to tip them over the top of the range
+                  (e.g. the free-shipping threshold). Each motivator is per currency, and a currency
+                  can have several - for example one for standard free shipping and one for Express.
+                </Text>
+                <InlineStack>
+                  <ButtonGroup variant="segmented">
                     <Button
-                      onClick={addManualUpsell}
-                      disabled={builder.manual_upsells.length >= MANUAL_UPSELL_SLOTS}
+                      pressed={motivatorView === "saved"}
+                      onClick={() => setMotivatorView("saved")}
                     >
-                      Add product
+                      {`Saved${motivators.length ? ` (${motivators.length})` : ""}`}
                     </Button>
+                    <Button
+                      pressed={motivatorView === "builder"}
+                      onClick={() => setMotivatorView("builder")}
+                    >
+                      Builder
+                    </Button>
+                  </ButtonGroup>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+
+            {motivatorView === "saved" && (
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h3" variant="headingSm">
+                      Saved motivators
+                    </Text>
+                    <Button onClick={newMotivator}>New motivator</Button>
                   </InlineStack>
+                  {motivators.length === 0 ? (
+                    <EmptyState
+                      heading="No motivators yet"
+                      action={{ content: "Open builder", onAction: newMotivator }}
+                      image=""
+                    >
+                      <p>Build a motivator, give it a name, and save it. It goes live in checkout.</p>
+                    </EmptyState>
+                  ) : (
+                    <BlockStack gap="300">
+                      {motivators.map((m) => (
+                        <Card key={m.id}>
+                          <BlockStack gap="200">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <InlineStack gap="200" blockAlign="center">
+                                <Text as="h3" variant="headingSm">
+                                  {m.name || "Untitled motivator"}
+                                </Text>
+                                <Badge tone="info">{m.currency}</Badge>
+                                <Badge tone={m.enabled ? "success" : "attention"}>
+                                  {m.enabled ? "Enabled" : "Disabled"}
+                                </Badge>
+                                <Text as="span" variant="bodySm" tone="subdued">
+                                  {`${m.min || 0}-${m.max || "?"} - ${m.products.length} product${
+                                    m.products.length === 1 ? "" : "s"
+                                  }`}
+                                </Text>
+                              </InlineStack>
+                              {m.updatedAt ? (
+                                <Text as="span" variant="bodySm" tone="subdued">
+                                  Updated {formatTimestamp(m.updatedAt)}
+                                </Text>
+                              ) : null}
+                            </InlineStack>
+                            <InlineStack gap="200">
+                              <Button onClick={() => editMotivator(m)}>Edit</Button>
+                              <Button onClick={() => duplicateMotivator(m)}>Duplicate</Button>
+                              <Button
+                                tone="critical"
+                                variant="tertiary"
+                                onClick={() => setDeleteTarget(m)}
+                              >
+                                Delete
+                              </Button>
+                            </InlineStack>
+                          </BlockStack>
+                        </Card>
+                      ))}
+                    </BlockStack>
+                  )}
                 </BlockStack>
               </Card>
+            )}
 
-              {/* Free shipping thresholds */}
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Free shipping thresholds
-                  </Text>
-                  <Text as="p" variant="bodyMd" tone="subdued">
-                    Cart total needed for free standard / Express shipping per currency. Leave a
-                    currency blank to hide the shipping nudge for it.
-                  </Text>
-                  <BlockStack gap="300">
-                    {SUPPORTED_CURRENCIES.map((code) => (
-                      <FormLayout key={code}>
-                        <FormLayout.Group condensed>
+            {motivatorView === "builder" && (
+              <Layout>
+                <Layout.Section>
+                  <Card>
+                    <BlockStack gap="400">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="h3" variant="headingSm">
+                          {editingId ? "Edit motivator" : "Build a motivator"}
+                        </Text>
+                        {editingId ? <Badge tone="info">Editing saved</Badge> : null}
+                      </InlineStack>
+                      <FormLayout>
+                        <TextField
+                          label="Name"
+                          value={draft.name}
+                          onChange={(v) => updateDraft("name", v)}
+                          autoComplete="off"
+                          placeholder="e.g. AUD - free standard shipping"
+                          helpText="Internal label so you can find this motivator in Saved."
+                        />
+                        <Checkbox
+                          label="Enabled"
+                          checked={draft.enabled}
+                          onChange={(v) => updateDraft("enabled", v)}
+                        />
+                        <Select
+                          label="Currency"
+                          options={SUPPORTED_CURRENCIES.map((c) => ({ label: c, value: c }))}
+                          value={draft.currency}
+                          onChange={(v) => updateDraft("currency", v)}
+                          helpText="The motivator only runs when checkout is in this currency."
+                        />
+                        <FormLayout.Group>
                           <TextField
-                            label={`${code} - free standard at`}
+                            label={`Min range (${draft.currency})`}
                             type="number"
-                            value={builder.free_shipping[code].standard}
-                            onChange={(v) => updateFreeShipping(code, "standard", v)}
+                            value={draft.min}
+                            onChange={(v) => updateDraft("min", v)}
                             autoComplete="off"
+                            helpText="Start showing once the cart subtotal reaches this. Blank = from $0."
                           />
                           <TextField
-                            label={`${code} - free Express at`}
+                            label={`Max range (${draft.currency})`}
                             type="number"
-                            value={builder.free_shipping[code].express}
-                            onChange={(v) => updateFreeShipping(code, "express", v)}
+                            value={draft.max}
+                            onChange={(v) => updateDraft("max", v)}
                             autoComplete="off"
+                            helpText="The target (e.g. free-shipping threshold). Stops showing once the subtotal reaches it."
                           />
                         </FormLayout.Group>
+                        <TextField
+                          label="Message"
+                          value={draft.text}
+                          onChange={(v) => updateDraft("text", v)}
+                          autoComplete="off"
+                          multiline={2}
+                          helpText="Shown above the recommendations while in range. Use {{ remaining }} for the spend left to reach the max."
+                        />
+                        <Divider />
+                        <Text as="h3" variant="headingSm">
+                          Products
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          The extension shows the cheapest of these priced at or above the remaining
+                          spend, so adding one tips the customer over the max.
+                        </Text>
+                        <BlockStack gap="300">
+                          {draft.products.length === 0 ? (
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              No products yet.
+                            </Text>
+                          ) : (
+                            draft.products.map((pick) => (
+                              <PickedProductRow
+                                key={pick.variantGid}
+                                pick={pick}
+                                onRemove={() => removeDraftProduct(pick.variantGid)}
+                              />
+                            ))
+                          )}
+                          <InlineStack>
+                            <Button onClick={addDraftProduct}>Add product</Button>
+                          </InlineStack>
+                        </BlockStack>
+                        <Divider />
+                        <InlineStack gap="200">
+                          <Button variant="primary" onClick={saveMotivator} loading={isSaving}>
+                            {editingId ? "Update motivator" : "Save motivator"}
+                          </Button>
+                          <Button onClick={() => setMotivatorView("saved")}>Back to saved</Button>
+                        </InlineStack>
                       </FormLayout>
-                    ))}
-                  </BlockStack>
-                </BlockStack>
-              </Card>
+                    </BlockStack>
+                  </Card>
+                </Layout.Section>
+              </Layout>
+            )}
+          </BlockStack>
+        )}
 
-              {/* Rule 1: free-shipping gap-fill */}
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
+        {/* ---- Loyalty (coming soon) ---- */}
+        {selectedTab === 1 && (
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack gap="200" blockAlign="center">
+                <Text as="h2" variant="headingMd">
+                  Loyalty level-up
+                </Text>
+                <Badge>Coming soon</Badge>
+              </InlineStack>
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Recommend products that tip a customer into the next loyalty band. Needs a spend
+                signal beyond tier tags - parked until that data source is confirmed.
+              </Text>
+            </BlockStack>
+          </Card>
+        )}
+
+        {/* ---- Promo (coming soon) ---- */}
+        {selectedTab === 2 && (
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack gap="200" blockAlign="center">
+                <Text as="h2" variant="headingMd">
+                  Promo alignment
+                </Text>
+                <Badge>Coming soon</Badge>
+              </InlineStack>
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Recommend products that align with a promo already in the cart. Largely covered today
+                by the {BASE_METAOBJECT_TYPE} cart-matching rules; a dedicated builder will follow.
+              </Text>
+            </BlockStack>
+          </Card>
+        )}
+
+        {/* ---- Settings ---- */}
+        {selectedTab === 3 && (
+          <Layout>
+            <Layout.Section>
+              <BlockStack gap="400">
+                <Card>
+                  <BlockStack gap="400">
                     <Text as="h2" variant="headingMd">
-                      Rule: free-shipping gap-fill
+                      General
                     </Text>
-                    <Badge tone={builder.gap_fill.enabled ? "success" : "attention"}>
-                      {builder.gap_fill.enabled ? "Enabled" : "Disabled"}
-                    </Badge>
-                  </InlineStack>
-                  <Text as="p" variant="bodyMd" tone="subdued">
-                    When a customer is close to the free standard shipping threshold, recommend
-                    products priced high enough to tip them over the edge. Curate a product list per
-                    currency below; the extension shows the cheapest qualifying products first.
-                  </Text>
-                  <Checkbox
-                    label="Enable gap-fill recommendations"
-                    checked={builder.gap_fill.enabled}
-                    onChange={setGapEnabled}
-                  />
-                  <Divider />
-                  <Select
-                    label="Currency"
-                    options={SUPPORTED_CURRENCIES.map((c) => ({ label: c, value: c }))}
-                    value={gapCurrency}
-                    onChange={setGapCurrency}
-                    helpText="Pick the currency to edit. Settings are saved per currency."
-                  />
-                  <TextField
-                    label={`Only show when within (${gapCurrency})`}
-                    type="number"
-                    value={builder.gap_fill.within[gapCurrency]}
-                    onChange={(v) => updateGapWithin(gapCurrency, v)}
-                    autoComplete="off"
-                    helpText="Show gap-fill products only when the remaining spend to free shipping is at or below this amount. Leave blank to always show when there is a gap."
-                  />
-                  <BlockStack gap="300">
-                    <Text as="h3" variant="headingSm">
-                      Gap-fill products ({gapCurrency})
+                    <FormLayout>
+                      <TextField
+                        label="Heading"
+                        value={settings.heading}
+                        onChange={(v) => updateSetting("heading", v)}
+                        autoComplete="off"
+                        placeholder={DEFAULT_HEADING}
+                        helpText="Shown above the recommendations in checkout."
+                      />
+                      <TextField
+                        label="Maximum products"
+                        type="number"
+                        min={1}
+                        value={settings.max_products}
+                        onChange={(v) => updateSetting("max_products", v)}
+                        autoComplete="off"
+                        helpText={`Maximum number of recommendations to show (defaults to ${DEFAULT_MAX_PRODUCTS}).`}
+                      />
+                    </FormLayout>
+                  </BlockStack>
+                </Card>
+
+                <Card>
+                  <BlockStack gap="400">
+                    <Text as="h2" variant="headingMd">
+                      Manual upsells
                     </Text>
-                    {gapProductsForCurrency.length === 0 ? (
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        No products yet for {gapCurrency}.
-                      </Text>
-                    ) : (
-                      gapProductsForCurrency.map((pick) => (
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Up to {MANUAL_UPSELL_SLOTS} products shown before the metaobject and Shopify
+                      recommendations. The first (default) variant is added to cart.
+                    </Text>
+                    <BlockStack gap="300">
+                      {settings.manual_upsells.map((pick) => (
                         <PickedProductRow
                           key={pick.variantGid}
                           pick={pick}
-                          onRemove={() => removeGapProduct(gapCurrency, pick.variantGid)}
+                          onRemove={() => removeManualUpsell(pick.variantGid)}
                         />
-                      ))
-                    )}
+                      ))}
+                    </BlockStack>
                     <InlineStack>
-                      <Button onClick={addGapProduct}>Add product</Button>
+                      <Button
+                        onClick={addManualUpsell}
+                        disabled={settings.manual_upsells.length >= MANUAL_UPSELL_SLOTS}
+                      >
+                        Add product
+                      </Button>
                     </InlineStack>
                   </BlockStack>
-                </BlockStack>
-              </Card>
+                </Card>
 
-              {/* Future rules */}
-              <Card>
-                <BlockStack gap="300">
-                  <InlineStack gap="200" blockAlign="center">
+                <Card>
+                  <BlockStack gap="400">
                     <Text as="h2" variant="headingMd">
-                      Rule: loyalty level-up
+                      Free shipping thresholds
                     </Text>
-                    <Badge>Coming soon</Badge>
-                  </InlineStack>
-                  <Text as="p" variant="bodyMd" tone="subdued">
-                    Recommend products that tip a customer into the next loyalty band. Needs a spend
-                    signal beyond tier tags - parked until that data source is confirmed.
-                  </Text>
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="300">
-                  <InlineStack gap="200" blockAlign="center">
-                    <Text as="h2" variant="headingMd">
-                      Rule: promo alignment
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Drives the fallback shipping nudge in the header per currency. Leave a currency
+                      blank to hide it. (Motivators use their own per-currency ranges.)
                     </Text>
-                    <Badge>Coming soon</Badge>
-                  </InlineStack>
-                  <Text as="p" variant="bodyMd" tone="subdued">
-                    Recommend products that align with a promo already in the cart. Largely covered
-                    today by the {BASE_METAOBJECT_TYPE} cart-matching rules; a dedicated builder will
-                    follow.
-                  </Text>
-                </BlockStack>
-              </Card>
-            </BlockStack>
-          </Layout.Section>
+                    <BlockStack gap="300">
+                      {SUPPORTED_CURRENCIES.map((code) => (
+                        <FormLayout key={code}>
+                          <FormLayout.Group condensed>
+                            <TextField
+                              label={`${code} - free standard at`}
+                              type="number"
+                              value={settings.free_shipping[code].standard}
+                              onChange={(v) => updateFreeShipping(code, "standard", v)}
+                              autoComplete="off"
+                            />
+                            <TextField
+                              label={`${code} - free Express at`}
+                              type="number"
+                              value={settings.free_shipping[code].express}
+                              onChange={(v) => updateFreeShipping(code, "express", v)}
+                              autoComplete="off"
+                            />
+                          </FormLayout.Group>
+                        </FormLayout>
+                      ))}
+                    </BlockStack>
+                  </BlockStack>
+                </Card>
 
-          <Layout.Section variant="oneThird">
-            <BlockStack gap="400">
+                <InlineStack>
+                  <Button variant="primary" onClick={saveSettings} loading={isSaving}>
+                    Save settings
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Layout.Section>
+
+            <Layout.Section variant="oneThird">
               <Card>
                 <BlockStack gap="300">
                   <Text as="h2" variant="headingMd">
-                    Save
+                    Published JSON
                   </Text>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Stored per shop and pushed live to checkout on save.
-                  </Text>
-                  <InlineStack>
-                    <Button variant="primary" onClick={save} loading={isSaving}>
-                      Save
-                    </Button>
-                  </InlineStack>
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">
-                    Generated JSON
+                    The full config written to the shop metafield on every save.
                   </Text>
                   <Box
                     padding="400"
@@ -615,15 +835,37 @@ export default function CheckoutRecommendationsPage() {
                     overflowX="scroll"
                   >
                     <pre style={{ margin: 0 }}>
-                      <code>{JSON.stringify(generatedConfig, null, 2)}</code>
+                      <code>{JSON.stringify(draftConfigPreview, null, 2)}</code>
                     </pre>
                   </Box>
                 </BlockStack>
               </Card>
-            </BlockStack>
-          </Layout.Section>
-        </Layout>
+            </Layout.Section>
+          </Layout>
+        )}
       </BlockStack>
+
+      {deleteTarget ? (
+        <Modal
+          open
+          onClose={() => setDeleteTarget(null)}
+          title={`Delete "${deleteTarget.name || "this motivator"}"?`}
+          primaryAction={{
+            content: "Delete",
+            destructive: true,
+            onAction: confirmDelete,
+            loading: isSaving,
+          }}
+          secondaryActions={[{ content: "Cancel", onAction: () => setDeleteTarget(null) }]}
+        >
+          <Modal.Section>
+            <Text as="p" variant="bodyMd">
+              This removes the motivator from the checkout metafield, so it stops showing at
+              checkout.
+            </Text>
+          </Modal.Section>
+        </Modal>
+      ) : null}
     </Page>
   );
 }

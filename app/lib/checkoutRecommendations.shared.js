@@ -7,7 +7,7 @@
 // object written here from a SHOP metafield ($app:checkout-recommendations /
 // config) via the storefront API. Base recommendations still come from the
 // `mini_cart_recommendations` metaobjects; the config below layers extra rules
-// (free-shipping gap-fill) and the migrated block settings on top.
+// (Price Range Motivators) and the migrated block settings on top.
 
 export const SUPPORTED_CURRENCIES = ["AUD", "NZD", "USD", "CAD", "GBP", "EUR", "AED"];
 
@@ -39,8 +39,12 @@ export const DEFAULT_MAX_PRODUCTS = 6;
 // historical manual_product1..4 settings).
 export const MANUAL_UPSELL_SLOTS = 4;
 
+// Default copy for a Price Range Motivator. {{ remaining }} is replaced by the
+// extension with the spend left to reach the top of the range.
+export const DEFAULT_MOTIVATOR_TEXT = "Spend {{ remaining }} more to receive free shipping";
+
 // Accepts a numeric id or a ProductVariant gid; returns a ProductVariant gid (or
-// null). Manual upsells and gap-fill products are stored as variant gids so the
+// null). Manual upsells and motivator products are stored as variant gids so the
 // extension can price and add the exact variant.
 export function toVariantGid(value) {
   if (value == null || value === "") return null;
@@ -54,6 +58,33 @@ export function toVariantGid(value) {
 function toFiniteOrNull(value) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// Normalize one Price Range Motivator into the shape the extension consumes.
+function normalizeMotivator(raw) {
+  if (!raw || typeof raw !== "object") return null;
+
+  const currency = SUPPORTED_CURRENCIES.includes(raw.currency) ? raw.currency : "AUD";
+  const min = toFiniteOrNull(raw.min);
+  const max = toFiniteOrNull(raw.max);
+  const products = (Array.isArray(raw.products) ? raw.products : [])
+    .map(toVariantGid)
+    .filter(Boolean);
+
+  // A motivator needs a target (max) and at least one product to do anything.
+  if (!max || products.length === 0) return null;
+
+  return {
+    id: typeof raw.id === "string" && raw.id ? raw.id : undefined,
+    name: String(raw.name ?? "").trim() || `${currency} motivator`,
+    enabled: raw.enabled !== false,
+    currency,
+    min: min ?? 0,
+    max,
+    text: String(raw.text ?? "").trim() || DEFAULT_MOTIVATOR_TEXT,
+    products,
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : undefined,
+  };
 }
 
 // Produce the canonical config object the extension consumes from whatever the
@@ -71,6 +102,7 @@ export function normalizeConfig(raw) {
     .slice(0, MANUAL_UPSELL_SLOTS);
 
   // free_shipping: { AUD: { standard, express }, ... } - only positive numbers kept.
+  // Drives the fallback shipping subtitle in the header (separate from motivators).
   const freeShipping = {};
   const rawFs = src.free_shipping && typeof src.free_shipping === "object" ? src.free_shipping : {};
   for (const code of SUPPORTED_CURRENCIES) {
@@ -84,31 +116,16 @@ export function normalizeConfig(raw) {
     }
   }
 
-  // gap_fill: { enabled, within: { AUD: n }, products: { AUD: [variantGid] } }.
-  const rawGap = src.gap_fill && typeof src.gap_fill === "object" ? src.gap_fill : {};
-  const gapWithin = {};
-  const gapProducts = {};
-  const rawWithin = rawGap.within && typeof rawGap.within === "object" ? rawGap.within : {};
-  const rawProducts = rawGap.products && typeof rawGap.products === "object" ? rawGap.products : {};
-  for (const code of SUPPORTED_CURRENCIES) {
-    const within = toFiniteOrNull(rawWithin[code]);
-    if (within) gapWithin[code] = within;
-    const products = (Array.isArray(rawProducts[code]) ? rawProducts[code] : [])
-      .map(toVariantGid)
-      .filter(Boolean);
-    if (products.length) gapProducts[code] = products;
-  }
+  const motivators = (Array.isArray(src.motivators) ? src.motivators : [])
+    .map(normalizeMotivator)
+    .filter(Boolean);
 
   return {
     heading,
     max_products: maxProducts,
     manual_upsells: manualUpsells,
     free_shipping: freeShipping,
-    gap_fill: {
-      enabled: rawGap.enabled !== false,
-      within: gapWithin,
-      products: gapProducts,
-    },
+    motivators,
   };
 }
 
@@ -119,6 +136,6 @@ export function emptyConfig() {
     max_products: DEFAULT_MAX_PRODUCTS,
     manual_upsells: [],
     free_shipping: {},
-    gap_fill: { enabled: true, within: {}, products: {} },
+    motivators: [],
   };
 }

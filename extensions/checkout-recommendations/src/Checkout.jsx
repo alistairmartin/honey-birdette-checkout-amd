@@ -131,6 +131,35 @@ const getShippingInfo = (thresholds, subtotal) => {
   };
 };
 
+// Price Range Motivators (the live rule). A motivator is active when the cart
+// subtotal in its currency sits inside [min, max); the buyer is nudged toward
+// `max` (e.g. a free-shipping threshold). When several overlap, the closest goal
+// wins so the most attainable nudge shows.
+const pickActiveMotivator = (motivators, currencyCode, subtotalAmount) => {
+  if (!Array.isArray(motivators) || !currencyCode || !(subtotalAmount >= 0)) return null;
+
+  let best = null;
+
+  for (const m of motivators) {
+    if (!m || m.enabled === false) continue;
+    if (m.currency !== currencyCode) continue;
+
+    const max = Number(m.max);
+    if (!Number.isFinite(max) || max <= 0) continue;
+
+    const min = Number(m.min) || 0;
+    if (subtotalAmount < min || subtotalAmount >= max) continue;
+
+    const remaining = max - subtotalAmount;
+    if (!best || remaining < best.remaining) best = { motivator: m, remaining };
+  }
+
+  return best;
+};
+
+const renderMotivatorText = (text, remaining) =>
+  String(text || '').replace(/\{\{\s*remaining\s*\}\}/g, formatPrice(remaining));
+
 // ---------------------------------------------------------------------------
 // GraphQL (Storefront API via `shopify.query`)
 // ---------------------------------------------------------------------------
@@ -510,8 +539,19 @@ function Extension() {
   const slotLimit =
     Number(appConfig?.max_products) || Number(settings.max_products) || DEFAULT_MAX_SLOTS;
 
+  const subtotalAmount = Number(subtotal?.amount);
+
+  // Rule: Price Range Motivator. The active motivator (if any) for the buyer's
+  // currency drives both the header message and the curated recommendations.
+  const activeMotivator = pickActiveMotivator(appConfig?.motivators, currencyCode, subtotalAmount);
+
+  // Header subtitle: an active motivator's message wins; otherwise fall back to
+  // the generic free-shipping nudge from the threshold settings.
   const thresholds = resolveShippingThresholds(appConfig, settings, currencyCode);
-  const { subtitle: shippingSubtitle, gap: shippingGap } = getShippingInfo(thresholds, subtotal);
+  const fallbackShipping = getShippingInfo(thresholds, subtotal);
+  const shippingSubtitle = activeMotivator
+    ? renderMotivatorText(activeMotivator.motivator.text, activeMotivator.remaining)
+    : fallbackShipping.subtitle;
 
   const manualVariantIds = (
     appConfig?.manual_upsells?.length
@@ -524,16 +564,11 @@ function Extension() {
         ]
   ).filter(Boolean);
 
-  // Rule 1 inputs: the curated gap-fill products for the buyer's currency, but
-  // only when the rule is enabled and the buyer is within the configured window
-  // of the next free-shipping tier.
-  const gapFillVariantIds = (() => {
-    if (!appConfig?.gap_fill?.enabled) return [];
-    if (!(shippingGap > 0)) return [];
-    const within = appConfig?.gap_fill?.within?.[currencyCode];
-    if (within != null && within !== '' && shippingGap > Number(within)) return [];
-    return appConfig?.gap_fill?.products?.[currencyCode] || [];
-  })();
+  // Curated motivator products + the spend left to reach the target. The
+  // resolver shows the cheapest priced at or above the gap, so adding one tips
+  // the buyer over the top of the range.
+  const gapFillVariantIds = activeMotivator ? activeMotivator.motivator.products || [] : [];
+  const gapFillGap = activeMotivator ? activeMotivator.remaining : 0;
 
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -546,7 +581,7 @@ function Extension() {
     [lines]
   );
   const manualKey = manualVariantIds.join('|');
-  const gapKey = `${gapFillVariantIds.join('|')}@${shippingGap}`;
+  const gapKey = `${gapFillVariantIds.join('|')}@${gapFillGap}`;
 
   useEffect(() => {
     // Wait for the config fetch to settle so we resolve once with the final
@@ -563,7 +598,7 @@ function Extension() {
       slotLimit,
       lines,
       manualVariantIds,
-      gapFill: { variantIds: gapFillVariantIds, gap: shippingGap },
+      gapFill: { variantIds: gapFillVariantIds, gap: gapFillGap },
     })
       .then((result) => {
         if (!cancelled) setCards(result);
