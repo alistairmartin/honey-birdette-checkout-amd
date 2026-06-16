@@ -102,11 +102,21 @@ function parseConfigsFromMetafield(raw: unknown): any[] {
 // enabled config. Each GiftOffer owns its own hooks, cart sync, and checkout
 // intercept, so multiple gifts run side by side without interfering.
 function Extension() {
-  const { query } = useApi();
+  const { query, extension } = useApi();
   // Defined when rendering inside the Checkout Editor preview; undefined on the
   // live storefront. Used to gate test-mode configs.
   const editor = useExtensionEditor();
   const inEditor = Boolean(editor);
+  // `extension.version` is undefined for an unpublished extension target (dev,
+  // preview, or a draft/unpublished checkout profile) and a version string once
+  // the extension is deployed and published. We treat "no version" as an
+  // unpublished checkout for the purpose of showing test-mode configs.
+  const isUnpublished = !extension?.version;
+  // Per-block override: when the merchant enables this in the checkout editor
+  // block settings, test-mode configs render even on a published checkout
+  // (handy for QA on the live profile).
+  const { show_test_mode_configs } = useSettings();
+  const showTestConfigs = inEditor || isUnpublished || Boolean(show_test_mode_configs);
   const [configs, setConfigs] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -132,10 +142,12 @@ function Extension() {
 
   const activeConfigs = configs.filter((c) => {
     if (c?.enabled === false) return false;
-    // Test-mode configs only render inside the Checkout Editor preview, never
-    // on the live storefront.
+    // Test-mode configs render only on an unpublished checkout (editor preview
+    // or undeployed extension version), OR when the block's
+    // `show_test_mode_configs` setting is enabled. They never show on a
+    // published checkout otherwise.
     const isTest = String(c?.mode || "live").toLowerCase() === "test";
-    return !isTest || inEditor;
+    return !isTest || showTestConfigs;
   });
   if (activeConfigs.length === 0) return null;
 

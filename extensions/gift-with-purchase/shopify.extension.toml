@@ -32,6 +32,14 @@ key = "show_testing_information"
 type = "boolean"
 name = "Show Testing Information?"
 
+# When enabled, test-mode configs render even on a published checkout. Test-mode
+# configs otherwise only show on an unpublished checkout (editor preview or an
+# undeployed extension version).
+[[extensions.settings.fields]]
+key = "show_test_mode_configs"
+type = "boolean"
+name = "Show Test Mode Configs?"
+
 # Customer tags metafield, used for one-per-customer redemption checks.
 [[extensions.metafields]]
 namespace = "custom"

@@ -22,6 +22,9 @@ import {
 } from "./gwpAppV1.shared";
 
 const DISCOUNT_TITLE = "Gift with purchase";
+// Tag applied to the automatic discount this app creates, so app-managed
+// discounts are identifiable in the admin Discounts list.
+const DISCOUNT_TAGS = ["AMD App"];
 const FUNCTION_HANDLE = "gift-with-purchase-discount";
 const DISCOUNT_ID_KEY = "gwp_app_v1_discount_id"; // on the app installation
 
@@ -76,6 +79,14 @@ const DISCOUNT_CREATE = `#graphql
 const GET_DISCOUNT = `#graphql
   query GwpAppV1GetDiscount($id: ID!) {
     discountNode(id: $id) { id }
+  }
+`;
+
+const TAGS_ADD = `#graphql
+  mutation GwpAppV1TagsAdd($id: ID!, $tags: [String!]!) {
+    tagsAdd(id: $id, tags: $tags) {
+      userErrors { field message }
+    }
   }
 `;
 
@@ -203,6 +214,20 @@ async function ensureDiscount(admin, { installationId, discountId, initialConfig
   }
   const newId = data?.discountAutomaticAppCreate?.automaticAppDiscount?.discountId;
   if (!newId) throw new Error("discountAutomaticAppCreate returned no id");
+
+  // Tag the new discount so it's identifiable in the admin. Non-fatal: a tagging
+  // failure must not block discount creation or config sync.
+  try {
+    const tagData = await gql(admin, TAGS_ADD, { id: newId, tags: DISCOUNT_TAGS });
+    const tagErrors = tagData?.tagsAdd?.userErrors ?? [];
+    if (tagErrors.length) {
+      console.error(
+        `tagsAdd on GWP discount failed: ${tagErrors.map((e) => e.message).join(", ")}`,
+      );
+    }
+  } catch (err) {
+    console.error("tagsAdd on GWP discount threw", err);
+  }
 
   await setMetafield(admin, {
     ownerId: installationId,
