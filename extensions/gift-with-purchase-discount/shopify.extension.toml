@@ -12,6 +12,12 @@ description = "t:description"
   input_query = "src/cart_lines_discounts_generate_run.graphql"
   export = "cart-lines-discounts-generate-run"
 
+  # Clicking a discount this function backs opens the Gift With Purchase app page
+  # (where the configs that drive every discount live) instead of the app root.
+  [extensions.ui.paths]
+  create = "/app/gift-with-purchase"
+  details = "/app/gift-with-purchase"
+
   [extensions.build]
   command = ""
   path = "dist/function.wasm"
