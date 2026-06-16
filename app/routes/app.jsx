@@ -33,6 +33,7 @@ export default function App() {
         <Link to="/app/po-box-delivery">PO/AFO/FPO delivery</Link>
         <Link to="/app/kibo-checker">Kibo Checker</Link>
         <Link to="/app/metaobject-creator">Metaobject Creator</Link>
+        <Link to="/app/loyalty-tier-sync">Loyalty tier sync</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>

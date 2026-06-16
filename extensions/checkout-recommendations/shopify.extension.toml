@@ -6,7 +6,7 @@
 api_version = "2026-04"
 
 [[extensions]]
-name = "checkout-recommendations"
+name = "Checkout Recommendations"
 handle = "checkout-recommendations"
 type = "ui_extension"
 uid = "d296a286-e696-6ece-36cc-64f3fd7b258c5b2b48b8"
@@ -29,143 +29,18 @@ api_access = true
 # https://shopify.dev/docs/api/checkout-ui-extensions/latest/configuration#network-access
 # network_access = true
 
-# Defines settings that will be collected from merchants installing
-# your extension. Learn more:
-# https://shopify.dev/docs/api/checkout-ui-extensions/latest/configuration#settings-definition
+# Merchant-facing configuration (manual upsells, heading, max products,
+# free-shipping thresholds, motivators) is managed in the app's Checkout
+# Recommendations admin page and read at runtime from the
+# `$app:checkout-recommendations/config` shop metafield. The only extension
+# setting is a debug toggle below.
 
 [extensions.settings]
 
-  # --- Manual upsells ---
-  # Optional product variants shown first, before metaobject/API recommendations.
-  # Use these to manually push a specific product. Leave blank to skip.
-  [[extensions.settings.fields]]
-  key = "manual_product1"
-  type = "variant_reference"
-  name = "Manual upsell #1"
-  description = "Product variant to show first"
-
-  [[extensions.settings.fields]]
-  key = "manual_product2"
-  type = "variant_reference"
-  name = "Manual upsell #2"
-  description = "Product variant to show first"
-
-  [[extensions.settings.fields]]
-  key = "manual_product3"
-  type = "variant_reference"
-  name = "Manual upsell #3"
-  description = "Product variant to show first"
-
-  [[extensions.settings.fields]]
-  key = "manual_product4"
-  type = "variant_reference"
-  name = "Manual upsell #4"
-  description = "Product variant to show first"
-
-  [[extensions.settings.fields]]
-  key = "heading"
-  type = "single_line_text_field"
-  name = "Heading"
-  description = "Heading shown above the recommendations (defaults to \"You May Also Like\")"
-
-  [[extensions.settings.fields]]
-  key = "max_products"
-  type = "number_integer"
-  name = "Maximum products"
-  description = "Maximum number of recommendations to show (defaults to 6)"
-
-  # --- Free-shipping thresholds (per currency) ---
-  # "standard" = cart total needed for free standard shipping.
-  # "express" = cart total needed for free Express shipping (the top tier).
-  # Leave a currency's fields blank to hide the shipping subtitle for it.
-
-  # AUD
-  [[extensions.settings.fields]]
-  key = "free_standard_aud"
-  type = "number_decimal"
-  name = "AUD - free standard shipping at"
-  description = "Cart total (AUD) for free standard shipping"
-
-  [[extensions.settings.fields]]
-  key = "free_express_aud"
-  type = "number_decimal"
-  name = "AUD - free Express shipping at"
-  description = "Cart total (AUD) for free Express shipping"
-
-  # NZD
-  [[extensions.settings.fields]]
-  key = "free_standard_nzd"
-  type = "number_decimal"
-  name = "NZD - free standard shipping at"
-  description = "Cart total (NZD) for free standard shipping"
-
-  [[extensions.settings.fields]]
-  key = "free_express_nzd"
-  type = "number_decimal"
-  name = "NZD - free Express shipping at"
-  description = "Cart total (NZD) for free Express shipping"
-
-  # EUR
-  [[extensions.settings.fields]]
-  key = "free_standard_eur"
-  type = "number_decimal"
-  name = "EUR - free standard shipping at"
-  description = "Cart total (EUR) for free standard shipping"
-
-  [[extensions.settings.fields]]
-  key = "free_express_eur"
-  type = "number_decimal"
-  name = "EUR - free Express shipping at"
-  description = "Cart total (EUR) for free Express shipping"
-
-  # GBP
-  [[extensions.settings.fields]]
-  key = "free_standard_gbp"
-  type = "number_decimal"
-  name = "GBP - free standard shipping at"
-  description = "Cart total (GBP) for free standard shipping"
-
-  [[extensions.settings.fields]]
-  key = "free_express_gbp"
-  type = "number_decimal"
-  name = "GBP - free Express shipping at"
-  description = "Cart total (GBP) for free Express shipping"
-
-  # USD
-  [[extensions.settings.fields]]
-  key = "free_standard_usd"
-  type = "number_decimal"
-  name = "USD - free standard shipping at"
-  description = "Cart total (USD) for free standard shipping"
-
-  [[extensions.settings.fields]]
-  key = "free_express_usd"
-  type = "number_decimal"
-  name = "USD - free Express shipping at"
-  description = "Cart total (USD) for free Express shipping"
-
-  # CAD
-  [[extensions.settings.fields]]
-  key = "free_standard_cad"
-  type = "number_decimal"
-  name = "CAD - free standard shipping at"
-  description = "Cart total (CAD) for free standard shipping"
-
-  [[extensions.settings.fields]]
-  key = "free_express_cad"
-  type = "number_decimal"
-  name = "CAD - free Express shipping at"
-  description = "Cart total (CAD) for free Express shipping"
-
-  # AED
-  [[extensions.settings.fields]]
-  key = "free_standard_aed"
-  type = "number_decimal"
-  name = "AED - free standard shipping at"
-  description = "Cart total (AED) for free standard shipping"
-
-  [[extensions.settings.fields]]
-  key = "free_express_aed"
-  type = "number_decimal"
-  name = "AED - free Express shipping at"
-  description = "Cart total (AED) for free Express shipping"
+# When enabled, renders a diagnostics panel in checkout showing the loaded app
+# config, detected currency/subtotal, and why each motivator did or didn't match.
+# Use it to debug configs that aren't appearing. Leave off in production.
+[[extensions.settings.fields]]
+key = "show_testing_information"
+type = "boolean"
+name = "Show Testing Information?"

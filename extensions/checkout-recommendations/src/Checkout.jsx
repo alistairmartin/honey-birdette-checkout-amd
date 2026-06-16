@@ -83,19 +83,15 @@ const SHIPPING_TIERS = [
   { suffix: 'express', message: 'free Express shipping' },
 ];
 
-// Resolve the standard/express free-shipping thresholds for a currency. Prefers
-// the app config (Checkout Recommendations admin page) and falls back to the
-// extension's own settings so nothing breaks before the config is populated.
-const resolveShippingThresholds = (appConfig, settings, currencyCode) => {
-  const lower = String(currencyCode || '').toLowerCase();
+// Resolve the standard/express free-shipping thresholds for a currency from the
+// app config (Checkout Recommendations admin page).
+const resolveShippingThresholds = (appConfig, currencyCode) => {
   const upper = String(currencyCode || '').toUpperCase();
   const fromConfig = appConfig?.free_shipping?.[upper] || {};
 
   const pick = (suffix) => {
     const cfgVal = Number(fromConfig[suffix]);
-    if (Number.isFinite(cfgVal) && cfgVal > 0) return cfgVal;
-    const setVal = Number(settings[`free_${suffix}_${lower}`]);
-    return Number.isFinite(setVal) && setVal > 0 ? setVal : 0;
+    return Number.isFinite(cfgVal) && cfgVal > 0 ? cfgVal : 0;
   };
 
   return { standard: pick('standard'), express: pick('express') };
@@ -159,6 +155,30 @@ const pickActiveMotivator = (motivators, currencyCode, subtotalAmount) => {
 
 const renderMotivatorText = (text, remaining) =>
   String(text || '').replace(/\{\{\s*remaining\s*\}\}/g, formatPrice(remaining));
+
+// Debug helper: for each configured motivator, explain whether it matched the
+// current cart and, if not, why. Powers the "Show Testing Information" panel.
+const describeMotivators = (motivators, currencyCode, subtotalAmount) => {
+  if (!Array.isArray(motivators) || !motivators.length) return ['(no motivators in config)'];
+
+  return motivators.map((m, i) => {
+    const label = `#${i + 1} ${m?.currency || '?'} [${m?.min ?? 0}-${m?.max ?? '?'}]`;
+    const reasons = [];
+
+    if (!m) return `${label} | skip: empty`;
+    if (m.enabled === false) reasons.push('disabled');
+    if (m.currency !== currencyCode) reasons.push(`currency != ${currencyCode || '(none)'}`);
+
+    const max = Number(m.max);
+    const min = Number(m.min) || 0;
+
+    if (!Number.isFinite(max) || max <= 0) reasons.push('invalid max');
+    if (subtotalAmount < min) reasons.push(`subtotal < ${min}`);
+    if (Number.isFinite(max) && subtotalAmount >= max) reasons.push(`subtotal >= ${max}`);
+
+    return `${label} | ${reasons.length ? `skip: ${reasons.join(', ')}` : 'MATCH'}`;
+  });
+};
 
 // ---------------------------------------------------------------------------
 // GraphQL (Storefront API via `shopify.query`)
@@ -301,8 +321,9 @@ const fetchProductRecommendations = async (productId, countryCode) => {
 };
 
 // Settings + extra rules configured in the app's Checkout Recommendations page,
-// stored in a storefront-readable SHOP metafield. Returns {} if unset/unreadable
-// so the extension falls back to its own TOML settings.
+// stored in a storefront-readable SHOP metafield. This is the source of truth
+// for all merchant config; returns {} if unset/unreadable so the extension
+// still renders metaobject / API recommendations with sensible defaults.
 const APP_CONFIG_QUERY = `
   query CheckoutRecsAppConfig {
     shop {
@@ -420,7 +441,7 @@ const toVariantCard = (variant) => {
  * Resolve checkout recommendations.
  *
  * Order of precedence (mirrors the theme mini-cart):
- *   1. Manual upsells configured in the extension settings.
+ *   1. Manual upsells configured in the app's Checkout Recommendations page.
  *   2. Active `mini_cart_recommendations` metaobjects whose conditions match
  *      the cart (products / product types / tags in cart).
  *   3. Shopify product recommendations seeded by the first cart item fill any
@@ -514,8 +535,12 @@ function Extension() {
 
   const currencyCode = subtotal?.currencyCode;
 
-  // App config (Checkout Recommendations admin page) is the source of truth;
-  // each value falls back to the extension's TOML settings until it's populated.
+  // Merchant-set debug toggle (the only extension setting). When on, a
+  // diagnostics panel renders even if there are no recommendation cards.
+  const showTesting = Boolean(settings.show_testing_information);
+
+  // App config (Checkout Recommendations admin page) is the source of truth for
+  // all merchant settings; defaults apply until it's populated.
   const [appConfig, setAppConfig] = useState(null);
   const [configLoaded, setConfigLoaded] = useState(false);
 
@@ -534,10 +559,9 @@ function Extension() {
     };
   }, []);
 
-  const heading = appConfig?.heading || settings.heading || 'You May Also Like';
-  const metaType = settings.metaobject_type || DEFAULT_META_TYPE;
-  const slotLimit =
-    Number(appConfig?.max_products) || Number(settings.max_products) || DEFAULT_MAX_SLOTS;
+  const heading = appConfig?.heading || 'You May Also Like';
+  const metaType = appConfig?.metaobject_type || DEFAULT_META_TYPE;
+  const slotLimit = Number(appConfig?.max_products) || DEFAULT_MAX_SLOTS;
 
   const subtotalAmount = Number(subtotal?.amount);
 
@@ -547,22 +571,13 @@ function Extension() {
 
   // Header subtitle: an active motivator's message wins; otherwise fall back to
   // the generic free-shipping nudge from the threshold settings.
-  const thresholds = resolveShippingThresholds(appConfig, settings, currencyCode);
+  const thresholds = resolveShippingThresholds(appConfig, currencyCode);
   const fallbackShipping = getShippingInfo(thresholds, subtotal);
   const shippingSubtitle = activeMotivator
     ? renderMotivatorText(activeMotivator.motivator.text, activeMotivator.remaining)
     : fallbackShipping.subtitle;
 
-  const manualVariantIds = (
-    appConfig?.manual_upsells?.length
-      ? appConfig.manual_upsells
-      : [
-          settings.manual_product1,
-          settings.manual_product2,
-          settings.manual_product3,
-          settings.manual_product4,
-        ]
-  ).filter(Boolean);
+  const manualVariantIds = (appConfig?.manual_upsells || []).filter(Boolean);
 
   // Curated motivator products + the spend left to reach the target. The
   // resolver shows the cheapest priced at or above the gap, so adding one tips
@@ -658,36 +673,67 @@ function Extension() {
     }
   };
 
+  // Diagnostics panel (rendered only when the merchant enables the debug
+  // toggle). Surfaces the state the resolver acted on so misconfigured or
+  // non-matching configs are visible instead of silently rendering nothing.
+  const debugPanel = showTesting ? (
+    <DebugPanel
+      configLoaded={configLoaded}
+      appConfig={appConfig}
+      countryCode={countryCode}
+      currencyCode={currencyCode}
+      subtotalAmount={subtotalAmount}
+      thresholds={thresholds}
+      activeMotivator={activeMotivator}
+      manualVariantIds={manualVariantIds}
+      gapFillVariantIds={gapFillVariantIds}
+      gapFillGap={gapFillGap}
+      heading={heading}
+      metaType={metaType}
+      slotLimit={slotLimit}
+      loading={loading}
+      cardCount={cards.length}
+    />
+  ) : null;
+
+  let content = null;
+
   if (loading) {
-    return <RecommendationsSkeleton heading={heading} subtitle={shippingSubtitle} />;
+    content = <RecommendationsSkeleton heading={heading} subtitle={shippingSubtitle} />;
+  } else if (cards.length) {
+    content = (
+      <>
+        <Header heading={heading} subtitle={shippingSubtitle} />
+
+        <s-scroll-box maxBlockSize="400px" padding="none">
+          <s-stack gap="base">
+            {cards.map((card) => (
+              <RecommendationCard
+                key={card.variantId}
+                card={card}
+                adding={adding === card.variantId}
+                onAdd={() => handleAddToCart(card)}
+              />
+            ))}
+          </s-stack>
+        </s-scroll-box>
+
+        {showError && (
+          <s-banner tone="critical">
+            There was an issue adding this product. Please try again.
+          </s-banner>
+        )}
+      </>
+    );
   }
 
-  if (!cards.length) {
-    return null;
-  }
+  // Nothing to show and debugging is off: render nothing.
+  if (!content && !debugPanel) return null;
 
   return (
     <s-stack gap="base">
-      <Header heading={heading} subtitle={shippingSubtitle} />
-
-      <s-scroll-box maxBlockSize="400px" padding="none">
-        <s-stack gap="base">
-          {cards.map((card) => (
-            <RecommendationCard
-              key={card.variantId}
-              card={card}
-              adding={adding === card.variantId}
-              onAdd={() => handleAddToCart(card)}
-            />
-          ))}
-        </s-stack>
-      </s-scroll-box>
-
-      {showError && (
-        <s-banner tone="critical">
-          There was an issue adding this product. Please try again.
-        </s-banner>
-      )}
+      {content}
+      {debugPanel}
     </s-stack>
   );
 }
@@ -755,5 +801,63 @@ function RecommendationsSkeleton({ heading, subtitle }) {
         </s-button>
       </s-grid>
     </s-stack>
+  );
+}
+
+// Diagnostics panel shown when the merchant flips "Show Testing Information?".
+// Mirrors the gift-with-purchase debug pattern: dotted border, small text, and
+// every input the resolver used so a non-appearing config is explainable.
+function DebugPanel({
+  configLoaded,
+  appConfig,
+  countryCode,
+  currencyCode,
+  subtotalAmount,
+  thresholds,
+  activeMotivator,
+  manualVariantIds,
+  gapFillVariantIds,
+  gapFillGap,
+  heading,
+  metaType,
+  slotLimit,
+  loading,
+  cardCount,
+}) {
+  const cfg = appConfig || {};
+  const motivators = cfg.motivators;
+  const motivatorLines = describeMotivators(motivators, currencyCode, subtotalAmount);
+  const configKeys = Object.keys(cfg);
+
+  const line = (text) => <s-text color="subdued">{text}</s-text>;
+
+  return (
+    <s-box border="dotted" borderRadius="base" padding="base">
+      <s-stack gap="small-300">
+        <s-text emphasis="bold">Checkout Recommendations - testing</s-text>
+
+        {line(`Config loaded: ${configLoaded ? 'yes' : 'no'} | keys: ${configKeys.length ? configKeys.join(', ') : '(empty)'}`)}
+        {line(`Country: ${countryCode || '-'} | Currency: ${currencyCode || '-'} | Subtotal: ${Number.isFinite(subtotalAmount) ? subtotalAmount : '-'}`)}
+        {line(`Heading: "${heading}" | Meta type: ${metaType} | Max slots: ${slotLimit}`)}
+        {line(`Resolving: ${loading ? 'yes' : 'no'} | Cards resolved: ${cardCount}`)}
+        {line(`Thresholds (${currencyCode || '-'}): standard ${thresholds.standard || 0}, express ${thresholds.express || 0}`)}
+        {line(`Manual upsells: ${manualVariantIds.length} | Gap-fill products: ${gapFillVariantIds.length} (gap ${gapFillGap || 0})`)}
+
+        <s-text emphasis="bold">Motivators ({Array.isArray(motivators) ? motivators.length : 0})</s-text>
+        {motivatorLines.map((text, i) => (
+          <s-text key={i} color="subdued">{text}</s-text>
+        ))}
+
+        {line(
+          activeMotivator
+            ? `Active motivator: MATCH (remaining ${activeMotivator.remaining}) -> "${activeMotivator.motivator?.text || ''}"`
+            : 'Active motivator: none'
+        )}
+
+        {cardCount === 0 && !loading
+          ? line('No cards: nothing would render without this panel. Check config loaded, currency match, subtotal range, and that metaobjects / recommendations resolved.')
+          : null}
+      </s-stack>
+    </s-box>
   );
 }
