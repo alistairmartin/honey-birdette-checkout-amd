@@ -110,17 +110,15 @@ const DISCOUNT_DELETE = `#graphql
   }
 `;
 
-const GET_DISCOUNTS_STATUS = `#graphql
-  query GwpAppV1DiscountsStatus($ids: [ID!]!) {
-    nodes(ids: $ids) {
-      ... on DiscountNode {
-        id
-        discount {
-          __typename
-          ... on DiscountAutomaticApp {
-            title
-            status
-          }
+const GET_DISCOUNT_STATUS = `#graphql
+  query GwpAppV1DiscountStatus($id: ID!) {
+    discountNode(id: $id) {
+      id
+      discount {
+        __typename
+        ... on DiscountAutomaticApp {
+          title
+          status
         }
       }
     }
@@ -464,44 +462,35 @@ export async function syncConfigs(admin, shop) {
 }
 
 // Build a map of configId -> { exists, status, title, adminUrl, discountId } for
-// the saved-config cards. Batches all discount lookups into one query.
+// the saved-config cards. One discountNode lookup per config (handful of rows).
 export async function getConfigDiscountMap(admin, shop, rows) {
   const map = {};
-  for (const r of rows) {
-    map[r.id] = { exists: false, discountId: r.discountId || null };
-  }
-  const withId = rows.filter((r) => r.discountId);
-  if (!withId.length) return map;
-
-  let nodes = [];
-  try {
-    const data = await gql(admin, GET_DISCOUNTS_STATUS, {
-      ids: withId.map((r) => r.discountId),
-    });
-    nodes = data?.nodes ?? [];
-  } catch {
-    return map;
-  }
-  const byId = {};
-  for (const n of nodes) {
-    if (n?.id) byId[n.id] = n;
-  }
-  for (const r of withId) {
-    const node = byId[r.discountId];
-    if (!node) continue; // discount was deleted out from under us
-    const discount = node.discount ?? {};
-    const numericId = String(r.discountId).match(/\/(\d+)$/)?.[1] ?? null;
-    map[r.id] = {
-      exists: true,
-      discountId: r.discountId,
-      status: discount.status ?? null, // ACTIVE | EXPIRED | SCHEDULED
-      title: discount.title ?? null,
-      adminUrl:
-        shop && numericId
-          ? `https://${shop}/admin/discounts/${numericId}`
-          : null,
-    };
-  }
+  await Promise.all(
+    rows.map(async (r) => {
+      map[r.id] = { exists: false, discountId: r.discountId || null };
+      if (!r.discountId) return;
+      let node;
+      try {
+        const data = await gql(admin, GET_DISCOUNT_STATUS, { id: r.discountId });
+        node = data?.discountNode;
+      } catch {
+        return;
+      }
+      if (!node?.id) return; // discount was deleted out from under us
+      const discount = node.discount ?? {};
+      const numericId = String(r.discountId).match(/\/(\d+)$/)?.[1] ?? null;
+      map[r.id] = {
+        exists: true,
+        discountId: r.discountId,
+        status: discount.status ?? null, // ACTIVE | EXPIRED | SCHEDULED
+        title: discount.title ?? null,
+        adminUrl:
+          shop && numericId
+            ? `https://${shop}/admin/discounts/${numericId}`
+            : null,
+      };
+    }),
+  );
   return map;
 }
 

@@ -393,21 +393,16 @@ const ruleMatchesCart = (rule, { handles, types, tags }) => {
   return false;
 };
 
-// A concise label for a variant in the size picker, e.g. "8B" or "Small / 10".
-// Falls back to the variant title, hiding the single-variant "Default Title".
-const variantOptionLabel = (variant) => {
-  const opts = (variant?.selectedOptions || []).filter(
-    (o) => o?.value && String(o.value).toLowerCase() !== 'default title'
-  );
-
-  if (opts.length) return opts.map((o) => o.value).join(' / ');
-
-  return variant?.title && variant.title !== 'Default Title' ? variant.title : 'One size';
-};
+// Shopify represents single-variant products with one synthetic "Title /
+// Default Title" option; we hide it so those products skip the picker.
+const isDefaultOption = (option) =>
+  String(option?.name).toLowerCase() === 'title' &&
+  String(option?.value).toLowerCase() === 'default title';
 
 // Reshape a Storefront product into the flat card shape the UI renders. Carries
-// every purchasable variant so multi-variant products open a size picker; the
-// default (first available) variant drives the card's price and one-tap add.
+// every purchasable variant (with its per-option values) plus the option axes
+// (e.g. "Bra Size", "Brief Size") so the picker can render a button row per
+// option. The default (first available) variant drives the card's price.
 const toCard = (product) => {
   const allVariants = (product?.variants?.nodes || []).filter((v) => v?.id);
   const available = allVariants.filter((v) => v.availableForSale);
@@ -415,12 +410,34 @@ const toCard = (product) => {
   // Skip products with nothing buyable rather than show a dead "Add" button.
   if (!product?.id || !available.length) return null;
 
-  const variants = available.map((v) => ({
-    id: v.id,
-    label: variantOptionLabel(v),
-    price: v.price?.amount ?? '0.00',
-    compareAtPrice: v.compareAtPrice?.amount ?? null,
-  }));
+  const variants = available.map((v) => {
+    const optionValues = {};
+    (v.selectedOptions || []).forEach((o) => {
+      if (!isDefaultOption(o)) optionValues[o.name] = o.value;
+    });
+
+    return {
+      id: v.id,
+      price: v.price?.amount ?? '0.00',
+      compareAtPrice: v.compareAtPrice?.amount ?? null,
+      optionValues,
+    };
+  });
+
+  // Option axes + their distinct values, in first-seen order across the
+  // available variants (so each axis becomes one row of buttons).
+  const options = [];
+  const byName = {};
+  available.forEach((v) => {
+    (v.selectedOptions || []).forEach((o) => {
+      if (isDefaultOption(o)) return;
+      if (!byName[o.name]) {
+        byName[o.name] = { name: o.name, values: [] };
+        options.push(byName[o.name]);
+      }
+      if (!byName[o.name].values.includes(o.value)) byName[o.name].values.push(o.value);
+    });
+  });
 
   const defaultVariant = variants[0];
 
@@ -434,8 +451,44 @@ const toCard = (product) => {
     price: defaultVariant.price,
     compareAtPrice: defaultVariant.compareAtPrice,
     variants,
-    hasOptions: variants.length > 1,
+    options,
+    hasOptions: options.length > 0,
   };
+};
+
+// Find the available variant matching an option selection (name -> value).
+const findVariant = (card, selection) =>
+  card.variants.find((v) => card.options.every((o) => v.optionValues[o.name] === selection[o.name]));
+
+// Whether choosing `value` for `option` can still yield an available variant,
+// given the buyer's current picks for the OTHER options. Drives button enabling.
+const valueIsAvailable = (card, selection, option, value) =>
+  card.variants.some(
+    (v) =>
+      v.optionValues[option.name] === value &&
+      card.options.every((o) => o.name === option.name || v.optionValues[o.name] === selection[o.name])
+  );
+
+// Apply a single option change, then snap the other options to a real available
+// variant so the selection never lands on a non-existent combination.
+const reconcileSelection = (card, selection, changedName, changedValue) => {
+  const next = { ...selection, [changedName]: changedValue };
+
+  if (findVariant(card, next)) return next;
+
+  const fallback = card.variants.find((v) => v.optionValues[changedName] === changedValue);
+  if (fallback) card.options.forEach((o) => { next[o.name] = fallback.optionValues[o.name]; });
+
+  return next;
+};
+
+// The buyer's default selection: the option values of the default variant.
+const defaultSelection = (card) => {
+  const variant = card.variants.find((v) => v.id === card.variantId) || card.variants[0];
+  const selection = {};
+  card.options.forEach((o) => { selection[o.name] = variant?.optionValues[o.name]; });
+
+  return selection;
 };
 
 /**
@@ -758,12 +811,13 @@ function Header({ heading, subtitle }) {
 }
 
 function RecommendationCard({ card, addingVariantId, onAdd }) {
-  const variants = card.variants || [];
-
-  // Buyer's size pick (defaults to the card's default variant). For
-  // single-variant products this stays put and the button adds directly.
-  const [selectedId, setSelectedId] = useState(card.variantId);
-  const selected = variants.find((v) => v.id === selectedId) || variants[0];
+  // Buyer's per-option picks (defaults to the card's default variant). For
+  // single-variant products `options` is empty and the button adds directly.
+  const [selection, setSelection] = useState(() => defaultSelection(card));
+  const selected =
+    findVariant(card, selection) ||
+    card.variants.find((v) => v.id === card.variantId) ||
+    card.variants[0];
 
   const isOnSale =
     selected?.compareAtPrice != null && Number(selected.compareAtPrice) > Number(selected.price);
@@ -771,6 +825,11 @@ function RecommendationCard({ card, addingVariantId, onAdd }) {
   const finalImageUrl = card.imageUrl
     ? `${card.imageUrl}${card.imageUrl.includes('?') ? '&' : '?'}width=200&height=200&crop=center`
     : 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png';
+
+  // Larger image for the modal hero (full width).
+  const modalImageUrl = card.imageUrl
+    ? `${card.imageUrl}${card.imageUrl.includes('?') ? '&' : '?'}width=600&height=600&crop=center`
+    : finalImageUrl;
 
   const adding = addingVariantId != null && selected != null && addingVariantId === selected.id;
   // s-modal needs a DOM-safe id; product gids contain "/" and ":".
@@ -815,21 +874,55 @@ function RecommendationCard({ card, addingVariantId, onAdd }) {
       </s-grid>
 
       {card.hasOptions && (
-        <s-modal id={modalId} heading={card.title}>
-          <s-select
-            label="Size"
-            value={selectedId}
-            onChange={(event) => setSelectedId(event.currentTarget.value)}
-          >
-            {variants.map((variant) => (
-              <s-option key={variant.id} value={variant.id}>
-                {variant.label} - {formatPrice(variant.price)}
-              </s-option>
-            ))}
-          </s-select>
+        <s-modal id={modalId} padding="none" accessibilityLabel={card.title}>
+          {/* Full-width product image above the title. */}
+          <s-image
+            src={modalImageUrl}
+            alt={card.imageAlt}
+            aspectRatio="1"
+            objectFit="cover"
+            inlineSize="fill"
+          />
 
+          <s-box padding="base">
+            <s-stack gap="base">
+              {/* Bold title with the (selected) price to the right. */}
+              <s-stack direction="inline" justifyContent="space-between" alignItems="center" gap="base">
+                <s-text type="strong">{card.title}</s-text>
+                <s-text type="strong">{formatPrice(selected?.price ?? card.price)}</s-text>
+              </s-stack>
+
+              {/* One row of selector buttons per option (e.g. Bra Size, Brief Size). */}
+              {card.options.map((option) => (
+                <s-stack key={option.name} gap="small-300">
+                  <s-text color="subdued">{option.name}</s-text>
+                  <s-grid
+                    gridTemplateColumns="repeat(auto-fit, minmax(64px, 1fr))"
+                    gap="small-300"
+                  >
+                    {option.values.map((value) => (
+                      <s-button
+                        key={value}
+                        variant={selection[option.name] === value ? 'primary' : 'secondary'}
+                        disabled={!valueIsAvailable(card, selection, option, value)}
+                        onClick={() =>
+                          setSelection((prev) => reconcileSelection(card, prev, option.name, value))
+                        }
+                      >
+                        {value}
+                      </s-button>
+                    ))}
+                  </s-grid>
+                </s-stack>
+              ))}
+            </s-stack>
+          </s-box>
+
+          {/* Full-width primary add-to-cart bar. */}
           <s-button
             slot="primary-action"
+            variant="primary"
+            inlineSize="fill"
             command="--hide"
             commandFor={modalId}
             onClick={() => onAdd(selected)}
