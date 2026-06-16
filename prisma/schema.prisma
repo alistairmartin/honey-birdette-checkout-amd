@@ -67,6 +67,9 @@ model GwpAppV1Config {
   shop       String
   name       String
   configJson String
+  // GID of the automatic app discount this config owns (one discount per config,
+  // each bound to the gift-with-purchase-discount function). Null until created.
+  discountId String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

@@ -56,25 +56,21 @@ function formatMoney(amount, currencyCode) {
   }
 }
 
-const VARIANT_INFO_QUERY = `#graphql
-  query CheckoutRecsVariantInfo($ids: [ID!]!) {
+const PRODUCT_INFO_QUERY = `#graphql
+  query CheckoutRecsProductInfo($ids: [ID!]!) {
     nodes(ids: $ids) {
-      ... on ProductVariant {
+      ... on Product {
         id
         title
-        image { url altText }
-        price
-        product {
-          title
-          featuredImage { url altText }
-        }
+        featuredImage { url altText }
+        priceRangeV2 { minVariantPrice { amount currencyCode } }
       }
     }
   }
 `;
 
-// All variant gids referenced anywhere in the config, for thumbnail enrichment.
-function collectVariantGids(config) {
+// All product gids referenced anywhere in the config, for thumbnail enrichment.
+function collectProductGids(config) {
   const gids = new Set(config.manual_upsells ?? []);
   for (const m of config.motivators ?? []) {
     for (const gid of m.products ?? []) gids.add(gid);
@@ -87,30 +83,28 @@ export const loader = async ({ request }) => {
 
   const config = await readConfig(admin);
 
-  const variantInfo = {};
-  const gids = collectVariantGids(config);
+  const productInfo = {};
+  const gids = collectProductGids(config);
   if (gids.length > 0) {
     try {
-      const response = await admin.graphql(VARIANT_INFO_QUERY, { variables: { ids: gids } });
+      const response = await admin.graphql(PRODUCT_INFO_QUERY, { variables: { ids: gids } });
       const data = await response.json();
       for (const node of data.data?.nodes ?? []) {
         if (!node?.id) continue;
-        const image = node.image ?? node.product?.featuredImage ?? null;
-        const variantLabel =
-          node.title && node.title !== "Default Title" ? ` - ${node.title}` : "";
-        variantInfo[node.id] = {
-          title: `${node.product?.title ?? "Product"}${variantLabel}`,
-          imageUrl: image?.url ?? null,
-          altText: image?.altText ?? null,
-          price: node.price != null ? formatMoney(node.price) : null,
+        const minPrice = node.priceRangeV2?.minVariantPrice;
+        productInfo[node.id] = {
+          title: node.title ?? "Product",
+          imageUrl: node.featuredImage?.url ?? null,
+          altText: node.featuredImage?.altText ?? null,
+          price: minPrice?.amount != null ? formatMoney(minPrice.amount, minPrice.currencyCode) : null,
         };
       }
     } catch (err) {
-      console.error("Failed to fetch checkout-recommendations variant info", err);
+      console.error("Failed to fetch checkout-recommendations product info", err);
     }
   }
 
-  return json({ config, variantInfo });
+  return json({ config, productInfo });
 };
 
 export const action = async ({ request }) => {
@@ -143,33 +137,32 @@ function newId() {
   return `m_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function decorateProduct(gid, variantInfo) {
+function decorateProduct(gid, productInfo) {
   return {
-    variantGid: gid,
-    title: variantInfo[gid]?.title ?? "",
-    imageUrl: variantInfo[gid]?.imageUrl ?? "",
-    price: variantInfo[gid]?.price ?? "",
+    productGid: gid,
+    title: productInfo[gid]?.title ?? "",
+    imageUrl: productInfo[gid]?.imageUrl ?? "",
+    price: productInfo[gid]?.price ?? "",
   };
 }
 
-// Map a resourcePicker product selection to our display shape, using the first
-// (default) variant - the same variant the extension prices and adds.
-function productToVariantPick(product) {
+// Map a resourcePicker product selection to our display shape. We store the
+// PRODUCT gid - the checkout extension fetches its variants and lets the
+// customer pick a size. Price shown is the first variant's, as a representative.
+function productToPick(product) {
+  if (!product?.id) return null;
   const variant = product?.variants?.[0];
-  if (!variant?.id) return null;
   const image =
-    variant.image?.originalSrc ||
-    variant.image?.src ||
+    variant?.image?.originalSrc ||
+    variant?.image?.src ||
     product.images?.[0]?.originalSrc ||
     product.images?.[0]?.src ||
     product.images?.[0]?.url ||
     "";
-  const rawPrice = typeof variant.price === "string" ? variant.price : variant.price?.amount;
-  const variantLabel =
-    variant.title && variant.title !== "Default Title" ? ` - ${variant.title}` : "";
+  const rawPrice = typeof variant?.price === "string" ? variant.price : variant?.price?.amount;
   return {
-    variantGid: variant.id,
-    title: `${product.title}${variantLabel}`,
+    productGid: product.id,
+    title: product.title,
     imageUrl: image,
     price: rawPrice ? `$${Number(rawPrice).toFixed(2)}` : "",
   };
@@ -182,7 +175,7 @@ const EMPTY_FREE_SHIPPING = () =>
   }, {});
 
 // Settings (global block settings) state from a stored config.
-function settingsFromConfig(config, variantInfo) {
+function settingsFromConfig(config, productInfo) {
   const freeShipping = EMPTY_FREE_SHIPPING();
   for (const code of SUPPORTED_CURRENCIES) {
     const entry = config.free_shipping?.[code] ?? {};
@@ -195,13 +188,13 @@ function settingsFromConfig(config, variantInfo) {
     heading: config.heading ?? DEFAULT_HEADING,
     max_products:
       config.max_products != null ? String(config.max_products) : String(DEFAULT_MAX_PRODUCTS),
-    manual_upsells: (config.manual_upsells ?? []).map((gid) => decorateProduct(gid, variantInfo)),
+    manual_upsells: (config.manual_upsells ?? []).map((gid) => decorateProduct(gid, productInfo)),
     free_shipping: freeShipping,
   };
 }
 
 // Motivators list state from a stored config (products decorated for display).
-function motivatorsFromConfig(config, variantInfo) {
+function motivatorsFromConfig(config, productInfo) {
   return (config.motivators ?? []).map((m) => ({
     id: m.id || newId(),
     name: m.name ?? "",
@@ -210,7 +203,7 @@ function motivatorsFromConfig(config, variantInfo) {
     min: m.min != null ? String(m.min) : "",
     max: m.max != null ? String(m.max) : "",
     text: m.text ?? DEFAULT_MOTIVATOR_TEXT,
-    products: (m.products ?? []).map((gid) => decorateProduct(gid, variantInfo)),
+    products: (m.products ?? []).map((gid) => decorateProduct(gid, productInfo)),
     updatedAt: m.updatedAt ?? null,
   }));
 }
@@ -241,7 +234,7 @@ function buildConfig(settings, motivators) {
   return {
     heading: settings.heading.trim() || DEFAULT_HEADING,
     max_products: Number(settings.max_products) || DEFAULT_MAX_PRODUCTS,
-    manual_upsells: settings.manual_upsells.map((p) => p.variantGid).filter(Boolean),
+    manual_upsells: settings.manual_upsells.map((p) => p.productGid).filter(Boolean),
     free_shipping,
     motivators: motivators.map((m) => ({
       id: m.id,
@@ -251,7 +244,7 @@ function buildConfig(settings, motivators) {
       min: m.min !== "" ? Number(m.min) : undefined,
       max: m.max !== "" ? Number(m.max) : undefined,
       text: m.text.trim() || DEFAULT_MOTIVATOR_TEXT,
-      products: m.products.map((p) => p.variantGid).filter(Boolean),
+      products: m.products.map((p) => p.productGid).filter(Boolean),
       updatedAt: m.updatedAt || undefined,
     })),
   };
@@ -274,7 +267,7 @@ function PickedProductRow({ pick, onRemove }) {
       ) : null}
       <BlockStack gap="050">
         <Text as="span" variant="bodyMd" fontWeight="semibold">
-          {pick.title || pick.variantGid}
+          {pick.title || pick.productGid}
         </Text>
         {pick.price ? (
           <Text as="span" variant="bodySm" tone="subdued">
@@ -302,13 +295,13 @@ const TABS = [
 ];
 
 export default function CheckoutRecommendationsPage() {
-  const { config, variantInfo } = useLoaderData();
+  const { config, productInfo } = useLoaderData();
   const shopify = useAppBridge();
   const fetcher = useFetcher();
 
   const [selectedTab, setSelectedTab] = useState(0);
-  const [settings, setSettings] = useState(() => settingsFromConfig(config, variantInfo));
-  const [motivators, setMotivators] = useState(() => motivatorsFromConfig(config, variantInfo));
+  const [settings, setSettings] = useState(() => settingsFromConfig(config, productInfo));
+  const [motivators, setMotivators] = useState(() => motivatorsFromConfig(config, productInfo));
 
   // Price Range Motivator sub-view + builder draft.
   const [motivatorView, setMotivatorView] = useState("saved"); // "saved" | "builder"
@@ -352,15 +345,15 @@ export default function CheckoutRecommendationsPage() {
       type: "product",
       multiple: Math.max(1, MANUAL_UPSELL_SLOTS - settings.manual_upsells.length),
       action: "select",
-      filter: { variants: true, archived: false },
+      filter: { archived: false },
     });
     if (!selection?.length) return;
-    const picks = selection.map(productToVariantPick).filter(Boolean);
+    const picks = selection.map(productToPick).filter(Boolean);
     setSettings((prev) => {
-      const existing = new Set(prev.manual_upsells.map((p) => p.variantGid));
+      const existing = new Set(prev.manual_upsells.map((p) => p.productGid));
       const merged = [...prev.manual_upsells];
       for (const p of picks) {
-        if (!existing.has(p.variantGid) && merged.length < MANUAL_UPSELL_SLOTS) merged.push(p);
+        if (!existing.has(p.productGid) && merged.length < MANUAL_UPSELL_SLOTS) merged.push(p);
       }
       return { ...prev, manual_upsells: merged };
     });
@@ -369,7 +362,7 @@ export default function CheckoutRecommendationsPage() {
   const removeManualUpsell = (gid) =>
     setSettings((prev) => ({
       ...prev,
-      manual_upsells: prev.manual_upsells.filter((p) => p.variantGid !== gid),
+      manual_upsells: prev.manual_upsells.filter((p) => p.productGid !== gid),
     }));
 
   const saveSettings = () => persist(motivators, settings);
@@ -382,20 +375,20 @@ export default function CheckoutRecommendationsPage() {
       type: "product",
       multiple: true,
       action: "select",
-      filter: { variants: true, archived: false },
+      filter: { archived: false },
     });
     if (!selection?.length) return;
-    const picks = selection.map(productToVariantPick).filter(Boolean);
+    const picks = selection.map(productToPick).filter(Boolean);
     setDraft((prev) => {
-      const existing = new Set(prev.products.map((p) => p.variantGid));
+      const existing = new Set(prev.products.map((p) => p.productGid));
       const merged = [...prev.products];
-      for (const p of picks) if (!existing.has(p.variantGid)) merged.push(p);
+      for (const p of picks) if (!existing.has(p.productGid)) merged.push(p);
       return { ...prev, products: merged };
     });
   }, [shopify]);
 
   const removeDraftProduct = (gid) =>
-    setDraft((prev) => ({ ...prev, products: prev.products.filter((p) => p.variantGid !== gid) }));
+    setDraft((prev) => ({ ...prev, products: prev.products.filter((p) => p.productGid !== gid) }));
 
   const newMotivator = () => {
     setDraft(EMPTY_MOTIVATOR());
@@ -642,8 +635,8 @@ export default function CheckoutRecommendationsPage() {
                           Products
                         </Text>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          The extension shows the cheapest of these priced at or above the remaining
-                          spend, so adding one tips the customer over the max.
+                          While this motivator is active, these products are pinned to the top of the
+                          recommendations (ignoring Max Products). Customers choose the size at checkout.
                         </Text>
                         <BlockStack gap="300">
                           {draft.products.length === 0 ? (
@@ -653,9 +646,9 @@ export default function CheckoutRecommendationsPage() {
                           ) : (
                             draft.products.map((pick) => (
                               <PickedProductRow
-                                key={pick.variantGid}
+                                key={pick.productGid}
                                 pick={pick}
-                                onRemove={() => removeDraftProduct(pick.variantGid)}
+                                onRemove={() => removeDraftProduct(pick.productGid)}
                               />
                             ))
                           )}
@@ -727,14 +720,15 @@ export default function CheckoutRecommendationsPage() {
                     </Text>
                     <Text as="p" variant="bodyMd" tone="subdued">
                       Up to {MANUAL_UPSELL_SLOTS} products shown before the metaobject and Shopify
-                      recommendations. The first (default) variant is added to cart.
+                      recommendations. Customers choose the size at checkout (or it's added directly
+                      when there's only one variant).
                     </Text>
                     <BlockStack gap="300">
                       {settings.manual_upsells.map((pick) => (
                         <PickedProductRow
-                          key={pick.variantGid}
+                          key={pick.productGid}
                           pick={pick}
-                          onRemove={() => removeManualUpsell(pick.variantGid)}
+                          onRemove={() => removeManualUpsell(pick.productGid)}
                         />
                       ))}
                     </BlockStack>

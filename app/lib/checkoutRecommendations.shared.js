@@ -43,16 +43,18 @@ export const MANUAL_UPSELL_SLOTS = 4;
 // extension with the spend left to reach the top of the range.
 export const DEFAULT_MOTIVATOR_TEXT = "Spend {{ remaining }} more to receive free shipping";
 
-// Accepts a numeric id or a ProductVariant gid; returns a ProductVariant gid (or
-// null). Manual upsells and motivator products are stored as variant gids so the
-// extension can price and add the exact variant.
-export function toVariantGid(value) {
+// Accepts a numeric id or a Product gid; returns a Product gid (or null). Manual
+// upsells and motivator products are stored as PRODUCT gids so the checkout
+// extension can fetch every variant and let the customer choose a size. A
+// ProductVariant gid can't be mapped to its product offline, so it's dropped
+// (legacy variant-based configs need re-picking).
+export function toProductGid(value) {
   if (value == null || value === "") return null;
   const str = String(value).trim();
-  if (str.startsWith("gid://shopify/ProductVariant/")) return str;
-  if (str.startsWith("gid://")) return null; // some other gid
+  if (str.startsWith("gid://shopify/Product/")) return str;
+  if (str.startsWith("gid://")) return null; // variant or some other gid
   const numeric = str.replace(/[^0-9]/g, "");
-  return numeric ? `gid://shopify/ProductVariant/${numeric}` : null;
+  return numeric ? `gid://shopify/Product/${numeric}` : null;
 }
 
 function toFiniteOrNull(value) {
@@ -68,7 +70,7 @@ function normalizeMotivator(raw) {
   const min = toFiniteOrNull(raw.min);
   const max = toFiniteOrNull(raw.max);
   const products = (Array.isArray(raw.products) ? raw.products : [])
-    .map(toVariantGid)
+    .map(toProductGid)
     .filter(Boolean);
 
   // A motivator needs a target (max) and at least one product to do anything.
@@ -97,7 +99,7 @@ export function normalizeConfig(raw) {
   const maxProducts = toFiniteOrNull(src.max_products) ?? DEFAULT_MAX_PRODUCTS;
 
   const manualUpsells = (Array.isArray(src.manual_upsells) ? src.manual_upsells : [])
-    .map(toVariantGid)
+    .map(toProductGid)
     .filter(Boolean)
     .slice(0, MANUAL_UPSELL_SLOTS);
 

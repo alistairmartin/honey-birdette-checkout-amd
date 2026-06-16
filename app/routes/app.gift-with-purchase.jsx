@@ -8,7 +8,6 @@ import {
   Card,
   Button,
   BlockStack,
-  Box,
   InlineStack,
   Badge,
   Tabs,
@@ -28,8 +27,10 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import {
   syncConfigs,
-  getDiscountInfo,
-  setDiscountActive,
+  getConfigDiscountMap,
+  setConfigDiscountActive,
+  createConfigDiscount,
+  deleteConfigDiscount,
 } from "../lib/gwpAppV1.server";
 import {
   SUPPORTED_CURRENCIES,
@@ -79,6 +80,14 @@ function formatMoney(amount, currencyCode) {
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
 
+  // Sync first so per-config discounts are created/updated and each row's
+  // discountId is populated before we read the rows back for display.
+  try {
+    await syncConfigs(admin, session.shop);
+  } catch (err) {
+    console.error("Failed to sync GWP V4 configs on load", err);
+  }
+
   const rows = await prisma.gwpAppV1Config.findMany({
     where: { shop: session.shop },
     orderBy: { updatedAt: "desc" },
@@ -87,16 +96,9 @@ export const loader = async ({ request }) => {
     id: row.id,
     name: row.name,
     configJson: row.configJson,
+    discountId: row.discountId,
     updatedAt: row.updatedAt.toISOString(),
   }));
-
-  // Push saved rows to both metafields on every load so the storefront always
-  // reflects what's saved here.
-  try {
-    await syncConfigs(admin, session.shop);
-  } catch (err) {
-    console.error("Failed to sync GWP V4 configs on load", err);
-  }
 
   const productGids = Array.from(
     new Set(
@@ -153,14 +155,14 @@ export const loader = async ({ request }) => {
     }
   }
 
-  let discountInfo = { exists: false };
+  let discountMap = {};
   try {
-    discountInfo = await getDiscountInfo(admin, session.shop);
+    discountMap = await getConfigDiscountMap(admin, session.shop, rows);
   } catch (err) {
     console.error("Failed to fetch GWP discount info", err);
   }
 
-  return json({ saved, productInfo, discountInfo });
+  return json({ saved, productInfo, discountMap });
 };
 
 export const action = async ({ request }) => {
@@ -222,6 +224,14 @@ export const action = async ({ request }) => {
       where: { id, shop: session.shop },
     });
     if (!existing) return json({ ok: false, error: "Config not found." });
+    // Delete this config's own discount before removing the row.
+    if (existing.discountId) {
+      try {
+        await deleteConfigDiscount(admin, existing.discountId);
+      } catch (err) {
+        console.error("Failed to delete GWP discount on config delete", err);
+      }
+    }
     await prisma.gwpAppV1Config.delete({ where: { id } });
     try {
       await syncConfigs(admin, session.shop);
@@ -232,29 +242,27 @@ export const action = async ({ request }) => {
   }
 
   if (intent === "create_discount") {
+    const id = String(formData.get("id") ?? "");
+    if (!id) return json({ ok: false, error: "Missing config id." });
     try {
-      await syncConfigs(admin, session.shop);
-      const info = await getDiscountInfo(admin, session.shop);
-      if (!info.exists) {
-        return json({
-          ok: false,
-          error:
-            "Nothing to create yet - add an enabled config with a gift product first.",
-        });
-      }
-      return json({ ok: true, intent, discountInfo: info });
+      await createConfigDiscount(admin, session.shop, id);
+      return json({ ok: true, intent, id });
     } catch (err) {
       console.error("Failed to create GWP discount", err);
-      return json({ ok: false, error: "Could not create the discount." });
+      return json({
+        ok: false,
+        error: err?.message || "Could not create the discount.",
+      });
     }
   }
 
   if (intent === "activate_discount" || intent === "deactivate_discount") {
+    const id = String(formData.get("id") ?? "");
+    if (!id) return json({ ok: false, error: "Missing config id." });
     const active = intent === "activate_discount";
     try {
-      await setDiscountActive(admin, active);
-      const info = await getDiscountInfo(admin, session.shop);
-      return json({ ok: true, intent, discountInfo: info });
+      await setConfigDiscountActive(admin, session.shop, id, active);
+      return json({ ok: true, intent, id });
     } catch (err) {
       console.error("Failed to toggle GWP discount", err);
       return json({
@@ -309,6 +317,7 @@ const INITIAL_BUILDER = {
   show_success_banner: true,
   label: "LIMITED OFFER",
   admin_title: DEFAULT_COPY.admin_title,
+  discount_title: "",
   discount_percentage: String(DEFAULT_DISCOUNT_PERCENTAGE),
   product_tag: "",
   min_spend: emptyMinSpend(),
@@ -344,6 +353,7 @@ function buildConfig(state) {
   };
   if (state.label.trim()) config.label = state.label.trim();
   if (state.admin_title.trim()) config.admin_title = state.admin_title.trim();
+  if (state.discount_title.trim()) config.discount_title = state.discount_title.trim();
   const pct = Number(state.discount_percentage);
   if (Number.isFinite(pct)) config.discount_percentage = pct;
   if (state.trigger_type !== "subscription" && state.product_tag.trim()) {
@@ -415,6 +425,7 @@ function builderFromConfig(c) {
     show_success_banner: c.show_success_banner !== false,
     label: c.label ?? "",
     admin_title: c.admin_title ?? "",
+    discount_title: c.discount_title ?? "",
     discount_percentage:
       c.discount_percentage != null
         ? String(c.discount_percentage)
@@ -457,7 +468,7 @@ function formatTimestamp(iso) {
 }
 
 export default function GiftWithPurchasePage() {
-  const { saved, productInfo, discountInfo } = useLoaderData();
+  const { saved, productInfo, discountMap } = useLoaderData();
   const shopify = useAppBridge();
   const fetcher = useFetcher();
 
@@ -619,9 +630,10 @@ export default function GiftWithPurchasePage() {
     setDeleteTarget(null);
   };
 
-  const submitDiscountIntent = (intent) => {
+  const submitDiscountIntent = (intent, id) => {
     const formData = new FormData();
     formData.set("intent", intent);
+    formData.set("id", id);
     fetcher.submit(formData, { method: "POST" });
   };
 
@@ -632,7 +644,6 @@ export default function GiftWithPurchasePage() {
       panelID: "saved-panel",
     },
     { id: "builder", content: "Builder", panelID: "builder-panel" },
-    { id: "discount", content: "Discount", panelID: "discount-panel" },
   ];
 
   const showProductTag = builder.trigger_type !== "subscription";
@@ -736,6 +747,15 @@ export default function GiftWithPurchasePage() {
                       autoComplete="off"
                       placeholder="e.g. {{ free_gift }} GWP - {{ trigger_type }}"
                       helpText="Internal label, not shown to customers. Also tags the gift line in the cart. Supports {{ free_gift }} (gift product title) and {{ trigger_type }}."
+                    />
+
+                    <TextField
+                      label="Discount title"
+                      value={builder.discount_title}
+                      onChange={(v) => update("discount_title", v)}
+                      autoComplete="off"
+                      placeholder="e.g. Gift with purchase - Luna"
+                      helpText="Title of the automatic discount this config creates, shown in the Shopify admin Discounts list. Leave blank to use the config name."
                     />
 
                     <TextField
@@ -1065,36 +1085,6 @@ export default function GiftWithPurchasePage() {
                 </Card>
               </BlockStack>
             </Layout.Section>
-
-            <Layout.Section>
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">
-                    Generated JSON
-                  </Text>
-                  <InlineStack gap="200">
-                    <Button onClick={() => copyJson(generatedConfig, false)}>
-                      Copy JSON
-                    </Button>
-                    <Button onClick={() => copyJson(generatedConfig, true)}>
-                      Copy minified
-                    </Button>
-                  </InlineStack>
-                  <Box
-                    padding="400"
-                    background="bg-surface-active"
-                    borderWidth="025"
-                    borderRadius="200"
-                    borderColor="border"
-                    overflowX="scroll"
-                  >
-                    <pre style={{ margin: 0 }}>
-                      <code>{JSON.stringify(generatedConfig, null, 2)}</code>
-                    </pre>
-                  </Box>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
           </Layout>
         )}
 
@@ -1109,6 +1099,27 @@ export default function GiftWithPurchasePage() {
                     </Text>
                     <Button onClick={newConfig}>New config</Button>
                   </InlineStack>
+
+                  <Banner tone="info">
+                    <Text as="p" variant="bodyMd">
+                      Each config owns its own automatic discount, bound to the
+                      gift-with-purchase-discount function and tagged{" "}
+                      <Text as="span" fontWeight="semibold">
+                        AMD App
+                      </Text>
+                      . A config saved in{" "}
+                      <Text as="span" fontWeight="semibold">
+                        Test mode
+                      </Text>{" "}
+                      (or Disabled) has its discount created{" "}
+                      <Text as="span" fontWeight="semibold">
+                        deactivated
+                      </Text>{" "}
+                      so it never applies on real checkouts. To test, update the
+                      customer segment to your own email, then make the discount
+                      active.
+                    </Text>
+                  </Banner>
 
                   {saved.length === 0 ? (
                     <EmptyState
@@ -1141,6 +1152,7 @@ export default function GiftWithPurchasePage() {
                           trigger = "unknown";
                         }
                         const isEditing = editingId === row.id;
+                        const disc = discountMap?.[row.id] || { exists: false };
                         const numericProductId =
                           productId.match(/\/(\d+)$/)?.[1] ?? productId;
                         const imageInfo = numericProductId
@@ -1213,6 +1225,74 @@ export default function GiftWithPurchasePage() {
                                   Delete
                                 </Button>
                               </InlineStack>
+
+                              {trigger !== "unknown" ? (
+                                <>
+                                  <Divider />
+                                  <InlineStack
+                                    align="space-between"
+                                    blockAlign="center"
+                                    gap="200"
+                                  >
+                                    <InlineStack gap="200" blockAlign="center">
+                                      <Text as="span" variant="bodySm" fontWeight="semibold">
+                                        Discount
+                                      </Text>
+                                      <Badge
+                                        tone={
+                                          disc.exists
+                                            ? discountStatusTone(disc.status)
+                                            : undefined
+                                        }
+                                      >
+                                        {disc.exists
+                                          ? discountStatusLabel(disc.status)
+                                          : "Not created"}
+                                      </Badge>
+                                      {disc.exists && disc.adminUrl ? (
+                                        <Link url={disc.adminUrl} target="_blank">
+                                          View in Shopify admin
+                                        </Link>
+                                      ) : null}
+                                    </InlineStack>
+                                    <InlineStack gap="200">
+                                      {!disc.exists ? (
+                                        <Button
+                                          onClick={() =>
+                                            submitDiscountIntent("create_discount", row.id)
+                                          }
+                                          loading={isSaving}
+                                        >
+                                          Create discount
+                                        </Button>
+                                      ) : (
+                                        <>
+                                          <Button
+                                            disabled={disc.status === "ACTIVE"}
+                                            onClick={() =>
+                                              submitDiscountIntent("activate_discount", row.id)
+                                            }
+                                            loading={isSaving}
+                                          >
+                                            Make active
+                                          </Button>
+                                          <Button
+                                            tone="critical"
+                                            variant="tertiary"
+                                            disabled={disc.status !== "ACTIVE"}
+                                            onClick={() =>
+                                              submitDiscountIntent("deactivate_discount", row.id)
+                                            }
+                                            loading={isSaving}
+                                          >
+                                            Deactivate
+                                          </Button>
+                                        </>
+                                      )}
+                                    </InlineStack>
+                                  </InlineStack>
+                                </>
+                              ) : null}
                             </BlockStack>
                           </Card>
                         );
@@ -1225,108 +1305,6 @@ export default function GiftWithPurchasePage() {
           </Layout>
         )}
 
-        {selectedTab === 2 && (
-          <Layout>
-            <Layout.Section>
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">
-                      Discount
-                    </Text>
-                    {discountInfo?.exists ? (
-                      <Badge tone={discountStatusTone(discountInfo.status)}>
-                        {discountStatusLabel(discountInfo.status)}
-                      </Badge>
-                    ) : (
-                      <Badge>Not created</Badge>
-                    )}
-                  </InlineStack>
-
-                  <Text as="p" variant="bodyMd">
-                    The app manages a single automatic discount,{" "}
-                    <Text as="span" fontWeight="semibold">
-                      Gift with purchase
-                    </Text>
-                    , bound to the gift-with-purchase-discount function. It
-                    applies the configured percentage off the gift line once an
-                    offer qualifies (e.g. the min-spend threshold is met). Every
-                    saved config reuses this one discount - the checkout
-                    extension decides when the gift line is added, and this
-                    discount makes that line free or % off.
-                  </Text>
-
-                  {discountInfo?.exists ? (
-                    <BlockStack gap="100">
-                      <Text as="p" variant="bodyMd" tone="subdued">
-                        Status: {discountStatusLabel(discountInfo.status)}
-                      </Text>
-                      {discountInfo.adminUrl ? (
-                        <Link url={discountInfo.adminUrl} target="_blank">
-                          View this discount in Shopify admin
-                        </Link>
-                      ) : null}
-                    </BlockStack>
-                  ) : (
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      No discount has been created yet. Save an enabled config
-                      with a gift product, or use Create discount below.
-                    </Text>
-                  )}
-
-                  <Divider />
-
-                  <InlineStack gap="200">
-                    <Button
-                      onClick={() => submitDiscountIntent("create_discount")}
-                      loading={isSaving}
-                    >
-                      Create discount
-                    </Button>
-                    <Button
-                      variant="primary"
-                      disabled={
-                        !discountInfo?.exists ||
-                        discountInfo.status === "ACTIVE"
-                      }
-                      onClick={() => submitDiscountIntent("activate_discount")}
-                      loading={isSaving}
-                    >
-                      Make active
-                    </Button>
-                    <Button
-                      tone="critical"
-                      disabled={
-                        !discountInfo?.exists ||
-                        discountInfo.status !== "ACTIVE"
-                      }
-                      onClick={() => submitDiscountIntent("deactivate_discount")}
-                      loading={isSaving}
-                    >
-                      Deactivate
-                    </Button>
-                  </InlineStack>
-
-                  <Banner tone="info">
-                    <Text as="p" variant="bodyMd">
-                      If a config is in{" "}
-                      <Text as="span" fontWeight="semibold">
-                        Test mode
-                      </Text>
-                      , the discount is created but left{" "}
-                      <Text as="span" fontWeight="semibold">
-                        deactivated
-                      </Text>{" "}
-                      so it never applies on real checkouts. To test, update the
-                      customer segment to your own email, then activate the
-                      discount.
-                    </Text>
-                  </Banner>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          </Layout>
-        )}
       </BlockStack>
 
       {deleteTarget ? (

@@ -184,7 +184,9 @@ const describeMotivators = (motivators, currencyCode, subtotalAmount) => {
 // GraphQL (Storefront API via `shopify.query`)
 // ---------------------------------------------------------------------------
 
-// Streamlined product fields needed to render a card + add the default variant.
+// Product fields needed to render a card + let the buyer choose a variant (size).
+// We pull every variant so a multi-variant product opens a size picker instead of
+// silently adding the first variant.
 const PRODUCT_CARD_FIELDS = `
   id
   title
@@ -192,10 +194,12 @@ const PRODUCT_CARD_FIELDS = `
   productType
   tags
   featuredImage { url altText }
-  variants(first: 1) {
+  variants(first: 50) {
     nodes {
       id
+      title
       availableForSale
+      selectedOptions { name value }
       price { amount currencyCode }
       compareAtPrice { amount currencyCode }
     }
@@ -261,45 +265,33 @@ const fetchCartProductDetails = async (productIds, countryCode) => {
   return byId;
 };
 
-// Manual upsells are explicit variant references, so we fetch the chosen
-// variant directly (rather than a product's default variant).
-const fetchManualUpsells = async (variantIds, countryCode) => {
-  if (!variantIds.length) return [];
+// Manual upsells and motivator products are stored as product references. We
+// fetch the full products (all variants) so the card can offer a size picker,
+// and preserve the merchant's configured order.
+const fetchProductsByIds = async (productIds, countryCode) => {
+  if (!productIds.length) return [];
 
   const query = `
-    query ManualUpsells($ids: [ID!]!) ${inContext(countryCode)} {
+    query RecProducts($ids: [ID!]!) ${inContext(countryCode)} {
       nodes(ids: $ids) {
-        ... on ProductVariant {
-          id
-          availableForSale
-          price { amount currencyCode }
-          compareAtPrice { amount currencyCode }
-          image { url altText }
-          product {
-            id
-            title
-            productType
-            featuredImage { url altText }
-          }
-        }
+        ... on Product { ${PRODUCT_CARD_FIELDS} }
       }
     }
   `;
 
-  const { data, errors } = await shopify.query(query, { variables: { ids: variantIds } });
+  const { data, errors } = await shopify.query(query, { variables: { ids: productIds } });
 
   if (errors?.length) {
-    console.error('[checkout-recommendations] manual upsell errors', errors);
+    console.error('[checkout-recommendations] product fetch errors', errors);
   }
 
-  // Preserve the merchant's configured order, dropping any that didn't resolve.
   const byId = {};
 
-  (data?.nodes || []).filter(Boolean).forEach((v) => {
-    byId[v.id] = v;
+  (data?.nodes || []).filter(Boolean).forEach((p) => {
+    byId[p.id] = p;
   });
 
-  return variantIds.map((id) => byId[id]).filter(Boolean);
+  return productIds.map((id) => byId[id]).filter(Boolean);
 };
 
 const fetchProductRecommendations = async (productId, countryCode) => {
@@ -401,39 +393,48 @@ const ruleMatchesCart = (rule, { handles, types, tags }) => {
   return false;
 };
 
-// Reshape a Storefront product into the flat card shape the UI renders.
-const toCard = (product) => {
-  const variant = product?.variants?.nodes?.[0];
+// A concise label for a variant in the size picker, e.g. "8B" or "Small / 10".
+// Falls back to the variant title, hiding the single-variant "Default Title".
+const variantOptionLabel = (variant) => {
+  const opts = (variant?.selectedOptions || []).filter(
+    (o) => o?.value && String(o.value).toLowerCase() !== 'default title'
+  );
 
-  if (!product?.id || !variant?.id) return null;
+  if (opts.length) return opts.map((o) => o.value).join(' / ');
+
+  return variant?.title && variant.title !== 'Default Title' ? variant.title : 'One size';
+};
+
+// Reshape a Storefront product into the flat card shape the UI renders. Carries
+// every purchasable variant so multi-variant products open a size picker; the
+// default (first available) variant drives the card's price and one-tap add.
+const toCard = (product) => {
+  const allVariants = (product?.variants?.nodes || []).filter((v) => v?.id);
+  const available = allVariants.filter((v) => v.availableForSale);
+
+  // Skip products with nothing buyable rather than show a dead "Add" button.
+  if (!product?.id || !available.length) return null;
+
+  const variants = available.map((v) => ({
+    id: v.id,
+    label: variantOptionLabel(v),
+    price: v.price?.amount ?? '0.00',
+    compareAtPrice: v.compareAtPrice?.amount ?? null,
+  }));
+
+  const defaultVariant = variants[0];
 
   return {
     productId: product.id,
-    variantId: variant.id,
+    variantId: defaultVariant.id,
     title: product.title || '',
     productType: product.productType || '',
     imageUrl: product.featuredImage?.url || '',
     imageAlt: product.featuredImage?.altText || product.title || 'Product image',
-    price: variant.price?.amount ?? '0.00',
-    compareAtPrice: variant.compareAtPrice?.amount ?? null,
-  };
-};
-
-// Reshape a Storefront variant (manual upsell) into the same card shape.
-const toVariantCard = (variant) => {
-  const product = variant?.product;
-
-  if (!variant?.id || !product?.id) return null;
-
-  return {
-    productId: product.id,
-    variantId: variant.id,
-    title: product.title || '',
-    productType: product.productType || '',
-    imageUrl: variant.image?.url || product.featuredImage?.url || '',
-    imageAlt: variant.image?.altText || product.featuredImage?.altText || product.title || 'Product image',
-    price: variant.price?.amount ?? '0.00',
-    compareAtPrice: variant.compareAtPrice?.amount ?? null,
+    price: defaultVariant.price,
+    compareAtPrice: defaultVariant.compareAtPrice,
+    variants,
+    hasOptions: variants.length > 1,
   };
 };
 
@@ -453,18 +454,18 @@ const toVariantCard = (variant) => {
  * exempt, so the rendered count can exceed Max Slots when a motivator is active.
  *
  * Cart products are always excluded. Lingerie sets and gift cards are excluded
- * from the automatic tiers, but allowed for manual upsells and motivator
- * products (the merchant picked exact variants, so the size concern doesn't apply).
+ * from the automatic tiers, but allowed for manual upsells and motivator products
+ * (the merchant picked them deliberately; the buyer picks a size at checkout).
  */
-const resolveRecommendations = async ({ metaType, countryCode, slotLimit, lines, manualVariantIds, gapFill }) => {
+const resolveRecommendations = async ({ metaType, countryCode, slotLimit, lines, manualProductIds, motivatorProductIds }) => {
   const cartProductIds = [...new Set(lines.map((l) => l.merchandise?.product?.id).filter(Boolean))];
   const cartTypes = new Set(
     lines.map((l) => String(l.merchandise?.product?.productType || '').toLowerCase()).filter(Boolean)
   );
 
-  const [manualVariants, gapVariants, metaNodes, cartDetails] = await Promise.all([
-    fetchManualUpsells(manualVariantIds, countryCode),
-    fetchManualUpsells(gapFill?.variantIds || [], countryCode),
+  const [manualProducts, motivatorProducts, metaNodes, cartDetails] = await Promise.all([
+    fetchProductsByIds(manualProductIds || [], countryCode),
+    fetchProductsByIds(motivatorProductIds || [], countryCode),
     fetchMetaobjects(metaType, countryCode),
     fetchCartProductDetails(cartProductIds, countryCode),
   ]);
@@ -500,14 +501,12 @@ const resolveRecommendations = async ({ metaType, countryCode, slotLimit, lines,
   // top, in the merchant's configured order. These bypass the type filter (like
   // manual upsells) and, via `force`, the Max Slots cap - the curated set always
   // shows in full; the tiers below fill any remaining slots up to Max Slots.
-  if (gapVariants.length) {
-    gapVariants
-      .filter((v) => v.availableForSale)
-      .forEach((variant) => tryAddCard(toVariantCard(variant), { allowAnyType: true, force: true }));
-  }
+  motivatorProducts.forEach((product) =>
+    tryAddCard(toCard(product), { allowAnyType: true, force: true })
+  );
 
   // 1. Manual upsells next, in configured order. These bypass the type filter.
-  manualVariants.forEach((variant) => tryAddCard(toVariantCard(variant), { allowAnyType: true }));
+  manualProducts.forEach((product) => tryAddCard(toCard(product), { allowAnyType: true }));
 
   // 2. Metaobject rules, highest priority first.
   metaNodes
@@ -584,13 +583,13 @@ function Extension() {
     ? renderMotivatorText(activeMotivator.motivator.text, activeMotivator.remaining)
     : fallbackShipping.subtitle;
 
-  const manualVariantIds = (appConfig?.manual_upsells || []).filter(Boolean);
+  const manualProductIds = (appConfig?.manual_upsells || []).filter(Boolean);
 
   // Curated products for the active motivator. When a motivator is active the
-  // resolver pins all of these to the top, ignoring Max Slots. `gapFillGap` (the
+  // resolver pins all of these to the top, ignoring Max Slots. `motivatorGap` (the
   // spend left to the target) is kept for the testing panel only.
-  const gapFillVariantIds = activeMotivator ? activeMotivator.motivator.products || [] : [];
-  const gapFillGap = activeMotivator ? activeMotivator.remaining : 0;
+  const motivatorProductIds = activeMotivator ? activeMotivator.motivator.products || [] : [];
+  const motivatorGap = activeMotivator ? activeMotivator.remaining : 0;
 
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -602,10 +601,10 @@ function Extension() {
     () => lines.map((l) => `${l.merchandise?.id}:${l.quantity}`).join('|'),
     [lines]
   );
-  const manualKey = manualVariantIds.join('|');
+  const manualKey = manualProductIds.join('|');
   // Resolution no longer depends on the gap amount, only on which curated
   // products the active motivator pins to the top.
-  const gapKey = gapFillVariantIds.join('|');
+  const motivatorKey = motivatorProductIds.join('|');
 
   useEffect(() => {
     // Wait for the config fetch to settle so we resolve once with the final
@@ -621,8 +620,8 @@ function Extension() {
       countryCode,
       slotLimit,
       lines,
-      manualVariantIds,
-      gapFill: { variantIds: gapFillVariantIds },
+      manualProductIds,
+      motivatorProductIds,
     })
       .then((result) => {
         if (!cancelled) setCards(result);
@@ -638,7 +637,7 @@ function Extension() {
     return () => {
       cancelled = true;
     };
-  }, [configLoaded, cartKey, metaType, countryCode, slotLimit, manualKey, gapKey]);
+  }, [configLoaded, cartKey, metaType, countryCode, slotLimit, manualKey, motivatorKey]);
 
   // Hide the error banner automatically after 3s.
   useEffect(() => {
@@ -649,11 +648,13 @@ function Extension() {
     return () => clearTimeout(timer);
   }, [showError]);
 
-  const handleAddToCart = async (card) => {
-    setAdding(card.variantId);
+  // Adds the chosen variant (the buyer's size pick, or the default for
+  // single-variant products). `variant` is a card.variants entry.
+  const handleAddToCart = async (variant) => {
+    setAdding(variant.id);
 
-    const compareAtNum = Number(card.compareAtPrice);
-    const hasCompareAt = Number.isFinite(compareAtNum) && compareAtNum > Number(card.price);
+    const compareAtNum = Number(variant.compareAtPrice);
+    const hasCompareAt = Number.isFinite(compareAtNum) && compareAtNum > Number(variant.price);
     const compareAtCents = hasCompareAt ? Math.round(compareAtNum * 100) : 0;
 
     const attributes = [
@@ -669,7 +670,7 @@ function Extension() {
 
     const result = await shopify.applyCartLinesChange({
       type: 'addCartLine',
-      merchandiseId: card.variantId,
+      merchandiseId: variant.id,
       quantity: 1,
       attributes,
     });
@@ -694,9 +695,9 @@ function Extension() {
       subtotalAmount={subtotalAmount}
       thresholds={thresholds}
       activeMotivator={activeMotivator}
-      manualVariantIds={manualVariantIds}
-      gapFillVariantIds={gapFillVariantIds}
-      gapFillGap={gapFillGap}
+      manualProductIds={manualProductIds}
+      motivatorProductIds={motivatorProductIds}
+      motivatorGap={motivatorGap}
       heading={heading}
       metaType={metaType}
       slotLimit={slotLimit}
@@ -718,10 +719,10 @@ function Extension() {
           <s-stack gap="base">
             {cards.map((card) => (
               <RecommendationCard
-                key={card.variantId}
+                key={card.productId}
                 card={card}
-                adding={adding === card.variantId}
-                onAdd={() => handleAddToCart(card)}
+                addingVariantId={adding}
+                onAdd={handleAddToCart}
               />
             ))}
           </s-stack>
@@ -756,43 +757,88 @@ function Header({ heading, subtitle }) {
   );
 }
 
-function RecommendationCard({ card, adding, onAdd }) {
+function RecommendationCard({ card, addingVariantId, onAdd }) {
+  const variants = card.variants || [];
+
+  // Buyer's size pick (defaults to the card's default variant). For
+  // single-variant products this stays put and the button adds directly.
+  const [selectedId, setSelectedId] = useState(card.variantId);
+  const selected = variants.find((v) => v.id === selectedId) || variants[0];
+
   const isOnSale =
-    card.compareAtPrice != null && Number(card.compareAtPrice) > Number(card.price);
+    selected?.compareAtPrice != null && Number(selected.compareAtPrice) > Number(selected.price);
 
   const finalImageUrl = card.imageUrl
     ? `${card.imageUrl}${card.imageUrl.includes('?') ? '&' : '?'}width=200&height=200&crop=center`
     : 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png';
 
+  const adding = addingVariantId != null && selected != null && addingVariantId === selected.id;
+  // s-modal needs a DOM-safe id; product gids contain "/" and ":".
+  const modalId = `rec-${String(card.productId).replace(/[^a-zA-Z0-9]/g, '')}`;
+
   return (
-    <s-grid gridTemplateColumns="auto 1fr auto" gap="base" alignItems="center">
-      <s-box inlineSize="64px">
-        <s-image
-          src={finalImageUrl}
-          alt={card.imageAlt}
-          aspectRatio="1"
-          objectFit="cover"
-          inlineSize="fill"
-          borderRadius="base"
-        />
-      </s-box>
+    <>
+      <s-grid gridTemplateColumns="auto 1fr auto" gap="base" alignItems="center">
+        <s-box inlineSize="64px">
+          <s-image
+            src={finalImageUrl}
+            alt={card.imageAlt}
+            aspectRatio="1"
+            objectFit="cover"
+            inlineSize="fill"
+            borderRadius="base"
+          />
+        </s-box>
 
-      <s-stack gap="small-500">
-        <s-heading>{card.title}</s-heading>
-        <s-stack direction="inline" gap="small-300">
-          <s-text color="subdued">{formatPrice(card.price)}</s-text>
-          {isOnSale && (
-            <s-text color="subdued" type="redundant">
-              {formatPrice(card.compareAtPrice)}
-            </s-text>
-          )}
+        <s-stack gap="small-500">
+          <s-heading>{card.title}</s-heading>
+          <s-stack direction="inline" gap="small-300">
+            <s-text color="subdued">{formatPrice(selected?.price ?? card.price)}</s-text>
+            {isOnSale && (
+              <s-text color="subdued" type="redundant">
+                {formatPrice(selected.compareAtPrice)}
+              </s-text>
+            )}
+          </s-stack>
         </s-stack>
-      </s-stack>
 
-      <s-button variant="secondary" loading={adding} onClick={onAdd}>
-        {shopify.i18n.translate('add-to-cart')}
-      </s-button>
-    </s-grid>
+        {card.hasOptions ? (
+          // Multi-variant: open the size picker instead of adding blindly.
+          <s-button variant="secondary" command="--show" commandFor={modalId}>
+            {shopify.i18n.translate('add-to-cart')}
+          </s-button>
+        ) : (
+          <s-button variant="secondary" loading={adding} onClick={() => onAdd(selected)}>
+            {shopify.i18n.translate('add-to-cart')}
+          </s-button>
+        )}
+      </s-grid>
+
+      {card.hasOptions && (
+        <s-modal id={modalId} heading={card.title}>
+          <s-select
+            label="Size"
+            value={selectedId}
+            onChange={(event) => setSelectedId(event.currentTarget.value)}
+          >
+            {variants.map((variant) => (
+              <s-option key={variant.id} value={variant.id}>
+                {variant.label} - {formatPrice(variant.price)}
+              </s-option>
+            ))}
+          </s-select>
+
+          <s-button
+            slot="primary-action"
+            command="--hide"
+            commandFor={modalId}
+            onClick={() => onAdd(selected)}
+          >
+            {shopify.i18n.translate('add-to-cart')}
+          </s-button>
+        </s-modal>
+      )}
+    </>
   );
 }
 
@@ -824,9 +870,9 @@ function DebugPanel({
   subtotalAmount,
   thresholds,
   activeMotivator,
-  manualVariantIds,
-  gapFillVariantIds,
-  gapFillGap,
+  manualProductIds,
+  motivatorProductIds,
+  motivatorGap,
   heading,
   metaType,
   slotLimit,
@@ -850,7 +896,7 @@ function DebugPanel({
         {line(`Heading: "${heading}" | Meta type: ${metaType} | Max slots: ${slotLimit}`)}
         {line(`Resolving: ${loading ? 'yes' : 'no'} | Cards resolved: ${cardCount}`)}
         {line(`Thresholds (${currencyCode || '-'}): standard ${thresholds.standard || 0}, express ${thresholds.express || 0}`)}
-        {line(`Manual upsells: ${manualVariantIds.length} | Gap-fill products: ${gapFillVariantIds.length} (gap ${gapFillGap || 0})`)}
+        {line(`Manual upsells: ${manualProductIds.length} | Motivator products: ${motivatorProductIds.length} (gap ${motivatorGap || 0})`)}
 
         <s-text type="strong">Motivators ({Array.isArray(motivators) ? motivators.length : 0})</s-text>
         {motivatorLines.map((text, i) => (

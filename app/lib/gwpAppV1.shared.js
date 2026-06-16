@@ -89,22 +89,31 @@ export function thresholdsFromConfig(config) {
 export function buildFunctionConfigs(rawConfigs) {
   return (Array.isArray(rawConfigs) ? rawConfigs : [])
     .filter((c) => c && typeof c === "object" && c.enabled !== false)
-    .map((c) => {
-      const productId = toProductGid(c.product_id);
-      const variantGid = toVariantGid(c.product_id);
-      const pct = Number(c.discount_percentage);
-      return {
-        enabled: true,
-        trigger_type: String(c.trigger_type || "min_spend"),
-        discount_percentage:
-          Number.isFinite(pct) && pct > 0 && pct <= 100
-            ? pct
-            : DEFAULT_DISCOUNT_PERCENTAGE,
-        thresholds: thresholdsFromConfig(c),
-        productId: productId || null,
-        variantIds: variantGid ? [variantGid] : [],
-        message: String(c.label || c.admin_title || "Gift with purchase"),
-      };
-    })
-    .filter((c) => c.productId || c.variantIds.length > 0);
+    .map((c) => buildFunctionConfig(c))
+    .filter(Boolean);
+}
+
+// Build the slim function-config object for a single raw config, or null when it
+// has no gift product/variant to target. Unlike buildFunctionConfigs this does
+// NOT filter on `enabled` - in the per-config discount model the enable/disable
+// state is carried by activating/deactivating the config's own discount, not by
+// omitting it from the metafield.
+export function buildFunctionConfig(c) {
+  if (!c || typeof c !== "object") return null;
+  const productId = toProductGid(c.product_id);
+  const variantGid = toVariantGid(c.product_id);
+  if (!productId && !variantGid) return null;
+  const pct = Number(c.discount_percentage);
+  return {
+    enabled: true,
+    trigger_type: String(c.trigger_type || "min_spend"),
+    discount_percentage:
+      Number.isFinite(pct) && pct > 0 && pct <= 100
+        ? pct
+        : DEFAULT_DISCOUNT_PERCENTAGE,
+    thresholds: thresholdsFromConfig(c),
+    productId: productId || null,
+    variantIds: variantGid ? [variantGid] : [],
+    message: String(c.label || c.admin_title || "Gift with purchase"),
+  };
 }
