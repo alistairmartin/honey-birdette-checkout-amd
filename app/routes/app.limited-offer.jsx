@@ -18,9 +18,8 @@ import {
 } from "@shopify/polaris";
 import {TitleBar} from "@shopify/app-bridge-react";
 import {authenticate} from "../shopify.server";
+import {SUPPORTED_CURRENCIES, WEEK_COUNT} from "../lib/limitedOffer.shared";
 import {
-  SUPPORTED_CURRENCIES,
-  WEEK_COUNT,
   activateWeek,
   getState,
   saveSchedule,
