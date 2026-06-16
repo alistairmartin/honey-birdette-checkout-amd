@@ -1,0 +1,55 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {"subtotalAmount": {"amount": "310.00", "currencyCode": "AUD"}},
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/999",
+              "product": {"id": "gid://shopify/Product/111"}
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/50277391001",
+              "product": {"id": "gid://shopify/Product/50277391"}
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["PRODUCT"],
+        "metafield": {
+          "value": "{\"enabled\":true,\"discountPercentage\":50,\"thresholds\":{\"AUD\":250,\"USD\":300,\"GBP\":200,\"EUR\":250},\"productId\":\"gid://shopify/Product/50277391\",\"message\":\"50% off Luna Black\"}"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "productDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "50% off Luna Black",
+                "targets": [
+                  {"cartLine": {"id": "gid://shopify/CartLine/1"}}
+                ],
+                "value": {"percentage": {"value": 50.0}}
+              }
+            ],
+            "selectionStrategy": "ALL"
+          }
+        }
+      ]
+    }
+  }
+}

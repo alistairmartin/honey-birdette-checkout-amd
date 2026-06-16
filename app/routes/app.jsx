@@ -28,6 +28,7 @@ export default function App() {
         <Link to="/app/cart-transform">Cart transform</Link>
         <Link to="/app/po-box-delivery">PO/AFO/FPO delivery</Link>
         <Link to="/app/lingerie-set-sync">Lingerie set sync</Link>
+        <Link to="/app/limited-offer">Toy purchase-with-purchase</Link>
         <Link to="/app/kibo-checker">Kibo Checker</Link>
       </NavMenu>
       <Outlet />

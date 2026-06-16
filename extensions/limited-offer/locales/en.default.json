@@ -1,0 +1,14 @@
+{
+  "badge": "Limited offer",
+  "unlock": "Unlock {{pct}}% off {{toy}}",
+  "claim": "Spend {{amount}} in this order to claim",
+  "progressLabel": "{{amount}} of {{threshold}} spent",
+  "toUnlock": "{{amount}} to unlock",
+  "spendMore": "Spend {{amount}} more for {{pct}}% off {{toy}}. You're so close.",
+  "unlocked": "You've unlocked {{pct}}% off {{toy}}!",
+  "off": "{{pct}}% off",
+  "add": "Add",
+  "added": "Added",
+  "addLabel": "Add {{toy}} to cart",
+  "errorAdding": "There was an issue adding this product. Please try again."
+}

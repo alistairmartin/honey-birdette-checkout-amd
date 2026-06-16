@@ -1,0 +1,4 @@
+{
+  "name": "Toy purchase-with-purchase discount",
+  "description": "Applies a percentage discount to a promotional toy once the cart subtotal meets a per-currency spend threshold."
+}
