@@ -16,10 +16,24 @@ export default reactExtension(
 );
 
 // Fallbacks so the block still renders in dev if settings aren't configured.
+// Replace these placeholders with real values in the extension's admin settings.
 const DEFAULT_CONFIG = {
   region: "AU",
   shopifyDomain: "honey-birdette-2.myshopify.com",
   proxyUrl: "https://www.honeybirdette.com",
+  desktopImageUrl:
+    "https://cdn.shopify.com/s/files/1/0585/9581/files/Top_Banner_4_75e18449-3b0a-4ad5-a631-e90f5100f6e3.jpg?v=1775539058",
+  mobileImageUrl:
+    "https://cdn.shopify.com/s/files/1/0585/9581/files/Cherry_Cuff12.jpg?v=1781588996",
+  unlockTag: "dress-circle",
+  headingUnlocked: "Honey Club Exclusives",
+  messageUnlocked: "Your members-only collection is unlocked. Shop it now.",
+  ctaUnlockedText: "Shop the collection",
+  ctaUnlockedUrl: "https://www.honeybirdette.com/collections/dress-circle-exclusives",
+  headingLocked: "Honey Club Exclusives",
+  messageLocked: "Reach Dress Circle to unlock members-only pieces.",
+  ctaLockedText: "How to unlock",
+  ctaLockedUrl: "https://www.honeybirdette.com/pages/the-honey-club",
 };
 
 function str(value: unknown): string {
@@ -48,21 +62,19 @@ function HoneyClubExclusives() {
   const authenticatedCustomer = useAuthenticatedAccountCustomer();
   const settings = useSettings();
 
-  const desktopImageUrl = str(settings.desktop_image_url);
-  const mobileImageUrl = str(settings.mobile_image_url);
-  const unlockTag = str(settings.unlock_tag).toLowerCase();
+  const desktopImageUrl = str(settings.desktop_image_url) || DEFAULT_CONFIG.desktopImageUrl;
+  const mobileImageUrl = str(settings.mobile_image_url) || DEFAULT_CONFIG.mobileImageUrl;
+  const unlockTag = (str(settings.unlock_tag) || DEFAULT_CONFIG.unlockTag).toLowerCase();
 
-  const headingUnlocked = str(settings.heading_unlocked) || "Honey Club Exclusives";
-  const messageUnlocked =
-    str(settings.message_unlocked) || "Your members-only collection is unlocked.";
-  const ctaUnlockedText = str(settings.cta_unlocked_text) || "Shop the collection";
-  const ctaUnlockedUrl = str(settings.cta_unlocked_url);
+  const headingUnlocked = str(settings.heading_unlocked) || DEFAULT_CONFIG.headingUnlocked;
+  const messageUnlocked = str(settings.message_unlocked) || DEFAULT_CONFIG.messageUnlocked;
+  const ctaUnlockedText = str(settings.cta_unlocked_text) || DEFAULT_CONFIG.ctaUnlockedText;
+  const ctaUnlockedUrl = str(settings.cta_unlocked_url) || DEFAULT_CONFIG.ctaUnlockedUrl;
 
-  const headingLocked = str(settings.heading_locked) || "Honey Club Exclusives";
-  const messageLocked =
-    str(settings.message_locked) || "Reach the next tier to unlock members-only pieces.";
-  const ctaLockedText = str(settings.cta_locked_text) || "How to unlock";
-  const ctaLockedUrl = str(settings.cta_locked_url);
+  const headingLocked = str(settings.heading_locked) || DEFAULT_CONFIG.headingLocked;
+  const messageLocked = str(settings.message_locked) || DEFAULT_CONFIG.messageLocked;
+  const ctaLockedText = str(settings.cta_locked_text) || DEFAULT_CONFIG.ctaLockedText;
+  const ctaLockedUrl = str(settings.cta_locked_url) || DEFAULT_CONFIG.ctaLockedUrl;
 
   const storeConfig = {
     region: str(settings.region) || DEFAULT_CONFIG.region,
