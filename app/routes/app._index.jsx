@@ -45,6 +45,12 @@ const ADMIN_PAGES = [
       "Schedule weekly limited-time toy offers with a per-week variant and per-currency spend thresholds that drive the limited-offer checkout UI.",
   },
   {
+    title: "Gift with purchase",
+    url: "/app/gift-with-purchase",
+    description:
+      "Build any number of gift/purchase-with-purchase offers (min spend, subscription, or buy X get Y) across seven currencies. Each renders a progress banner and label in checkout and discounts the gift line via the gift-with-purchase-discount function.",
+  },
+  {
     title: "Kibo Checker",
     url: "/app/kibo-checker",
     description:
@@ -83,6 +89,12 @@ const FUNCTIONS = [
     type: "Product discount",
     description:
       "Apply the purchase-with-purchase discount for the weekly toy offer driven by the Toy purchase-with-purchase page.",
+  },
+  {
+    name: "gift-with-purchase-discount",
+    type: "Product discount",
+    description:
+      "Make the gift line free (or % off) for offers built on the Gift with purchase page, gating min-spend offers on the per-currency subtotal threshold.",
   },
   {
     name: "free-standard-shipping-for-staff",
@@ -170,6 +182,11 @@ const CHECKOUT_EXTENSIONS = [
     name: "limited-offer",
     description:
       "Time-limited toy upsell driven by the per-week, per-currency limited-offer config.",
+  },
+  {
+    name: "gift-with-purchase",
+    description:
+      "Multi-offer gift/purchase-with-purchase system. Renders one progress banner with a label per enabled config (min spend, subscription, or buy X get Y) across seven currencies, and auto-adds the gift line.",
   },
   {
     name: "message-banner",

@@ -1,0 +1,4 @@
+{
+  "name": "Gift with purchase discount",
+  "description": "Applies the gift-with-purchase price reduction (free or % off) to the gift line once the offer's per-currency spend threshold is met. Reads its config from the Gift With Purchase admin page."
+}

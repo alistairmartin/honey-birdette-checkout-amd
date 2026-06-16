@@ -56,3 +56,19 @@ model KiboFailedOrder {
   @@unique([shop, shopifyOrderId])
   @@index([shop, status])
 }
+
+// One row per saved Gift With Purchase config. The admin builder page writes
+// these and, on every change, syncs the full set up to a shop metafield (read by
+// the gift-with-purchase checkout extension) and the discount node metafield
+// (read by the gift-with-purchase-discount function). `configJson` is the raw
+// stringified config object.
+model GwpAppV1Config {
+  id         String   @id @default(cuid())
+  shop       String
+  name       String
+  configJson String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([shop])
+}

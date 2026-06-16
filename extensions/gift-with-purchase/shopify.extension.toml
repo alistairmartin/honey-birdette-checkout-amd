@@ -1,0 +1,38 @@
+# Gift With Purchase checkout extension.
+# Reads its config array from a SHOP metafield ($app:gift-with-purchase /
+# configs), written by the "Gift With Purchase" admin page. Renders one gift
+# offer per enabled config: a progress banner with a label, then auto-adds the
+# gift line. The gift-with-purchase-discount Shopify Function makes the gift line
+# free (or % off).
+api_version = "2025-07"
+
+[[extensions]]
+name = "Gift With Purchase"
+handle = "gift-with-purchase"
+type = "ui_extension"
+uid = "488c1000-354b-4117-a8a1-50b99e668bcc"
+
+[[extensions.targeting]]
+module = "./src/Checkout.tsx"
+target = "purchase.checkout.block.render"
+
+[extensions.capabilities]
+# Direct storefront API access (config metafield + cart variant tags/prices).
+api_access = true
+# Allows blocking checkout progress while an eligible gift is being added.
+block_progress = true
+# fetch() to the app backend so guest checkouts can be checked for the
+# redemption tag via the Admin API (see api.checkout.redemption-check).
+network_access = true
+
+[extensions.settings]
+
+[[extensions.settings.fields]]
+key = "show_testing_information"
+type = "boolean"
+name = "Show Testing Information?"
+
+# Customer tags metafield, used for one-per-customer redemption checks.
+[[extensions.metafields]]
+namespace = "custom"
+key = "tags"

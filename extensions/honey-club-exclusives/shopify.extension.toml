@@ -1,0 +1,119 @@
+# Honey Club Exclusives - Customer Account UI extension
+# Renders an editorial banner in the account profile that showcases tier-locked
+# products. It reads the customer's Honey Club tier from a customer TAG (synced
+# from Omneo, same mechanism as the birthday banner) and swaps between a
+# "locked" state (aspirational, links to how-to-unlock) and an "unlocked" state
+# (links straight to the members' collection).
+#
+# NOTE: this block only MERCHANDISES + links. True purchase gating must be
+# enforced on the storefront (e.g. Locksmith tag rule on the collection/PDP).
+api_version = "2025-07"
+
+[[extensions]]
+name = "Honey Club Exclusives"
+handle = "honey-club-exclusives"
+uid = "a9398105-8a19-c322-954f-03691d32c8e37e65b26e"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/OrderStatusBlock.tsx"
+target = "customer-account.profile.block.render"
+
+[extensions.capabilities]
+# api_access: lets the extension query Shopify; network_access: lets it call the
+# app proxy to read the customer's tags.
+api_access = true
+network_access = true
+
+[access_scopes]
+scopes = "read_customers"
+
+[extensions.settings]
+  # --- Imagery (per the slide spec: 2000px desktop / 1000px mobile) ---
+  [[extensions.settings.fields]]
+  key = "desktop_image_url"
+  type = "single_line_text_field"
+  name = "Desktop image URL"
+  description = "Hero banner image for desktop (~2000px wide)."
+
+  [[extensions.settings.fields]]
+  key = "mobile_image_url"
+  type = "single_line_text_field"
+  name = "Mobile image URL"
+  description = "Hero banner image for mobile (~1000px wide)."
+
+  # --- Tier gating ---
+  [[extensions.settings.fields]]
+  key = "unlock_tag"
+  type = "single_line_text_field"
+  name = "Unlock tag"
+  description = "Customer tag that unlocks the exclusives (e.g. dress-circle). Case-insensitive."
+
+  # --- Unlocked state copy + CTA ---
+  [[extensions.settings.fields]]
+  key = "heading_unlocked"
+  type = "single_line_text_field"
+  name = "Heading (unlocked)"
+  description = "Heading shown to members who have unlocked the exclusives."
+
+  [[extensions.settings.fields]]
+  key = "message_unlocked"
+  type = "single_line_text_field"
+  name = "Message (unlocked)"
+  description = "Supporting copy for the unlocked state."
+
+  [[extensions.settings.fields]]
+  key = "cta_unlocked_text"
+  type = "single_line_text_field"
+  name = "CTA text (unlocked)"
+  description = "Button label, e.g. \"Shop the collection\"."
+
+  [[extensions.settings.fields]]
+  key = "cta_unlocked_url"
+  type = "single_line_text_field"
+  name = "CTA URL (unlocked)"
+  description = "Members' collection URL the button links to."
+
+  # --- Locked state copy + CTA ---
+  [[extensions.settings.fields]]
+  key = "heading_locked"
+  type = "single_line_text_field"
+  name = "Heading (locked)"
+  description = "Heading shown to customers who have not unlocked the exclusives."
+
+  [[extensions.settings.fields]]
+  key = "message_locked"
+  type = "single_line_text_field"
+  name = "Message (locked)"
+  description = "Supporting copy for the locked state, e.g. \"Reach Dress Circle to unlock\"."
+
+  [[extensions.settings.fields]]
+  key = "cta_locked_text"
+  type = "single_line_text_field"
+  name = "CTA text (locked)"
+  description = "Button label, e.g. \"How to unlock\"."
+
+  [[extensions.settings.fields]]
+  key = "cta_locked_url"
+  type = "single_line_text_field"
+  name = "CTA URL (locked)"
+  description = "Loyalty / how-to-earn page the locked button links to."
+
+  # --- App proxy config (mirror of omeno-birthday-banner) ---
+  [[extensions.settings.fields]]
+  key = "proxy_url"
+  type = "single_line_text_field"
+  name = "Proxy URL"
+  description = "Public app-proxy base, e.g. https://www.honeybirdette.com"
+
+  [[extensions.settings.fields]]
+  key = "shopify_domain"
+  type = "single_line_text_field"
+  name = "Shopify Domain"
+  description = "The myshopify domain, e.g. honey-birdette-2.myshopify.com"
+
+  [[extensions.settings.fields]]
+  key = "region"
+  type = "single_line_text_field"
+  name = "Store Region"
+  description = "Region this store belongs to (US, EU, AU, UK, or DEV)."
