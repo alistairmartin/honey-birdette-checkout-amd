@@ -65,6 +65,21 @@ export function cartLinesDiscountsGenerateRun(
   }
   const cartSubtotal = Number(subtotal.amount);
 
+  // Gift cards must not count toward a min-spend threshold - a shopper shouldn't
+  // unlock a free gift by buying a gift card. Subtract gift-card line subtotals
+  // from the cart subtotal so this gate matches the checkout extension.
+  const giftCardTotal = input.cart.lines.reduce((sum, line) => {
+    const merchandise = line.merchandise;
+    const isGiftCard =
+      'product' in merchandise && Boolean(merchandise.product?.isGiftCard);
+    if (!isGiftCard) return sum;
+    const amount = Number(line.cost?.subtotalAmount?.amount || 0);
+    return sum + (Number.isFinite(amount) ? amount : 0);
+  }, 0);
+  const qualifyingSubtotal = Number.isFinite(cartSubtotal)
+    ? cartSubtotal - giftCardTotal
+    : cartSubtotal;
+
   const configs = parseConfigs(input.discount?.metafield?.value);
   if (!configs.length) {
     return noOps;
@@ -90,7 +105,7 @@ export function cartLinesDiscountsGenerateRun(
     if (trigger === 'min_spend') {
       const threshold = config.thresholds?.[currencyCode];
       if (typeof threshold !== 'number' || threshold <= 0) continue;
-      if (!Number.isFinite(cartSubtotal) || cartSubtotal < threshold) continue;
+      if (!Number.isFinite(qualifyingSubtotal) || qualifyingSubtotal < threshold) continue;
     }
 
     const productId = config.productId || undefined;

@@ -4,7 +4,7 @@ handle = "management-upsells"
 type = "editor_extension_collection"
 uid = "63cf431f-c124-c617-04ac-ae4fe146309d3af2dba0"
 # Add the handles of the extensions you want in this collection here
-includes=["product-upsell", "Product-upsells", "Product-upsells-V2", "giftbox-upsell", "limited-offer"]
+includes=["product-upsell", "Product-upsells", "Product-upsells-V2", "giftbox-upsell"]
 
 # You can also add extensions to the collection this way
 #[[extensions.include]]

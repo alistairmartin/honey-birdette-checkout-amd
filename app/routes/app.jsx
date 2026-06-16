@@ -23,14 +23,16 @@ export default function App() {
         <Link to="/app" rel="home">
           Home
         </Link>
+        <Link to="/app/gift-with-purchase">Gift with purchase</Link>
+        <Link to="/app/checkout-recommendations">Checkout recommendations</Link>
+        <Link to="/app/lingerie-set-sync">Lingerie set sync</Link>
+
         <Link to="/app/additional">Additional page</Link>
         <Link to="/app/client-info-cleanup">Client info cleanup</Link>
         <Link to="/app/cart-transform">Cart transform</Link>
         <Link to="/app/po-box-delivery">PO/AFO/FPO delivery</Link>
-        <Link to="/app/lingerie-set-sync">Lingerie set sync</Link>
-        <Link to="/app/limited-offer">Toy purchase-with-purchase</Link>
-        <Link to="/app/gift-with-purchase">Gift with purchase</Link>
         <Link to="/app/kibo-checker">Kibo Checker</Link>
+        <Link to="/app/metaobject-creator">Metaobject Creator</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>

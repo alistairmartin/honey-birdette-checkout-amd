@@ -9,11 +9,17 @@ query CartInput {
     lines {
       id
       quantity
+      cost {
+        subtotalAmount {
+          amount
+        }
+      }
       merchandise {
         ... on ProductVariant {
           id
           product {
             id
+            isGiftCard
           }
         }
       }

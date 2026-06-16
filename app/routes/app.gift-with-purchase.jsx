@@ -200,84 +200,6 @@ export const action = async ({ request }) => {
   return json({ ok: false, error: "Unknown intent." });
 };
 
-const EXAMPLES = [
-  {
-    id: "min-spend",
-    title: "Min spend (free gift)",
-    trigger: "min_spend",
-    description:
-      "Customer must spend at least the threshold (per currency) on lines tagged with product_tag to unlock the free gift. Shows a progress bar with a label in checkout. discount_percentage of 100 makes the gift free.",
-    config: {
-      enabled: true,
-      trigger_type: "min_spend",
-      label: "LIMITED OFFER",
-      admin_title: "{{ free_gift }} GWP - min spend",
-      discount_percentage: 100,
-      product_tag: "gwp--qualifying_buy",
-      min_spend_AUD: 250,
-      min_spend_NZD: 270,
-      min_spend_USD: 160,
-      min_spend_CAD: 220,
-      min_spend_GBP: 130,
-      min_spend_EUR: 150,
-      min_spend_AED: 590,
-      min_spend_currency: "AUD",
-      product_id: 0,
-      shipping_countries: "all",
-      banner_title_before: "You're close!",
-      banner_message_before:
-        "Spend {{ remaining }} more to unlock a FREE {{ title }}.",
-      banner_title_after: "You scored a free gift",
-      banner_message_after: "We added your free {{ title }} to your cart.",
-      banner_title_region: "Sorry, this gift isn't available in your region.",
-      banner_message_region: "We are only shipping this gift to {{ allowed }}.",
-    },
-  },
-  {
-    id: "subscription",
-    title: "Subscription",
-    trigger: "subscription",
-    description:
-      "Any cart line with a selling plan (subscription) unlocks the gift. No threshold. product_tag is not used.",
-    config: {
-      enabled: true,
-      trigger_type: "subscription",
-      label: "SUBSCRIBER GIFT",
-      admin_title: "{{ free_gift }} GWP - subscription",
-      discount_percentage: 100,
-      product_id: 0,
-      shipping_countries: "all",
-      banner_title_before: "Subscribe and get a free gift",
-      banner_message_before:
-        "Add any subscription to your cart to unlock a FREE {{ title }}.",
-      banner_title_after: "You scored a free gift",
-      banner_message_after: "Free gift added because you subscribed.",
-    },
-  },
-  {
-    id: "buy-x-get-y",
-    title: "Buy X get Y",
-    trigger: "buy_x_get_y",
-    description:
-      "Any cart line whose product carries product_tag unlocks the gift. No threshold, just presence of the buy tag.",
-    config: {
-      enabled: true,
-      trigger_type: "buy_x_get_y",
-      label: "GIFT WITH PURCHASE",
-      admin_title: "{{ free_gift }} GWP - BXGY",
-      discount_percentage: 100,
-      product_tag: "gwp--qualifying_buy",
-      product_id: 0,
-      shipping_countries: "all",
-      banner_title_before: "Buy a qualifying product, get a free gift",
-      banner_message_before:
-        "Add a qualifying product to your cart to unlock a FREE {{ title }}.",
-      banner_title_after: "You scored a free gift",
-      banner_message_after: "Your free gift has been added.",
-    },
-  },
-];
-
 const DEFAULT_COPY = {
   admin_title: "{{ free_gift }} GWP - {{ trigger_type }}",
   banner_title_before: "You're close!",
@@ -552,14 +474,6 @@ export default function GiftWithPurchasePage() {
     }));
   };
 
-  const loadExample = (example) => {
-    setBuilder(builderFromConfig(example.config));
-    setEditingId(null);
-    setConfigName(example.title);
-    setSelectedTab(0);
-    shopify.toast.show(`Loaded "${example.title}" into builder`);
-  };
-
   const loadSaved = useCallback(
     (row) => {
       try {
@@ -571,7 +485,7 @@ export default function GiftWithPurchasePage() {
       }
       setEditingId(row.id);
       setConfigName(row.name);
-      setSelectedTab(0);
+      setSelectedTab(1);
     },
     [shopify],
   );
@@ -586,7 +500,7 @@ export default function GiftWithPurchasePage() {
     }
     setEditingId(null);
     setConfigName(`${row.name} (copy)`);
-    setSelectedTab(0);
+    setSelectedTab(1);
     shopify.toast.show(`Duplicated "${row.name}" - save to keep the copy`);
   };
 
@@ -594,7 +508,7 @@ export default function GiftWithPurchasePage() {
     setBuilder(INITIAL_BUILDER);
     setEditingId(null);
     setConfigName("");
-    setSelectedTab(0);
+    setSelectedTab(1);
   };
 
   const saveNew = () => {
@@ -633,13 +547,12 @@ export default function GiftWithPurchasePage() {
   };
 
   const tabs = [
-    { id: "builder", content: "Builder", panelID: "builder-panel" },
     {
       id: "saved",
       content: `Saved${saved.length > 0 ? ` (${saved.length})` : ""}`,
       panelID: "saved-panel",
     },
-    { id: "examples", content: "Examples", panelID: "examples-panel" },
+    { id: "builder", content: "Builder", panelID: "builder-panel" },
   ];
 
   const showProductTag = builder.trigger_type !== "subscription";
@@ -654,7 +567,7 @@ export default function GiftWithPurchasePage() {
           <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab} />
         </Card>
 
-        {selectedTab === 0 && (
+        {selectedTab === 1 && (
           <Layout>
             <Layout.Section>
               <Card>
@@ -759,12 +672,20 @@ export default function GiftWithPurchasePage() {
 
                     {showProductTag && (
                       <TextField
-                        label="Product tag (qualifying products)"
+                        label={
+                          builder.trigger_type === "min_spend"
+                            ? "Product tag (qualifying products, optional)"
+                            : "Product tag (qualifying products)"
+                        }
                         value={builder.product_tag}
                         onChange={(v) => update("product_tag", v)}
                         autoComplete="off"
                         placeholder="e.g. gwp--qualifying_buy"
-                        helpText="Cart lines whose product carries this tag count toward the trigger."
+                        helpText={
+                          builder.trigger_type === "min_spend"
+                            ? "Only cart lines whose product carries this tag count toward the spend threshold. Leave blank to count the whole cart. Gift cards never count."
+                            : "Cart lines whose product carries this tag count toward the trigger."
+                        }
                       />
                     )}
 
@@ -1062,40 +983,42 @@ export default function GiftWithPurchasePage() {
                     </InlineStack>
                   </BlockStack>
                 </Card>
-
-                <Card>
-                  <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">
-                      Generated JSON
-                    </Text>
-                    <InlineStack gap="200">
-                      <Button onClick={() => copyJson(generatedConfig, false)}>
-                        Copy JSON
-                      </Button>
-                      <Button onClick={() => copyJson(generatedConfig, true)}>
-                        Copy minified
-                      </Button>
-                    </InlineStack>
-                    <Box
-                      padding="400"
-                      background="bg-surface-active"
-                      borderWidth="025"
-                      borderRadius="200"
-                      borderColor="border"
-                      overflowX="scroll"
-                    >
-                      <pre style={{ margin: 0 }}>
-                        <code>{JSON.stringify(generatedConfig, null, 2)}</code>
-                      </pre>
-                    </Box>
-                  </BlockStack>
-                </Card>
               </BlockStack>
+            </Layout.Section>
+
+            <Layout.Section>
+              <Card>
+                <BlockStack gap="300">
+                  <Text as="h2" variant="headingMd">
+                    Generated JSON
+                  </Text>
+                  <InlineStack gap="200">
+                    <Button onClick={() => copyJson(generatedConfig, false)}>
+                      Copy JSON
+                    </Button>
+                    <Button onClick={() => copyJson(generatedConfig, true)}>
+                      Copy minified
+                    </Button>
+                  </InlineStack>
+                  <Box
+                    padding="400"
+                    background="bg-surface-active"
+                    borderWidth="025"
+                    borderRadius="200"
+                    borderColor="border"
+                    overflowX="scroll"
+                  >
+                    <pre style={{ margin: 0 }}>
+                      <code>{JSON.stringify(generatedConfig, null, 2)}</code>
+                    </pre>
+                  </Box>
+                </BlockStack>
+              </Card>
             </Layout.Section>
           </Layout>
         )}
 
-        {selectedTab === 1 && (
+        {selectedTab === 0 && (
           <Layout>
             <Layout.Section>
               <Card>
@@ -1219,66 +1142,6 @@ export default function GiftWithPurchasePage() {
                 </BlockStack>
               </Card>
             </Layout.Section>
-          </Layout>
-        )}
-
-        {selectedTab === 2 && (
-          <Layout>
-            <Layout.Section>
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h2" variant="headingMd">
-                    How to use these examples
-                  </Text>
-                  <Text as="p" variant="bodyMd">
-                    The Gift With Purchase extension reads every enabled
-                    config saved here straight from a shop metafield. Pick the
-                    trigger type that matches your promotion, open it in the
-                    Builder, set the gift product and copy, then Save to push it
-                    live. The discount function makes the gift line free or % off
-                    based on the discount percentage.
-                  </Text>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-
-            {EXAMPLES.map((example) => (
-              <Layout.Section key={example.id}>
-                <Card>
-                  <BlockStack gap="300">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Text as="h2" variant="headingMd">
-                        {example.title}
-                      </Text>
-                      <Badge tone="info">{example.trigger}</Badge>
-                    </InlineStack>
-                    <Text as="p" variant="bodyMd">
-                      {example.description}
-                    </Text>
-                    <InlineStack gap="200">
-                      <Button onClick={() => copyJson(example.config, false)}>
-                        Copy JSON
-                      </Button>
-                      <Button onClick={() => loadExample(example)}>
-                        Open in builder
-                      </Button>
-                    </InlineStack>
-                    <Box
-                      padding="400"
-                      background="bg-surface-active"
-                      borderWidth="025"
-                      borderRadius="200"
-                      borderColor="border"
-                      overflowX="scroll"
-                    >
-                      <pre style={{ margin: 0 }}>
-                        <code>{JSON.stringify(example.config, null, 2)}</code>
-                      </pre>
-                    </Box>
-                  </BlockStack>
-                </Card>
-              </Layout.Section>
-            ))}
           </Layout>
         )}
       </BlockStack>

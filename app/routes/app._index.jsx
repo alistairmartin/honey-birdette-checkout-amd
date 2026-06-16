@@ -39,12 +39,6 @@ const ADMIN_PAGES = [
       "Auto-populate lingerie set metaobjects by finding parent set products and writing component references to their child items.",
   },
   {
-    title: "Toy purchase-with-purchase",
-    url: "/app/limited-offer",
-    description:
-      "Schedule weekly limited-time toy offers with a per-week variant and per-currency spend thresholds that drive the limited-offer checkout UI.",
-  },
-  {
     title: "Gift with purchase",
     url: "/app/gift-with-purchase",
     description:
@@ -83,12 +77,6 @@ const FUNCTIONS = [
     type: "Product discount",
     description:
       "Block discounts for staff (honeybirdette.com.au / honeybirdette.com emails or the staff tag).",
-  },
-  {
-    name: "toy-pwp-discount",
-    type: "Product discount",
-    description:
-      "Apply the purchase-with-purchase discount for the weekly toy offer driven by the Toy purchase-with-purchase page.",
   },
   {
     name: "gift-with-purchase-discount",
@@ -177,11 +165,6 @@ const CHECKOUT_EXTENSIONS = [
     name: "limit-1-ui",
     description:
       "Companion UI to the limit-1 validation that holds specified products to a quantity of one.",
-  },
-  {
-    name: "limited-offer",
-    description:
-      "Time-limited toy upsell driven by the per-week, per-currency limited-offer config.",
   },
   {
     name: "gift-with-purchase",

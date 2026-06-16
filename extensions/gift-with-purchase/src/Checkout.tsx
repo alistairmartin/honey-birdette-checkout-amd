@@ -229,7 +229,7 @@ function buildVariantTagsQuery(country: string): string {
         ... on ProductVariant {
           id
           price { amount currencyCode }
-          product { id tags }
+          product { id tags isGiftCard }
         }
       }
     }
@@ -853,6 +853,18 @@ async function removeGiftIfPresent() {
     return map;
   }, [tagData]);
 
+  // Variants whose product is a gift card. These never count toward a
+  // min-spend threshold (a shopper shouldn't be able to unlock a free gift by
+  // buying a gift card).
+  const giftCardVariantIds = useMemo(() => {
+    const set = new Set<string>();
+    const nodes = tagData?.nodes || [];
+    for (const n of nodes) {
+      if (n?.id && (n as any)?.product?.isGiftCard) set.add(n.id);
+    }
+    return set;
+  }, [tagData]);
+
   // Build a quick lookup: variantId -> price in the active currency.
   // tagData is already fetched in the active currency context so this is the
   // only price map we need.
@@ -868,21 +880,28 @@ async function removeGiftIfPresent() {
     return map;
   }, [tagData]);
 
-  // Compute the spend contributed by items whose product has the configured tag
+  // Compute the spend that counts toward the min-spend threshold. When a
+  // product_tag is set, only lines carrying that tag count. When it's blank the
+  // tag is optional, so the whole cart counts - excluding the gift line itself
+  // and any gift cards.
   const taggedSpend = useMemo(() => {
-    if (!config.product_tag) return 0;
+    const tag = config.product_tag.toLowerCase();
     let total = 0;
     for (const line of lines) {
       const vId = line.merchandise.id;
-      const tags: string[] = variantProductTags[vId] || [];
-      const hasTag = tags.some((tg) => tg.toLowerCase() === config.product_tag.toLowerCase());
-      if (!hasTag) continue;
+      if (giftVariantGid && vId === giftVariantGid) continue;
+      if (giftCardVariantIds.has(vId)) continue;
+      if (tag) {
+        const tags: string[] = variantProductTags[vId] || [];
+        const hasTag = tags.some((tg) => tg.toLowerCase() === tag);
+        if (!hasTag) continue;
+      }
       const unit = variantPriceMap[vId] ?? 0;
       const qty = Number(line.quantity || 1);
       total += unit * (isFinite(qty) ? qty : 1);
     }
     return total;
-  }, [lines, variantProductTags, variantPriceMap, config.product_tag]);
+  }, [lines, variantProductTags, variantPriceMap, config.product_tag, giftCardVariantIds, giftVariantGid]);
 
   // Calculate cart-level discounts, excluding shipping-only discounts so we don't inflate the GWP goal
   const totalCartDiscounts = useMemo(() => {
@@ -927,13 +946,17 @@ async function removeGiftIfPresent() {
   // Sum line-item discount allocations only on tagged lines (e.g. a product
   // discount applied directly to a qualifying SKU).
   const taggedLineItemDiscounts = useMemo(() => {
-    if (!config.product_tag) return 0;
+    const tag = config.product_tag.toLowerCase();
     let total = 0;
     for (const line of lines) {
       const vId = line.merchandise.id;
-      const tags: string[] = variantProductTags[vId] || [];
-      const hasTag = tags.some((tg) => tg.toLowerCase() === config.product_tag.toLowerCase());
-      if (!hasTag) continue;
+      if (giftVariantGid && vId === giftVariantGid) continue;
+      if (giftCardVariantIds.has(vId)) continue;
+      if (tag) {
+        const tags: string[] = variantProductTags[vId] || [];
+        const hasTag = tags.some((tg) => tg.toLowerCase() === tag);
+        if (!hasTag) continue;
+      }
       if (line.discountAllocations && line.discountAllocations.length > 0) {
         for (const allocation of line.discountAllocations) {
           const amount = Number(allocation?.discountedAmount?.amount || 0);
@@ -942,7 +965,7 @@ async function removeGiftIfPresent() {
       }
     }
     return total;
-  }, [lines, variantProductTags, config.product_tag]);
+  }, [lines, variantProductTags, config.product_tag, giftCardVariantIds, giftVariantGid]);
 
   // Gross spend across the non-gift cart, used to apportion order-level
   // discounts back onto tagged lines.
@@ -950,12 +973,13 @@ async function removeGiftIfPresent() {
     let total = 0;
     for (const line of lines) {
       if (giftVariantGid && line.merchandise.id === giftVariantGid) continue;
+      if (giftCardVariantIds.has(line.merchandise.id)) continue;
       const unit = variantPriceMap[line.merchandise.id] ?? 0;
       const qty = Number(line.quantity || 1);
       total += unit * (isFinite(qty) ? qty : 1);
     }
     return total;
-  }, [lines, variantPriceMap, giftVariantGid]);
+  }, [lines, variantPriceMap, giftVariantGid, giftCardVariantIds]);
 
   // Order-level discounts apply across the whole cart; only the share that
   // proportionally falls on tagged lines should inflate the qualifying goal.

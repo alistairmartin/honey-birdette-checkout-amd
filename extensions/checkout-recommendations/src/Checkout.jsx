@@ -83,28 +83,52 @@ const SHIPPING_TIERS = [
   { suffix: 'express', message: 'free Express shipping' },
 ];
 
-const getShippingSubtitle = (settings, subtotal) => {
-  if (!subtotal) return null;
+// Resolve the standard/express free-shipping thresholds for a currency. Prefers
+// the app config (Checkout Recommendations admin page) and falls back to the
+// extension's own settings so nothing breaks before the config is populated.
+const resolveShippingThresholds = (appConfig, settings, currencyCode) => {
+  const lower = String(currencyCode || '').toLowerCase();
+  const upper = String(currencyCode || '').toUpperCase();
+  const fromConfig = appConfig?.free_shipping?.[upper] || {};
 
-  const currency = String(subtotal.currencyCode || '').toLowerCase();
+  const pick = (suffix) => {
+    const cfgVal = Number(fromConfig[suffix]);
+    if (Number.isFinite(cfgVal) && cfgVal > 0) return cfgVal;
+    const setVal = Number(settings[`free_${suffix}_${lower}`]);
+    return Number.isFinite(setVal) && setVal > 0 ? setVal : 0;
+  };
+
+  return { standard: pick('standard'), express: pick('express') };
+};
+
+// Returns the shipping nudge subtitle plus the remaining spend ("gap") to the
+// next free-shipping tier. The gap drives both the subtitle and the rule-1
+// gap-fill recommendations.
+const getShippingInfo = (thresholds, subtotal) => {
+  if (!subtotal) return { subtitle: null, gap: 0 };
 
   const tiers = SHIPPING_TIERS.map((tier) => ({
-    threshold: Number(settings[`free_${tier.suffix}_${currency}`]),
+    threshold: thresholds[tier.suffix],
     message: tier.message,
   }))
     .filter((tier) => Number.isFinite(tier.threshold) && tier.threshold > 0)
     .sort((a, b) => a.threshold - b.threshold);
 
-  if (!tiers.length) return null;
+  if (!tiers.length) return { subtitle: null, gap: 0 };
 
   // First tier the buyer hasn't cleared yet.
   const nextTier = tiers.find((tier) => subtotal.amount < tier.threshold);
 
   if (!nextTier) {
-    return "You've got free shipping honey!";
+    return { subtitle: "You've got free shipping honey!", gap: 0 };
   }
 
-  return `Spend ${formatPrice(nextTier.threshold - subtotal.amount)} more to get ${nextTier.message}`;
+  const gap = nextTier.threshold - subtotal.amount;
+
+  return {
+    subtitle: `Spend ${formatPrice(gap)} more to get ${nextTier.message}`,
+    gap,
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -247,6 +271,37 @@ const fetchProductRecommendations = async (productId, countryCode) => {
   return data?.productRecommendations || [];
 };
 
+// Settings + extra rules configured in the app's Checkout Recommendations page,
+// stored in a storefront-readable SHOP metafield. Returns {} if unset/unreadable
+// so the extension falls back to its own TOML settings.
+const APP_CONFIG_QUERY = `
+  query CheckoutRecsAppConfig {
+    shop {
+      metafield(namespace: "$app:checkout-recommendations", key: "config") {
+        value
+      }
+    }
+  }
+`;
+
+const fetchAppConfig = async () => {
+  try {
+    const { data, errors } = await shopify.query(APP_CONFIG_QUERY);
+
+    if (errors?.length) {
+      console.error('[checkout-recommendations] app config errors', errors);
+    }
+
+    const raw = data?.shop?.metafield?.value;
+
+    return raw ? JSON.parse(raw) : {};
+  } catch (err) {
+    console.error('[checkout-recommendations] app config fetch failed', err);
+
+    return {};
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Rule parsing / matching (ported from the theme lib)
 // ---------------------------------------------------------------------------
@@ -346,14 +401,15 @@ const toVariantCard = (variant) => {
  * from the automatic tiers, but allowed for manual upsells (the merchant picked
  * an exact variant, so the size-selection concern doesn't apply).
  */
-const resolveRecommendations = async ({ metaType, countryCode, slotLimit, lines, manualVariantIds }) => {
+const resolveRecommendations = async ({ metaType, countryCode, slotLimit, lines, manualVariantIds, gapFill }) => {
   const cartProductIds = [...new Set(lines.map((l) => l.merchandise?.product?.id).filter(Boolean))];
   const cartTypes = new Set(
     lines.map((l) => String(l.merchandise?.product?.productType || '').toLowerCase()).filter(Boolean)
   );
 
-  const [manualVariants, metaNodes, cartDetails] = await Promise.all([
+  const [manualVariants, gapVariants, metaNodes, cartDetails] = await Promise.all([
     fetchManualUpsells(manualVariantIds, countryCode),
+    fetchManualUpsells(gapFill?.variantIds || [], countryCode),
     fetchMetaobjects(metaType, countryCode),
     fetchCartProductDetails(cartProductIds, countryCode),
   ]);
@@ -383,7 +439,17 @@ const resolveRecommendations = async ({ metaType, countryCode, slotLimit, lines,
 
   const tryAdd = (product) => tryAddCard(toCard(product));
 
-  // 1. Manual upsells first, in configured order. These bypass the type filter.
+  // 0. Free-shipping gap-fill (rule 1): when the buyer is within range of free
+  // shipping, offer curated products priced to tip them over the edge, cheapest
+  // qualifying first. These bypass the type filter like manual upsells.
+  if (gapFill?.gap > 0 && gapVariants.length) {
+    gapVariants
+      .filter((v) => v.availableForSale && Number(v.price?.amount) >= gapFill.gap)
+      .sort((a, b) => Number(a.price?.amount) - Number(b.price?.amount))
+      .forEach((variant) => tryAddCard(toVariantCard(variant), { allowAnyType: true }));
+  }
+
+  // 1. Manual upsells next, in configured order. These bypass the type filter.
   manualVariants.forEach((variant) => tryAddCard(toVariantCard(variant), { allowAnyType: true }));
 
   // 2. Metaobject rules, highest priority first.
@@ -417,17 +483,57 @@ function Extension() {
   const countryCode = shopify.localization?.country?.value?.isoCode;
   const subtotal = shopify.cost?.subtotalAmount?.value;
 
-  const heading = settings.heading || 'You May Also Like';
-  const metaType = settings.metaobject_type || DEFAULT_META_TYPE;
-  const slotLimit = Number(settings.max_products) || DEFAULT_MAX_SLOTS;
-  const shippingSubtitle = getShippingSubtitle(settings, subtotal);
+  const currencyCode = subtotal?.currencyCode;
 
-  const manualVariantIds = [
-    settings.manual_product1,
-    settings.manual_product2,
-    settings.manual_product3,
-    settings.manual_product4,
-  ].filter(Boolean);
+  // App config (Checkout Recommendations admin page) is the source of truth;
+  // each value falls back to the extension's TOML settings until it's populated.
+  const [appConfig, setAppConfig] = useState(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchAppConfig().then((cfg) => {
+      if (!cancelled) {
+        setAppConfig(cfg);
+        setConfigLoaded(true);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const heading = appConfig?.heading || settings.heading || 'You May Also Like';
+  const metaType = settings.metaobject_type || DEFAULT_META_TYPE;
+  const slotLimit =
+    Number(appConfig?.max_products) || Number(settings.max_products) || DEFAULT_MAX_SLOTS;
+
+  const thresholds = resolveShippingThresholds(appConfig, settings, currencyCode);
+  const { subtitle: shippingSubtitle, gap: shippingGap } = getShippingInfo(thresholds, subtotal);
+
+  const manualVariantIds = (
+    appConfig?.manual_upsells?.length
+      ? appConfig.manual_upsells
+      : [
+          settings.manual_product1,
+          settings.manual_product2,
+          settings.manual_product3,
+          settings.manual_product4,
+        ]
+  ).filter(Boolean);
+
+  // Rule 1 inputs: the curated gap-fill products for the buyer's currency, but
+  // only when the rule is enabled and the buyer is within the configured window
+  // of the next free-shipping tier.
+  const gapFillVariantIds = (() => {
+    if (!appConfig?.gap_fill?.enabled) return [];
+    if (!(shippingGap > 0)) return [];
+    const within = appConfig?.gap_fill?.within?.[currencyCode];
+    if (within != null && within !== '' && shippingGap > Number(within)) return [];
+    return appConfig?.gap_fill?.products?.[currencyCode] || [];
+  })();
 
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -440,13 +546,25 @@ function Extension() {
     [lines]
   );
   const manualKey = manualVariantIds.join('|');
+  const gapKey = `${gapFillVariantIds.join('|')}@${shippingGap}`;
 
   useEffect(() => {
+    // Wait for the config fetch to settle so we resolve once with the final
+    // settings (config fetch returns {} on error, so this never hangs).
+    if (!configLoaded) return undefined;
+
     let cancelled = false;
 
     setLoading(true);
 
-    resolveRecommendations({ metaType, countryCode, slotLimit, lines, manualVariantIds })
+    resolveRecommendations({
+      metaType,
+      countryCode,
+      slotLimit,
+      lines,
+      manualVariantIds,
+      gapFill: { variantIds: gapFillVariantIds, gap: shippingGap },
+    })
       .then((result) => {
         if (!cancelled) setCards(result);
       })
@@ -461,7 +579,7 @@ function Extension() {
     return () => {
       cancelled = true;
     };
-  }, [cartKey, metaType, countryCode, slotLimit, manualKey]);
+  }, [configLoaded, cartKey, metaType, countryCode, slotLimit, manualKey, gapKey]);
 
   // Hide the error banner automatically after 3s.
   useEffect(() => {

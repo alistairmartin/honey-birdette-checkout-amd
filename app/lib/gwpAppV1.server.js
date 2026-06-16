@@ -10,8 +10,7 @@
 //     gift-with-purchase-discount Shopify Function). Holds a slim per-offer shape
 //     (buildFunctionConfigs) used only to apply the price reduction.
 //
-// A single automatic app discount is created on demand and bound to the function,
-// mirroring app/lib/limitedOffer.server.js.
+// A single automatic app discount is created on demand and bound to the function.
 
 import prisma from "../db.server";
 import {
