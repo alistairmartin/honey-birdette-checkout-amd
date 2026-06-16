@@ -832,9 +832,9 @@ function DebugPanel({
   const line = (text) => <s-text color="subdued">{text}</s-text>;
 
   return (
-    <s-box border="dotted" borderRadius="base" padding="base">
+    <s-box border="base base dotted" borderRadius="base" padding="base">
       <s-stack gap="small-300">
-        <s-text emphasis="bold">Checkout Recommendations - testing</s-text>
+        <s-text type="strong">Checkout Recommendations - testing</s-text>
 
         {line(`Config loaded: ${configLoaded ? 'yes' : 'no'} | keys: ${configKeys.length ? configKeys.join(', ') : '(empty)'}`)}
         {line(`Country: ${countryCode || '-'} | Currency: ${currencyCode || '-'} | Subtotal: ${Number.isFinite(subtotalAmount) ? subtotalAmount : '-'}`)}
@@ -843,7 +843,7 @@ function DebugPanel({
         {line(`Thresholds (${currencyCode || '-'}): standard ${thresholds.standard || 0}, express ${thresholds.express || 0}`)}
         {line(`Manual upsells: ${manualVariantIds.length} | Gap-fill products: ${gapFillVariantIds.length} (gap ${gapFillGap || 0})`)}
 
-        <s-text emphasis="bold">Motivators ({Array.isArray(motivators) ? motivators.length : 0})</s-text>
+        <s-text type="strong">Motivators ({Array.isArray(motivators) ? motivators.length : 0})</s-text>
         {motivatorLines.map((text, i) => (
           <s-text key={i} color="subdued">{text}</s-text>
         ))}
