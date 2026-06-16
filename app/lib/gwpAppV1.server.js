@@ -239,6 +239,9 @@ async function createDiscount(admin, { functionId, title, payload, active }) {
     discount: {
       title,
       functionId,
+      // startsAt is required by the API; start immediately (deactivation later
+      // controls whether the discount actually applies).
+      startsAt: new Date().toISOString(),
       discountClasses: ["PRODUCT"],
       combinesWith: {
         orderDiscounts: true,
