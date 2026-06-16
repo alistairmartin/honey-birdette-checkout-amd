@@ -21,6 +21,7 @@ import {
   Thumbnail,
   Link,
   Banner,
+  ChoiceList,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -31,6 +32,7 @@ import {
   setConfigDiscountActive,
   createConfigDiscount,
   deleteConfigDiscount,
+  listSegments,
 } from "../lib/gwpAppV1.server";
 import {
   SUPPORTED_CURRENCIES,
@@ -162,7 +164,9 @@ export const loader = async ({ request }) => {
     console.error("Failed to fetch GWP discount info", err);
   }
 
-  return json({ saved, productInfo, discountMap });
+  const segments = await listSegments(admin);
+
+  return json({ saved, productInfo, discountMap, segments });
 };
 
 export const action = async ({ request }) => {
@@ -328,6 +332,12 @@ const INITIAL_BUILDER = {
   product_price: "",
   shipping_countries: "all",
   customer_redeemed_tag: "",
+  eligibility: "all",
+  eligible_emails: "",
+  eligible_segments: [],
+  combines_product: false,
+  combines_order: false,
+  combines_shipping: false,
   valid_from: "",
   valid_to: "",
   button_url: "",
@@ -379,6 +389,28 @@ function buildConfig(state) {
   }
   if (state.redemption_type === "one_per_customer" && state.customer_redeemed_tag.trim()) {
     config.customer_redeemed_tag = state.customer_redeemed_tag.trim();
+  }
+  config.combines_with = {
+    orderDiscounts: !!state.combines_order,
+    productDiscounts: !!state.combines_product,
+    shippingDiscounts: !!state.combines_shipping,
+  };
+  const eligibility =
+    state.eligibility === "customers" || state.eligibility === "segments"
+      ? state.eligibility
+      : "all";
+  config.eligibility = eligibility;
+  if (eligibility === "customers") {
+    const emails = String(state.eligible_emails || "")
+      .split(/[\s,]+/)
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    if (emails.length) config.eligible_emails = emails;
+  } else if (eligibility === "segments") {
+    const segs = Array.isArray(state.eligible_segments)
+      ? state.eligible_segments.filter(Boolean)
+      : [];
+    if (segs.length) config.eligible_segment_ids = segs;
   }
   const vf = localToDateTimeParts(state.valid_from);
   if (vf.date) {
@@ -439,6 +471,19 @@ function builderFromConfig(c) {
     product_price: "",
     shipping_countries: c.shipping_countries ?? "all",
     customer_redeemed_tag: c.customer_redeemed_tag ?? "",
+    eligibility:
+      c.eligibility === "customers" || c.eligibility === "segments"
+        ? c.eligibility
+        : "all",
+    eligible_emails: Array.isArray(c.eligible_emails)
+      ? c.eligible_emails.join("\n")
+      : "",
+    eligible_segments: Array.isArray(c.eligible_segment_ids)
+      ? c.eligible_segment_ids
+      : [],
+    combines_product: c.combines_with?.productDiscounts === true,
+    combines_order: c.combines_with?.orderDiscounts === true,
+    combines_shipping: c.combines_with?.shippingDiscounts === true,
     valid_from: dateTimePartsToLocal(c.valid_date_from, c.valid_time_from),
     valid_to: dateTimePartsToLocal(c.valid_date_till, c.valid_time_till),
     button_url: c.button_url ?? "",
@@ -468,7 +513,7 @@ function formatTimestamp(iso) {
 }
 
 export default function GiftWithPurchasePage() {
-  const { saved, productInfo, discountMap } = useLoaderData();
+  const { saved, productInfo, discountMap, segments } = useLoaderData();
   const shopify = useAppBridge();
   const fetcher = useFetcher();
 
@@ -926,7 +971,85 @@ export default function GiftWithPurchasePage() {
 
                     <Divider />
                     <Text as="h3" variant="headingSm">
+                      Customer eligibility
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Who the discount applies to in Shopify. Use Specific
+                      customers to restrict it to your team&apos;s emails while
+                      testing.
+                    </Text>
+                    <Select
+                      label="Eligibility"
+                      labelHidden
+                      options={[
+                        { label: "All customers", value: "all" },
+                        { label: "Specific customers", value: "customers" },
+                        { label: "Specific customer segments", value: "segments" },
+                      ]}
+                      value={builder.eligibility}
+                      onChange={(v) => update("eligibility", v)}
+                    />
+                    {builder.eligibility === "customers" ? (
+                      <TextField
+                        label="Eligible customer emails"
+                        value={builder.eligible_emails}
+                        onChange={(v) => update("eligible_emails", v)}
+                        autoComplete="off"
+                        multiline={3}
+                        placeholder={"jane@honeybirdette.com\njohn@honeybirdette.com"}
+                        helpText="One email per line. Each must already be a customer in this shop; unknown emails are skipped."
+                      />
+                    ) : null}
+                    {builder.eligibility === "segments" ? (
+                      segments && segments.length > 0 ? (
+                        <ChoiceList
+                          allowMultiple
+                          title="Customer segments"
+                          choices={segments.map((s) => ({
+                            label: s.name,
+                            value: s.id,
+                          }))}
+                          selected={builder.eligible_segments}
+                          onChange={(v) => update("eligible_segments", v)}
+                        />
+                      ) : (
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          No customer segments found in this shop. Create one in
+                          Shopify admin, or use Specific customers instead.
+                        </Text>
+                      )
+                    ) : null}
+
+                    <Divider />
+                    <Text as="h3" variant="headingSm">
+                      Combinations
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Which other discount types this gift's automatic discount
+                      can combine with. Applied to the discount in Shopify.
+                    </Text>
+                    <Checkbox
+                      label="Combine with product discounts"
+                      checked={builder.combines_product}
+                      onChange={(v) => update("combines_product", v)}
+                    />
+                    <Checkbox
+                      label="Combine with order discounts"
+                      checked={builder.combines_order}
+                      onChange={(v) => update("combines_order", v)}
+                    />
+                    <Checkbox
+                      label="Combine with shipping discounts"
+                      checked={builder.combines_shipping}
+                      onChange={(v) => update("combines_shipping", v)}
+                    />
+
+                    <Divider />
+                    <Text as="h3" variant="headingSm">
                       Schedule (optional)
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Sets the discount&apos;s active start/end dates in Shopify.
                     </Text>
                     <FormLayout.Group>
                       <TextField
@@ -1115,9 +1238,12 @@ export default function GiftWithPurchasePage() {
                       <Text as="span" fontWeight="semibold">
                         deactivated
                       </Text>{" "}
-                      so it never applies on real checkouts. To test, update the
-                      customer segment to your own email, then make the discount
-                      active.
+                      so it never applies on real checkouts. To test safely, set{" "}
+                      <Text as="span" fontWeight="semibold">
+                        Customer eligibility
+                      </Text>{" "}
+                      to Specific customers (your team&apos;s emails), then make
+                      the discount active - only those customers will get it.
                     </Text>
                   </Banner>
 
@@ -1249,6 +1375,9 @@ export default function GiftWithPurchasePage() {
                                           ? discountStatusLabel(disc.status)
                                           : "Not created"}
                                       </Badge>
+                                      {disc.exists && disc.eligibility ? (
+                                        <Badge>{disc.eligibility}</Badge>
+                                      ) : null}
                                       {disc.exists && disc.adminUrl ? (
                                         <Link url={disc.adminUrl} target="_blank">
                                           View in Shopify admin

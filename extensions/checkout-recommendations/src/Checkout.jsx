@@ -826,7 +826,8 @@ function RecommendationCard({ card, addingVariantId, onAdd }) {
     ? `${card.imageUrl}${card.imageUrl.includes('?') ? '&' : '?'}width=200&height=200&crop=center`
     : 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png';
 
-  // Larger image for the modal hero (full width).
+  // Thumbnail for the modal's product row (left column). Requested at 600px so
+  // it stays crisp on 2x/3x displays despite the small render size.
   const modalImageUrl = card.imageUrl
     ? `${card.imageUrl}${card.imageUrl.includes('?') ? '&' : '?'}width=600&height=600&crop=center`
     : finalImageUrl;
@@ -874,61 +875,62 @@ function RecommendationCard({ card, addingVariantId, onAdd }) {
       </s-grid>
 
       {card.hasOptions && (
-        <s-modal id={modalId} padding="none" accessibilityLabel={card.title}>
-          {/* Full-width product image above the title. */}
-          <s-image
-            src={modalImageUrl}
-            alt={card.imageAlt}
-            aspectRatio="1"
-            objectFit="cover"
-            inlineSize="fill"
-          />
-
-          <s-box padding="base">
-            <s-stack gap="base">
-              {/* Bold title with the (selected) price to the right. */}
-              <s-stack direction="inline" justifyContent="space-between" alignItems="center" gap="base">
+        <s-modal id={modalId} accessibilityLabel={card.title}>
+          <s-stack gap="base">
+            {/* Row: product image (left, 25%) | title over price (right, 75%). */}
+            <s-grid gridTemplateColumns="2fr 2fr" gap="base" alignItems="center">
+              <s-image
+                src={modalImageUrl}
+                alt={card.imageAlt}
+                aspectRatio="1"
+                objectFit="cover"
+                inlineSize="fill"
+                borderRadius="base"
+              />
+              <s-stack gap="small-300">
                 <s-text type="strong">{card.title}</s-text>
-                <s-text type="strong">{formatPrice(selected?.price ?? card.price)}</s-text>
+                <s-text color="subdued">{formatPrice(selected?.price ?? card.price)}</s-text>
               </s-stack>
+            </s-grid>
 
-              {/* One row of selector buttons per option (e.g. Bra Size, Brief Size). */}
-              {card.options.map((option) => (
-                <s-stack key={option.name} gap="small-300">
-                  <s-text color="subdued">{option.name}</s-text>
-                  <s-grid
-                    gridTemplateColumns="repeat(auto-fit, minmax(64px, 1fr))"
-                    gap="small-300"
-                  >
-                    {option.values.map((value) => (
-                      <s-button
-                        key={value}
-                        variant={selection[option.name] === value ? 'primary' : 'secondary'}
-                        disabled={!valueIsAvailable(card, selection, option, value)}
-                        onClick={() =>
-                          setSelection((prev) => reconcileSelection(card, prev, option.name, value))
-                        }
-                      >
-                        {value}
-                      </s-button>
-                    ))}
-                  </s-grid>
-                </s-stack>
-              ))}
-            </s-stack>
-          </s-box>
+            {/* One row of selector buttons per option (e.g. Size, Cup). Buttons
+                fill their cell (inlineSize="fill") and sit on a tight gap. */}
+            {card.options.map((option) => (
+              <s-stack key={option.name} gap="small-300">
+                <s-text color="subdued">{option.name}</s-text>
+                <s-grid
+                  gridTemplateColumns="repeat(auto-fit, minmax(56px, 1fr))"
+                  gap="small-500"
+                >
+                  {option.values.map((value) => (
+                    <s-button
+                      key={value}
+                      inlineSize="fill"
+                      variant={selection[option.name] === value ? 'primary' : 'secondary'}
+                      disabled={!valueIsAvailable(card, selection, option, value)}
+                      onClick={() =>
+                        setSelection((prev) => reconcileSelection(card, prev, option.name, value))
+                      }
+                    >
+                      {value}
+                    </s-button>
+                  ))}
+                </s-grid>
+              </s-stack>
+            ))}
 
-          {/* Full-width primary add-to-cart bar. */}
-          <s-button
-            slot="primary-action"
-            variant="primary"
-            inlineSize="fill"
-            command="--hide"
-            commandFor={modalId}
-            onClick={() => onAdd(selected)}
-          >
-            {shopify.i18n.translate('add-to-cart')}
-          </s-button>
+            {/* Full-width add-to-cart button (the footer slot ignores width, so
+                we render it inline instead). */}
+            <s-button
+              variant="primary"
+              inlineSize="fill"
+              command="--hide"
+              commandFor={modalId}
+              onClick={() => onAdd(selected)}
+            >
+              {shopify.i18n.translate('add-to-cart')}
+            </s-button>
+          </s-stack>
         </s-modal>
       )}
     </>

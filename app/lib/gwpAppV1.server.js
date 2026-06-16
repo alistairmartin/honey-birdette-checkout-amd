@@ -87,9 +87,11 @@ const DISCOUNT_CREATE = `#graphql
   }
 `;
 
-const GET_DISCOUNT = `#graphql
-  query GwpAppV1GetDiscount($id: ID!) {
-    discountNode(id: $id) { id }
+const LIST_SEGMENTS = `#graphql
+  query GwpAppV1Segments {
+    segments(first: 50) {
+      nodes { id name }
+    }
   }
 `;
 
@@ -119,8 +121,21 @@ const GET_DISCOUNT_STATUS = `#graphql
         ... on DiscountAutomaticApp {
           title
           status
+          context {
+            __typename
+            ... on DiscountCustomers { customers { id } }
+            ... on DiscountCustomerSegments { segments { id } }
+          }
         }
       }
+    }
+  }
+`;
+
+const CUSTOMERS_BY_EMAIL = `#graphql
+  query GwpAppV1CustomersByEmail($query: String!) {
+    customers(first: 50, query: $query) {
+      nodes { id email }
     }
   }
 `;
@@ -229,23 +244,166 @@ async function findFunctionId(admin) {
   return (byTitle ?? discountNodes[0])?.id ?? null;
 }
 
+// Store timezone the config's valid-date/time fields are expressed in. Must match
+// STORE_TIMEZONE in the gift-with-purchase checkout extension.
+const STORE_TIMEZONE = "Australia/Melbourne";
+
+// Offset (ms) of `timeZone` from UTC at the given UTC instant, DST-aware.
+function tzOffsetMs(utcMs, timeZone) {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const map = {};
+  for (const p of dtf.formatToParts(new Date(utcMs))) map[p.type] = p.value;
+  const asUTC = Date.UTC(
+    +map.year,
+    +map.month - 1,
+    +map.day,
+    +map.hour % 24,
+    +map.minute,
+    +map.second,
+  );
+  return asUTC - utcMs;
+}
+
+// Interpret a "YYYY-MM-DD" date + optional "HH:MM" time as wall-clock in
+// STORE_TIMEZONE and return the UTC ISO instant, or null if no date.
+function storeLocalToISO(dateStr, timeStr) {
+  if (!dateStr) return null;
+  const [y, mo, d] = String(dateStr).split("-").map(Number);
+  if (!y || !mo || !d) return null;
+  const [hh = 0, mm = 0] = String(timeStr || "")
+    .split(":")
+    .map((n) => Number(n) || 0);
+  const guess = Date.UTC(y, mo - 1, d, hh, mm, 0);
+  let utc = guess - tzOffsetMs(guess, STORE_TIMEZONE);
+  // Re-resolve once in case the guess landed on the wrong side of a DST change.
+  utc = guess - tzOffsetMs(utc, STORE_TIMEZONE);
+  return new Date(utc).toISOString();
+}
+
+// Active window for the discount from the config's valid-date fields. startsAt
+// is required by the API, so it defaults to now when the config has no start.
+function discountDatesFor(config) {
+  const startsAt =
+    storeLocalToISO(config?.valid_date_from, config?.valid_time_from) ||
+    new Date().toISOString();
+  const endsAt =
+    storeLocalToISO(config?.valid_date_till, config?.valid_time_till) || null;
+  return { startsAt, endsAt };
+}
+
+// Which discount classes this config's discount may combine with, defaulting to
+// none ("Can't combine") to match Shopify's own default.
+function combinesWithFor(config) {
+  const c = config?.combines_with || {};
+  return {
+    orderDiscounts: c.orderDiscounts === true,
+    productDiscounts: c.productDiscounts === true,
+    shippingDiscounts: c.shippingDiscounts === true,
+  };
+}
+
+// Normalize the DiscountContext union returned by the API into a plain shape.
+function normalizeContext(context) {
+  const t = context?.__typename;
+  if (t === "DiscountCustomers") {
+    return {
+      type: "customers",
+      customerIds: (context.customers || []).map((c) => c.id),
+      segmentIds: [],
+    };
+  }
+  if (t === "DiscountCustomerSegments") {
+    return {
+      type: "segments",
+      customerIds: [],
+      segmentIds: (context.segments || []).map((s) => s.id),
+    };
+  }
+  return { type: "all", customerIds: [], segmentIds: [] };
+}
+
+// Resolve a list of emails to customer gids (deduped, lowercased). Unknown
+// emails are simply dropped.
+async function resolveCustomerIds(admin, emails) {
+  const clean = [
+    ...new Set(
+      (Array.isArray(emails) ? emails : [])
+        .map((e) => String(e).trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+  if (!clean.length) return [];
+  const query = clean.map((e) => `email:${e}`).join(" OR ");
+  try {
+    const data = await gql(admin, CUSTOMERS_BY_EMAIL, { query });
+    return (data?.customers?.nodes || []).map((n) => n.id);
+  } catch (err) {
+    console.error("Resolving customer emails failed", err);
+    return [];
+  }
+}
+
+// Build the discount `context` input from a config, diffed against the current
+// context so the result is declarative. Returns null to leave eligibility
+// untouched (e.g. "specific" selected but nothing resolvable to set).
+async function buildContextInput(admin, config, current) {
+  const eligibility = String(config?.eligibility || "all");
+  const cur = current || { type: "all", customerIds: [], segmentIds: [] };
+
+  if (eligibility === "customers") {
+    const desired = await resolveCustomerIds(admin, config.eligible_emails);
+    if (!desired.length) return null; // can't set an empty specific-customer list
+    const have = cur.type === "customers" ? cur.customerIds : [];
+    return {
+      customers: {
+        add: desired.filter((id) => !have.includes(id)),
+        remove: have.filter((id) => !desired.includes(id)),
+      },
+    };
+  }
+
+  if (eligibility === "segments") {
+    const desired = Array.isArray(config.eligible_segment_ids)
+      ? config.eligible_segment_ids
+      : [];
+    if (!desired.length) return null;
+    const have = cur.type === "segments" ? cur.segmentIds : [];
+    return {
+      customerSegments: {
+        add: desired.filter((id) => !have.includes(id)),
+        remove: have.filter((id) => !desired.includes(id)),
+      },
+    };
+  }
+
+  return { all: "ALL" };
+}
+
 // Create a new automatic app discount bound to the function, carrying one
 // config's slim payload, with the given title. Created active unless `active`
 // is false. Returns the new discount gid.
-async function createDiscount(admin, { functionId, title, payload, active }) {
+async function createDiscount(
+  admin,
+  { functionId, title, payload, active, combinesWith, startsAt, endsAt, context },
+) {
   const data = await gql(admin, DISCOUNT_CREATE, {
     discount: {
       title,
       functionId,
-      // startsAt is required by the API; start immediately (deactivation later
-      // controls whether the discount actually applies).
-      startsAt: new Date().toISOString(),
+      startsAt,
+      ...(endsAt ? { endsAt } : {}),
+      ...(context ? { context } : {}),
       discountClasses: ["PRODUCT"],
-      combinesWith: {
-        orderDiscounts: true,
-        productDiscounts: true,
-        shippingDiscounts: true,
-      },
+      combinesWith,
       metafields: [
         {
           namespace: FUNCTION_METAFIELD_NAMESPACE,
@@ -290,13 +448,17 @@ async function createDiscount(admin, { functionId, title, payload, active }) {
   return newId;
 }
 
-async function discountExists(admin, discountId) {
-  if (!discountId) return false;
+// Read whether a discount exists and its current customer-eligibility context
+// (used to diff eligibility into a declarative add/remove on update).
+async function readDiscountState(admin, discountId) {
+  if (!discountId) return { exists: false, context: null };
   try {
-    const data = await gql(admin, GET_DISCOUNT, { id: discountId });
-    return Boolean(data?.discountNode?.id);
+    const data = await gql(admin, GET_DISCOUNT_STATUS, { id: discountId });
+    const node = data?.discountNode;
+    if (!node?.id) return { exists: false, context: null };
+    return { exists: true, context: normalizeContext(node.discount?.context) };
   } catch {
-    return false;
+    return { exists: false, context: null };
   }
 }
 
@@ -329,19 +491,29 @@ async function ensureConfigDiscount(admin, { functionId, row, config }) {
 
   const payload = { configs: [fnConfig] };
   const title = discountTitleFor(config, row);
+  const combinesWith = combinesWithFor(config);
+  const { startsAt, endsAt } = discountDatesFor(config);
   const isEnabled = config.enabled !== false;
   const isLive = String(config.mode || "live").toLowerCase() !== "test";
 
   let discountId = row.discountId;
-  const exists = await discountExists(admin, discountId);
+  const { exists, context: currentContext } = await readDiscountState(
+    admin,
+    discountId,
+  );
 
   if (!exists) {
     // Fresh discount. Active only when the config is enabled AND live.
+    const context = await buildContextInput(admin, config, null);
     discountId = await createDiscount(admin, {
       functionId,
       title,
       payload,
       active: isEnabled && isLive,
+      combinesWith,
+      startsAt,
+      endsAt,
+      context,
     });
     await prisma.gwpAppV1Config.update({
       where: { id: row.id },
@@ -350,12 +522,23 @@ async function ensureConfigDiscount(admin, { functionId, row, config }) {
     return discountId;
   }
 
-  // Existing discount: keep title + payload current. The active state is left to
-  // the merchant (manual override) except a disabled config is forced off.
+  // Existing discount: keep title, combinations, active window + payload current.
+  // The active state is left to the merchant (manual override) except a disabled
+  // config is forced off.
+  const context = await buildContextInput(admin, config, currentContext);
   try {
-    await gql(admin, DISCOUNT_UPDATE, { id: discountId, discount: { title } });
+    await gql(admin, DISCOUNT_UPDATE, {
+      id: discountId,
+      discount: {
+        title,
+        combinesWith,
+        startsAt,
+        ...(endsAt ? { endsAt } : {}),
+        ...(context ? { context } : {}),
+      },
+    });
   } catch (err) {
-    console.error("Updating GWP discount title failed", err);
+    console.error("Updating GWP discount failed", err);
   }
   await setMetafield(admin, {
     ownerId: discountId,
@@ -479,11 +662,19 @@ export async function getConfigDiscountMap(admin, shop, rows) {
       if (!node?.id) return; // discount was deleted out from under us
       const discount = node.discount ?? {};
       const numericId = String(r.discountId).match(/\/(\d+)$/)?.[1] ?? null;
+      const ctx = normalizeContext(discount.context);
+      const eligibility =
+        ctx.type === "customers"
+          ? `${ctx.customerIds.length} customer${ctx.customerIds.length === 1 ? "" : "s"}`
+          : ctx.type === "segments"
+            ? `${ctx.segmentIds.length} segment${ctx.segmentIds.length === 1 ? "" : "s"}`
+            : "All customers";
       map[r.id] = {
         exists: true,
         discountId: r.discountId,
         status: discount.status ?? null, // ACTIVE | EXPIRED | SCHEDULED
         title: discount.title ?? null,
+        eligibility,
         adminUrl:
           shop && numericId
             ? `https://${shop}/admin/discounts/${numericId}`
@@ -540,4 +731,15 @@ export async function createConfigDiscount(admin, shop, configId) {
 // Delete a config's discount. Call before deleting the config row.
 export async function deleteConfigDiscount(admin, discountId) {
   await deleteDiscount(admin, discountId);
+}
+
+// List the shop's customer segments for the eligibility picker in the builder.
+export async function listSegments(admin) {
+  try {
+    const data = await gql(admin, LIST_SEGMENTS);
+    return (data?.segments?.nodes || []).map((n) => ({ id: n.id, name: n.name }));
+  } catch (err) {
+    console.error("Listing customer segments failed", err);
+    return [];
+  }
 }
