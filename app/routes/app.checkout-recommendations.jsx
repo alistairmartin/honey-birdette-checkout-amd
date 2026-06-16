@@ -794,35 +794,6 @@ export default function CheckoutRecommendationsPage() {
                 <Card>
                   <BlockStack gap="400">
                     <Text as="h2" variant="headingMd">
-                      Manual upsells
-                    </Text>
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      Up to {MANUAL_UPSELL_SLOTS} products shown before the metaobject and Shopify
-                      recommendations. The first (default) variant is added to cart.
-                    </Text>
-                    <BlockStack gap="300">
-                      {settings.manual_upsells.map((pick) => (
-                        <PickedProductRow
-                          key={pick.variantGid}
-                          pick={pick}
-                          onRemove={() => removeManualUpsell(pick.variantGid)}
-                        />
-                      ))}
-                    </BlockStack>
-                    <InlineStack>
-                      <Button
-                        onClick={addManualUpsell}
-                        disabled={settings.manual_upsells.length >= MANUAL_UPSELL_SLOTS}
-                      >
-                        Add product
-                      </Button>
-                    </InlineStack>
-                  </BlockStack>
-                </Card>
-
-                <Card>
-                  <BlockStack gap="400">
-                    <Text as="h2" variant="headingMd">
                       Free shipping thresholds
                     </Text>
                     <Text as="p" variant="bodyMd" tone="subdued">
