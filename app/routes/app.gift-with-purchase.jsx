@@ -20,11 +20,17 @@ import {
   Modal,
   EmptyState,
   Thumbnail,
+  Link,
+  Banner,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { syncConfigs } from "../lib/gwpAppV1.server";
+import {
+  syncConfigs,
+  getDiscountInfo,
+  setDiscountActive,
+} from "../lib/gwpAppV1.server";
 import {
   SUPPORTED_CURRENCIES,
   DEFAULT_THRESHOLDS,
@@ -35,6 +41,27 @@ import {
 // saved config (a GwpAppV1Config row) is pushed to a shop metafield read by the
 // gift-with-purchase checkout extension AND to a discount metafield read by
 // the gift-with-purchase-discount function - all handled by syncConfigs().
+
+// Map the Shopify DiscountStatus enum to merchant-facing wording. A discount
+// this app deactivates comes back as EXPIRED, which we surface as "Deactivated".
+function discountStatusLabel(status) {
+  switch (status) {
+    case "ACTIVE":
+      return "Active";
+    case "EXPIRED":
+      return "Deactivated";
+    case "SCHEDULED":
+      return "Scheduled";
+    default:
+      return "Unknown";
+  }
+}
+
+function discountStatusTone(status) {
+  if (status === "ACTIVE") return "success";
+  if (status === "SCHEDULED") return "attention";
+  return undefined;
+}
 
 function formatMoney(amount, currencyCode) {
   const n = Number(amount);
@@ -126,7 +153,14 @@ export const loader = async ({ request }) => {
     }
   }
 
-  return json({ saved, productInfo });
+  let discountInfo = { exists: false };
+  try {
+    discountInfo = await getDiscountInfo(admin, session.shop);
+  } catch (err) {
+    console.error("Failed to fetch GWP discount info", err);
+  }
+
+  return json({ saved, productInfo, discountInfo });
 };
 
 export const action = async ({ request }) => {
@@ -195,6 +229,39 @@ export const action = async ({ request }) => {
       console.error("Failed to sync GWP V4 configs (delete)", err);
     }
     return json({ ok: true, intent, id });
+  }
+
+  if (intent === "create_discount") {
+    try {
+      await syncConfigs(admin, session.shop);
+      const info = await getDiscountInfo(admin, session.shop);
+      if (!info.exists) {
+        return json({
+          ok: false,
+          error:
+            "Nothing to create yet - add an enabled config with a gift product first.",
+        });
+      }
+      return json({ ok: true, intent, discountInfo: info });
+    } catch (err) {
+      console.error("Failed to create GWP discount", err);
+      return json({ ok: false, error: "Could not create the discount." });
+    }
+  }
+
+  if (intent === "activate_discount" || intent === "deactivate_discount") {
+    const active = intent === "activate_discount";
+    try {
+      await setDiscountActive(admin, active);
+      const info = await getDiscountInfo(admin, session.shop);
+      return json({ ok: true, intent, discountInfo: info });
+    } catch (err) {
+      console.error("Failed to toggle GWP discount", err);
+      return json({
+        ok: false,
+        error: err?.message || "Could not update the discount.",
+      });
+    }
   }
 
   return json({ ok: false, error: "Unknown intent." });
@@ -390,7 +457,7 @@ function formatTimestamp(iso) {
 }
 
 export default function GiftWithPurchasePage() {
-  const { saved, productInfo } = useLoaderData();
+  const { saved, productInfo, discountInfo } = useLoaderData();
   const shopify = useAppBridge();
   const fetcher = useFetcher();
 
@@ -427,6 +494,12 @@ export default function GiftWithPurchasePage() {
           setBuilder(INITIAL_BUILDER);
         }
         shopify.toast.show("Deleted");
+      } else if (lastResult.intent === "create_discount") {
+        shopify.toast.show("Discount created");
+      } else if (lastResult.intent === "activate_discount") {
+        shopify.toast.show("Discount activated");
+      } else if (lastResult.intent === "deactivate_discount") {
+        shopify.toast.show("Discount deactivated");
       }
     } else if (lastResult.error) {
       shopify.toast.show(lastResult.error, { isError: true });
@@ -546,6 +619,12 @@ export default function GiftWithPurchasePage() {
     setDeleteTarget(null);
   };
 
+  const submitDiscountIntent = (intent) => {
+    const formData = new FormData();
+    formData.set("intent", intent);
+    fetcher.submit(formData, { method: "POST" });
+  };
+
   const tabs = [
     {
       id: "saved",
@@ -553,6 +632,7 @@ export default function GiftWithPurchasePage() {
       panelID: "saved-panel",
     },
     { id: "builder", content: "Builder", panelID: "builder-panel" },
+    { id: "discount", content: "Discount", panelID: "discount-panel" },
   ];
 
   const showProductTag = builder.trigger_type !== "subscription";
@@ -1139,6 +1219,109 @@ export default function GiftWithPurchasePage() {
                       })}
                     </BlockStack>
                   )}
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          </Layout>
+        )}
+
+        {selectedTab === 2 && (
+          <Layout>
+            <Layout.Section>
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">
+                      Discount
+                    </Text>
+                    {discountInfo?.exists ? (
+                      <Badge tone={discountStatusTone(discountInfo.status)}>
+                        {discountStatusLabel(discountInfo.status)}
+                      </Badge>
+                    ) : (
+                      <Badge>Not created</Badge>
+                    )}
+                  </InlineStack>
+
+                  <Text as="p" variant="bodyMd">
+                    The app manages a single automatic discount,{" "}
+                    <Text as="span" fontWeight="semibold">
+                      Gift with purchase
+                    </Text>
+                    , bound to the gift-with-purchase-discount function. It
+                    applies the configured percentage off the gift line once an
+                    offer qualifies (e.g. the min-spend threshold is met). Every
+                    saved config reuses this one discount - the checkout
+                    extension decides when the gift line is added, and this
+                    discount makes that line free or % off.
+                  </Text>
+
+                  {discountInfo?.exists ? (
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        Status: {discountStatusLabel(discountInfo.status)}
+                      </Text>
+                      {discountInfo.adminUrl ? (
+                        <Link url={discountInfo.adminUrl} target="_blank">
+                          View this discount in Shopify admin
+                        </Link>
+                      ) : null}
+                    </BlockStack>
+                  ) : (
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      No discount has been created yet. Save an enabled config
+                      with a gift product, or use Create discount below.
+                    </Text>
+                  )}
+
+                  <Divider />
+
+                  <InlineStack gap="200">
+                    <Button
+                      onClick={() => submitDiscountIntent("create_discount")}
+                      loading={isSaving}
+                    >
+                      Create discount
+                    </Button>
+                    <Button
+                      variant="primary"
+                      disabled={
+                        !discountInfo?.exists ||
+                        discountInfo.status === "ACTIVE"
+                      }
+                      onClick={() => submitDiscountIntent("activate_discount")}
+                      loading={isSaving}
+                    >
+                      Make active
+                    </Button>
+                    <Button
+                      tone="critical"
+                      disabled={
+                        !discountInfo?.exists ||
+                        discountInfo.status !== "ACTIVE"
+                      }
+                      onClick={() => submitDiscountIntent("deactivate_discount")}
+                      loading={isSaving}
+                    >
+                      Deactivate
+                    </Button>
+                  </InlineStack>
+
+                  <Banner tone="info">
+                    <Text as="p" variant="bodyMd">
+                      If a config is in{" "}
+                      <Text as="span" fontWeight="semibold">
+                        Test mode
+                      </Text>
+                      , the discount is created but left{" "}
+                      <Text as="span" fontWeight="semibold">
+                        deactivated
+                      </Text>{" "}
+                      so it never applies on real checkouts. To test, update the
+                      customer segment to your own email, then activate the
+                      discount.
+                    </Text>
+                  </Banner>
                 </BlockStack>
               </Card>
             </Layout.Section>

@@ -1,11 +1,13 @@
 import React, {useEffect, useMemo, useRef, useState} from "react";
 import {
   reactExtension,
+  Badge,
   Banner,
   BlockStack,
   Text,
   Button,
   InlineStack,
+  Progress,
   useApi,
   useApplyCartLinesChange,
   useBuyerJourneyIntercept,
@@ -300,18 +302,18 @@ function normalizeTagList(raw: string | undefined | null): string[] {
     .filter(Boolean);
 }
 
-// Lightweight progress indicator. The 2025.7 checkout component set no longer
-// ships a <Progress> component, and View backgrounds only support
-// transparent/base/subdued (no accent fill), so we render a text-based bar.
+// Native checkout progress bar. `Progress` takes a 0..max value (max defaults
+// to 1), so we feed it the completion fraction. The accessibility label keeps
+// the percentage available to screen readers now that the visual bar no longer
+// prints "34%" as text.
 function ProgressBar({percent}: {percent: number}) {
   const pct = Math.max(0, Math.min(100, Math.round(percent)));
-  const segments = 20;
-  const filled = Math.round((pct / 100) * segments);
-  const bar = "█".repeat(filled) + "░".repeat(segments - filled);
   return (
-    <Text size="small" appearance="accent">
-      {bar} {pct}%
-    </Text>
+    <Progress
+      value={pct}
+      max={100}
+      accessibilityLabel={`${pct}% of the way to your free gift`}
+    />
   );
 }
 
@@ -1418,9 +1420,11 @@ const messageText = config.banner_message_before
         <Banner status="info" title={bannerTitleBefore}>
           <BlockStack spacing="tight">
             {config.label ? (
-              <Text size="small" emphasis="bold" appearance="accent">
-                {config.label}
-              </Text>
+              <InlineStack inlineAlignment="start">
+                <Badge tone="default" size="small">
+                  {config.label}
+                </Badge>
+              </InlineStack>
             ) : null}
             <ProgressBar
               percent={config.trigger_type === "min_spend" ? progressPercent : (qualification.qualifies ? 100 : 0)}

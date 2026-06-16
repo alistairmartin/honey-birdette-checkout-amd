@@ -297,6 +297,7 @@ const TABS = [
   { id: "price-range", content: "Price Range Motivator", panelID: "price-range-panel" },
   { id: "loyalty", content: "Loyalty level-up", panelID: "loyalty-panel" },
   { id: "promo", content: "Promo alignment", panelID: "promo-panel" },
+  { id: "manual-upsells", content: "Manual upsells", panelID: "manual-upsells-panel" },
   { id: "settings", content: "Settings", panelID: "settings-panel" },
 ];
 
@@ -714,8 +715,52 @@ export default function CheckoutRecommendationsPage() {
           </Card>
         )}
 
-        {/* ---- Settings ---- */}
+        {/* ---- Manual upsells ---- */}
         {selectedTab === 3 && (
+          <Layout>
+            <Layout.Section>
+              <BlockStack gap="400">
+                <Card>
+                  <BlockStack gap="400">
+                    <Text as="h2" variant="headingMd">
+                      Manual upsells
+                    </Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Up to {MANUAL_UPSELL_SLOTS} products shown before the metaobject and Shopify
+                      recommendations. The first (default) variant is added to cart.
+                    </Text>
+                    <BlockStack gap="300">
+                      {settings.manual_upsells.map((pick) => (
+                        <PickedProductRow
+                          key={pick.variantGid}
+                          pick={pick}
+                          onRemove={() => removeManualUpsell(pick.variantGid)}
+                        />
+                      ))}
+                    </BlockStack>
+                    <InlineStack>
+                      <Button
+                        onClick={addManualUpsell}
+                        disabled={settings.manual_upsells.length >= MANUAL_UPSELL_SLOTS}
+                      >
+                        Add product
+                      </Button>
+                    </InlineStack>
+                  </BlockStack>
+                </Card>
+
+                <InlineStack>
+                  <Button variant="primary" onClick={saveSettings} loading={isSaving}>
+                    Save
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Layout.Section>
+          </Layout>
+        )}
+
+        {/* ---- Settings ---- */}
+        {selectedTab === 4 && (
           <Layout>
             <Layout.Section>
               <BlockStack gap="400">

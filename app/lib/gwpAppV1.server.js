@@ -90,6 +90,41 @@ const TAGS_ADD = `#graphql
   }
 `;
 
+const GET_DISCOUNT_STATUS = `#graphql
+  query GwpAppV1DiscountStatus($id: ID!) {
+    discountNode(id: $id) {
+      id
+      discount {
+        __typename
+        ... on DiscountAutomaticApp {
+          title
+          status
+          startsAt
+          endsAt
+        }
+      }
+    }
+  }
+`;
+
+const DISCOUNT_ACTIVATE = `#graphql
+  mutation GwpAppV1DiscountActivate($id: ID!) {
+    discountAutomaticActivate(id: $id) {
+      automaticDiscountNode { id }
+      userErrors { field message }
+    }
+  }
+`;
+
+const DISCOUNT_DEACTIVATE = `#graphql
+  mutation GwpAppV1DiscountDeactivate($id: ID!) {
+    discountAutomaticDeactivate(id: $id) {
+      automaticDiscountNode { id }
+      userErrors { field message }
+    }
+  }
+`;
+
 const SET_METAFIELDS = `#graphql
   mutation GwpAppV1SetMetafields($metafields: [MetafieldsSetInput!]!) {
     metafieldsSet(metafields: $metafields) {
@@ -169,7 +204,13 @@ async function findFunctionId(admin) {
 }
 
 // Ensure the automatic discount exists; create it if missing. Returns its id.
-async function ensureDiscount(admin, { installationId, discountId, initialConfig }) {
+// `activateOnCreate` sets the initial state when a discount is freshly created:
+// false (no live config) creates it deactivated. It only applies on creation -
+// an existing discount's state is left as-is so manual activate/deactivate wins.
+async function ensureDiscount(
+  admin,
+  { installationId, discountId, initialConfig, activateOnCreate = true },
+) {
   if (discountId) {
     try {
       const data = await gql(admin, GET_DISCOUNT, { id: discountId });
@@ -235,6 +276,18 @@ async function ensureDiscount(admin, { installationId, discountId, initialConfig
     key: DISCOUNT_ID_KEY,
     value: newId,
   });
+
+  // New discounts are created active. If there's no live offer (e.g. all test
+  // mode), deactivate it so nothing applies on real checkouts until the merchant
+  // turns it on. Non-fatal.
+  if (!activateOnCreate) {
+    try {
+      await gql(admin, DISCOUNT_DEACTIVATE, { id: newId });
+    } catch (err) {
+      console.error("Deactivating new GWP discount failed", err);
+    }
+  }
+
   return newId;
 }
 
@@ -283,6 +336,15 @@ export async function syncConfigs(admin, shop) {
   const functionConfigs = buildFunctionConfigs(configs);
   const functionPayload = { configs: functionConfigs };
 
+  // If the discount is created on this sync, start it active only when there's a
+  // live (non-test) enabled offer; an all-test setup is created deactivated.
+  const anyLiveEnabled = configs.some(
+    (c) =>
+      c &&
+      c.enabled !== false &&
+      String(c.mode || "live").toLowerCase() !== "test",
+  );
+
   // Only manage the discount if there is at least one offer that can discount a
   // gift line; otherwise skip creating an empty discount on first save.
   if (installationId && (functionConfigs.length > 0 || discountId)) {
@@ -290,6 +352,7 @@ export async function syncConfigs(admin, shop) {
       installationId,
       discountId,
       initialConfig: functionPayload,
+      activateOnCreate: anyLiveEnabled,
     });
     await setMetafield(admin, {
       ownerId: ensuredId,
@@ -300,4 +363,61 @@ export async function syncConfigs(admin, shop) {
   }
 
   return { count: configs.length, functionCount: functionConfigs.length };
+}
+
+// Resolve the stored discount id (a gid) from the app installation metafield.
+async function resolveDiscountId(admin) {
+  const ctx = await gql(admin, GET_CONTEXT);
+  return parseJsonMetafield(ctx?.currentAppInstallation?.discountId?.value, null);
+}
+
+// Fetch the current state of the app's automatic discount for the Discount
+// section in the UI. Returns { exists: false } when no discount has been
+// created yet, otherwise its id, status, title and an admin deep link.
+export async function getDiscountInfo(admin, shop) {
+  const discountId = await resolveDiscountId(admin);
+  if (!discountId) return { exists: false };
+
+  let node;
+  try {
+    const data = await gql(admin, GET_DISCOUNT_STATUS, { id: discountId });
+    node = data?.discountNode;
+  } catch {
+    return { exists: false };
+  }
+  if (!node?.id) return { exists: false };
+
+  const discount = node.discount ?? {};
+  const numericId = String(discountId).match(/\/(\d+)$/)?.[1] ?? null;
+  const adminUrl =
+    shop && numericId ? `https://${shop}/admin/discounts/${numericId}` : null;
+
+  return {
+    exists: true,
+    id: discountId,
+    status: discount.status ?? null, // ACTIVE | EXPIRED | SCHEDULED
+    title: discount.title ?? DISCOUNT_TITLE,
+    startsAt: discount.startsAt ?? null,
+    endsAt: discount.endsAt ?? null,
+    adminUrl,
+  };
+}
+
+// Activate or deactivate the app's automatic discount. Manual override that the
+// merchant triggers from the Discount section; wins over the mode-based default.
+export async function setDiscountActive(admin, active) {
+  const discountId = await resolveDiscountId(admin);
+  if (!discountId) {
+    throw new Error("No discount exists yet. Save a config to create it first.");
+  }
+  const mutation = active ? DISCOUNT_ACTIVATE : DISCOUNT_DEACTIVATE;
+  const key = active ? "discountAutomaticActivate" : "discountAutomaticDeactivate";
+  const data = await gql(admin, mutation, { id: discountId });
+  const errors = data?.[key]?.userErrors ?? [];
+  if (errors.length) {
+    throw new Error(
+      `${key} failed: ${errors.map((e) => e.message).join(", ")}`,
+    );
+  }
+  return discountId;
 }

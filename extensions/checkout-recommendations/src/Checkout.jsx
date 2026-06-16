@@ -441,15 +441,20 @@ const toVariantCard = (variant) => {
  * Resolve checkout recommendations.
  *
  * Order of precedence (mirrors the theme mini-cart):
+ *   0. The active range motivator's curated products, pinned to the top in
+ *      configured order. These ignore the Max Slots cap (always shown in full).
  *   1. Manual upsells configured in the app's Checkout Recommendations page.
  *   2. Active `mini_cart_recommendations` metaobjects whose conditions match
  *      the cart (products / product types / tags in cart).
  *   3. Shopify product recommendations seeded by the first cart item fill any
  *      remaining slots.
  *
+ * Tiers 1-3 stop once Max Slots is reached; the motivator products in tier 0 are
+ * exempt, so the rendered count can exceed Max Slots when a motivator is active.
+ *
  * Cart products are always excluded. Lingerie sets and gift cards are excluded
- * from the automatic tiers, but allowed for manual upsells (the merchant picked
- * an exact variant, so the size-selection concern doesn't apply).
+ * from the automatic tiers, but allowed for manual upsells and motivator
+ * products (the merchant picked exact variants, so the size concern doesn't apply).
  */
 const resolveRecommendations = async ({ metaType, countryCode, slotLimit, lines, manualVariantIds, gapFill }) => {
   const cartProductIds = [...new Set(lines.map((l) => l.merchandise?.product?.id).filter(Boolean))];
@@ -476,8 +481,10 @@ const resolveRecommendations = async ({ metaType, countryCode, slotLimit, lines,
   const collected = [];
   const seenProductIds = new Set();
 
-  const tryAddCard = (card, { allowAnyType = false } = {}) => {
-    if (collected.length >= slotLimit) return;
+  // `force` bypasses the Max Slots cap (used for the active motivator's curated
+  // products, which always show on top). Cart/dedupe/availability still apply.
+  const tryAddCard = (card, { allowAnyType = false, force = false } = {}) => {
+    if (!force && collected.length >= slotLimit) return;
     if (!card) return;
     if (cartProductIdSet.has(card.productId)) return;
     if (seenProductIds.has(card.productId)) return;
@@ -489,14 +496,14 @@ const resolveRecommendations = async ({ metaType, countryCode, slotLimit, lines,
 
   const tryAdd = (product) => tryAddCard(toCard(product));
 
-  // 0. Free-shipping gap-fill (rule 1): when the buyer is within range of free
-  // shipping, offer curated products priced to tip them over the edge, cheapest
-  // qualifying first. These bypass the type filter like manual upsells.
-  if (gapFill?.gap > 0 && gapVariants.length) {
+  // 0. Active range motivator: surface ALL of its curated products at the very
+  // top, in the merchant's configured order. These bypass the type filter (like
+  // manual upsells) and, via `force`, the Max Slots cap - the curated set always
+  // shows in full; the tiers below fill any remaining slots up to Max Slots.
+  if (gapVariants.length) {
     gapVariants
-      .filter((v) => v.availableForSale && Number(v.price?.amount) >= gapFill.gap)
-      .sort((a, b) => Number(a.price?.amount) - Number(b.price?.amount))
-      .forEach((variant) => tryAddCard(toVariantCard(variant), { allowAnyType: true }));
+      .filter((v) => v.availableForSale)
+      .forEach((variant) => tryAddCard(toVariantCard(variant), { allowAnyType: true, force: true }));
   }
 
   // 1. Manual upsells next, in configured order. These bypass the type filter.
@@ -579,9 +586,9 @@ function Extension() {
 
   const manualVariantIds = (appConfig?.manual_upsells || []).filter(Boolean);
 
-  // Curated motivator products + the spend left to reach the target. The
-  // resolver shows the cheapest priced at or above the gap, so adding one tips
-  // the buyer over the top of the range.
+  // Curated products for the active motivator. When a motivator is active the
+  // resolver pins all of these to the top, ignoring Max Slots. `gapFillGap` (the
+  // spend left to the target) is kept for the testing panel only.
   const gapFillVariantIds = activeMotivator ? activeMotivator.motivator.products || [] : [];
   const gapFillGap = activeMotivator ? activeMotivator.remaining : 0;
 
@@ -596,7 +603,9 @@ function Extension() {
     [lines]
   );
   const manualKey = manualVariantIds.join('|');
-  const gapKey = `${gapFillVariantIds.join('|')}@${gapFillGap}`;
+  // Resolution no longer depends on the gap amount, only on which curated
+  // products the active motivator pins to the top.
+  const gapKey = gapFillVariantIds.join('|');
 
   useEffect(() => {
     // Wait for the config fetch to settle so we resolve once with the final
@@ -613,7 +622,7 @@ function Extension() {
       slotLimit,
       lines,
       manualVariantIds,
-      gapFill: { variantIds: gapFillVariantIds, gap: gapFillGap },
+      gapFill: { variantIds: gapFillVariantIds },
     })
       .then((result) => {
         if (!cancelled) setCards(result);
