@@ -49,7 +49,7 @@ const GET_CONTEXT = `#graphql
       id
       discountId: metafield(namespace: "$app", key: "gwp_app_v1_discount_id") { value }
     }
-    shop { id }
+    shop { id ianaTimezone }
   }
 `;
 
@@ -244,9 +244,11 @@ async function findFunctionId(admin) {
   return (byTitle ?? discountNodes[0])?.id ?? null;
 }
 
-// Store timezone the config's valid-date/time fields are expressed in. Must match
-// STORE_TIMEZONE in the gift-with-purchase checkout extension.
-const STORE_TIMEZONE = "Australia/Melbourne";
+// Fallback timezone for interpreting the config's valid-date/time fields when
+// the shop's ianaTimezone can't be resolved. Normally each store's own timezone
+// (Australia/Sydney, America/Los_Angeles, Europe/Paris, Europe/London, ...) is
+// used, fetched from shop.ianaTimezone.
+const DEFAULT_STORE_TIMEZONE = "Australia/Sydney";
 
 // Offset (ms) of `timeZone` from UTC at the given UTC instant, DST-aware.
 function tzOffsetMs(utcMs, timeZone) {
@@ -273,30 +275,33 @@ function tzOffsetMs(utcMs, timeZone) {
   return asUTC - utcMs;
 }
 
-// Interpret a "YYYY-MM-DD" date + optional "HH:MM" time as wall-clock in
-// STORE_TIMEZONE and return the UTC ISO instant, or null if no date.
-function storeLocalToISO(dateStr, timeStr) {
+// Interpret a "YYYY-MM-DD" date + optional "HH:MM" time as wall-clock in the
+// given timeZone and return the UTC ISO instant, or null if no date.
+function storeLocalToISO(dateStr, timeStr, timeZone) {
   if (!dateStr) return null;
   const [y, mo, d] = String(dateStr).split("-").map(Number);
   if (!y || !mo || !d) return null;
   const [hh = 0, mm = 0] = String(timeStr || "")
     .split(":")
     .map((n) => Number(n) || 0);
+  const tz = timeZone || DEFAULT_STORE_TIMEZONE;
   const guess = Date.UTC(y, mo - 1, d, hh, mm, 0);
-  let utc = guess - tzOffsetMs(guess, STORE_TIMEZONE);
+  let utc = guess - tzOffsetMs(guess, tz);
   // Re-resolve once in case the guess landed on the wrong side of a DST change.
-  utc = guess - tzOffsetMs(utc, STORE_TIMEZONE);
+  utc = guess - tzOffsetMs(utc, tz);
   return new Date(utc).toISOString();
 }
 
-// Active window for the discount from the config's valid-date fields. startsAt
-// is required by the API, so it defaults to now when the config has no start.
-function discountDatesFor(config) {
+// Active window for the discount from the config's valid-date fields, in the
+// shop's timezone. startsAt is required by the API, so it defaults to now when
+// the config has no start.
+function discountDatesFor(config, timeZone) {
   const startsAt =
-    storeLocalToISO(config?.valid_date_from, config?.valid_time_from) ||
+    storeLocalToISO(config?.valid_date_from, config?.valid_time_from, timeZone) ||
     new Date().toISOString();
   const endsAt =
-    storeLocalToISO(config?.valid_date_till, config?.valid_time_till) || null;
+    storeLocalToISO(config?.valid_date_till, config?.valid_time_till, timeZone) ||
+    null;
   return { startsAt, endsAt };
 }
 
@@ -475,7 +480,7 @@ async function deleteDiscount(admin, discountId) {
 // keep its title + function payload current, and (only on creation) set the
 // active state from enabled/mode. A disabled config is always deactivated.
 // Returns the discount gid, or null when the config has no gift product.
-async function ensureConfigDiscount(admin, { functionId, row, config }) {
+async function ensureConfigDiscount(admin, { functionId, row, config, timeZone }) {
   const fnConfig = buildFunctionConfig(config);
   if (!fnConfig) {
     // No gift product to target. Retire any discount the config used to own.
@@ -492,7 +497,7 @@ async function ensureConfigDiscount(admin, { functionId, row, config }) {
   const payload = { configs: [fnConfig] };
   const title = discountTitleFor(config, row);
   const combinesWith = combinesWithFor(config);
-  const { startsAt, endsAt } = discountDatesFor(config);
+  const { startsAt, endsAt } = discountDatesFor(config, timeZone);
   const isEnabled = config.enabled !== false;
   const isLive = String(config.mode || "live").toLowerCase() !== "test";
 
@@ -603,18 +608,19 @@ export async function syncConfigs(admin, shop) {
   const ctx = await gql(admin, GET_CONTEXT);
   const installationId = ctx?.currentAppInstallation?.id ?? null;
   const shopId = ctx?.shop?.id ?? null;
+  const timeZone = ctx?.shop?.ianaTimezone || DEFAULT_STORE_TIMEZONE;
   const legacyDiscountId = parseJsonMetafield(
     ctx?.currentAppInstallation?.discountId?.value,
     null,
   );
   if (!shopId) throw new Error("Could not resolve shop id");
 
-  // 1. Shop metafield (rich configs) for the checkout extension.
+  // 1. Shop metafield (rich configs + store timezone) for the checkout extension.
   await setMetafield(admin, {
     ownerId: shopId,
     namespace: SHOP_METAFIELD_NAMESPACE,
     key: SHOP_METAFIELD_KEY,
-    value: { configs },
+    value: { configs, timeZone },
   });
 
   // 2. Retire the legacy single shared discount, if it still exists.
@@ -637,11 +643,16 @@ export async function syncConfigs(admin, shop) {
   let discountCount = 0;
   for (const { row, config } of parsed) {
     if (!config) continue;
-    const id = await ensureConfigDiscount(admin, { functionId, row, config });
+    const id = await ensureConfigDiscount(admin, {
+      functionId,
+      row,
+      config,
+      timeZone,
+    });
     if (id) discountCount += 1;
   }
 
-  return { count: configs.length, discountCount };
+  return { count: configs.length, discountCount, timeZone };
 }
 
 // Build a map of configId -> { exists, status, title, adminUrl, discountId } for
@@ -725,7 +736,9 @@ export async function createConfigDiscount(admin, shop, configId) {
       `No discount function found. Deploy the ${FUNCTION_HANDLE} extension first.`,
     );
   }
-  return ensureConfigDiscount(admin, { functionId, row, config });
+  const ctx = await gql(admin, GET_CONTEXT);
+  const timeZone = ctx?.shop?.ianaTimezone || DEFAULT_STORE_TIMEZONE;
+  return ensureConfigDiscount(admin, { functionId, row, config, timeZone });
 }
 
 // Delete a config's discount. Call before deleting the config row.

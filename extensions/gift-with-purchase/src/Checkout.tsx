@@ -100,6 +100,18 @@ function parseConfigsFromMetafield(raw: unknown): any[] {
   return list.filter((c: any) => c && typeof c === "object");
 }
 
+// Pull the store timezone the app wrote into the metafield ({ timeZone }).
+// Falls back to '' so callers can apply their own default.
+function parseTimeZoneFromMetafield(raw: unknown): string {
+  if (typeof raw !== "string" || !raw.trim()) return "";
+  try {
+    const tz = JSON.parse(raw)?.timeZone;
+    return typeof tz === "string" ? tz : "";
+  } catch {
+    return "";
+  }
+}
+
 // Parent: load all configs from the metafield and render one GiftOffer per
 // enabled config. Each GiftOffer owns its own hooks, cart sync, and checkout
 // intercept, so multiple gifts run side by side without interfering.
@@ -120,6 +132,7 @@ function Extension() {
   const { show_test_mode_configs } = useSettings();
   const showTestConfigs = inEditor || isUnpublished || Boolean(show_test_mode_configs);
   const [configs, setConfigs] = useState<any[]>([]);
+  const [storeTimeZone, setStoreTimeZone] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -128,7 +141,9 @@ function Extension() {
       try {
         const res: any = await query(CONFIG_QUERY);
         if (cancelled) return;
-        setConfigs(parseConfigsFromMetafield(res?.data?.shop?.metafield?.value));
+        const raw = res?.data?.shop?.metafield?.value;
+        setConfigs(parseConfigsFromMetafield(raw));
+        setStoreTimeZone(parseTimeZoneFromMetafield(raw));
       } catch (err) {
         if (!cancelled) console.error("GWP: failed to load configs", err);
       } finally {
@@ -159,6 +174,7 @@ function Extension() {
         <GiftOffer
           key={String(cfg?.admin_title || cfg?.product_id || cfg?.customer_redeemed_tag || i)}
           config={cfg}
+          storeTimeZone={storeTimeZone}
         />
       ))}
     </BlockStack>
@@ -317,7 +333,7 @@ function ProgressBar({percent}: {percent: number}) {
   );
 }
 
-function GiftOffer({config: rawConfig}: {config: any}) {
+function GiftOffer({config: rawConfig, storeTimeZone}: {config: any; storeTimeZone?: string}) {
   const t = useTranslate();
   const {extension} = useApi();
   const applyCartLinesChange = useApplyCartLinesChange();
@@ -437,7 +453,10 @@ const config = useMemo(() => {
   };
 }, [rawConfig, show_testing_information]);
   // Use a constant store timezone (Australia/Melbourne)
-  const STORE_TIMEZONE = 'Australia/Melbourne';
+  // Store timezone the offer's valid-date/time fields are expressed in. Comes
+  // from the app (shop.ianaTimezone, written into the configs metafield); falls
+  // back to Australia/Melbourne if absent so older metafields still work.
+  const STORE_TIMEZONE = storeTimeZone || 'Australia/Melbourne';
 
 // Generic template renderer. Always provides `trigger_type` and aliases
 // `free_gift` to whatever `title` was passed, so both {{ title }} and

@@ -194,6 +194,7 @@ const PRODUCT_CARD_FIELDS = `
   productType
   tags
   featuredImage { url altText }
+  images(first: 10) { nodes { url altText } }
   variants(first: 50) {
     nodes {
       id
@@ -441,13 +442,25 @@ const toCard = (product) => {
 
   const defaultVariant = variants[0];
 
+  // Gallery images: featured first, then the rest, deduped by url.
+  const fallbackAlt = product.title || 'Product image';
+  const imageNodes = [product.featuredImage, ...(product.images?.nodes || [])].filter((n) => n?.url);
+  const seenUrls = new Set();
+  const images = [];
+  imageNodes.forEach((node) => {
+    if (seenUrls.has(node.url)) return;
+    seenUrls.add(node.url);
+    images.push({ url: node.url, alt: node.altText || fallbackAlt });
+  });
+
   return {
     productId: product.id,
     variantId: defaultVariant.id,
     title: product.title || '',
     productType: product.productType || '',
-    imageUrl: product.featuredImage?.url || '',
-    imageAlt: product.featuredImage?.altText || product.title || 'Product image',
+    imageUrl: images[0]?.url || '',
+    imageAlt: images[0]?.alt || fallbackAlt,
+    images,
     price: defaultVariant.price,
     compareAtPrice: defaultVariant.compareAtPrice,
     variants,
@@ -810,6 +823,14 @@ function Header({ heading, subtitle }) {
   );
 }
 
+const PLACEHOLDER_IMAGE =
+  'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png';
+
+// Append Shopify CDN resize params so each render gets an appropriately-sized,
+// crisp image (request 2x the render size for high-DPI displays).
+const sizedImage = (url, size) =>
+  url ? `${url}${url.includes('?') ? '&' : '?'}width=${size}&height=${size}&crop=center` : PLACEHOLDER_IMAGE;
+
 function RecommendationCard({ card, addingVariantId, onAdd }) {
   // Buyer's per-option picks (defaults to the card's default variant). For
   // single-variant products `options` is empty and the button adds directly.
@@ -819,18 +840,17 @@ function RecommendationCard({ card, addingVariantId, onAdd }) {
     card.variants.find((v) => v.id === card.variantId) ||
     card.variants[0];
 
+  // Gallery: all product images, with the active one shown large in the modal.
+  const images = card.images?.length ? card.images : [{ url: card.imageUrl, alt: card.imageAlt }];
+  const [activeImage, setActiveImage] = useState(0);
+  const activeIdx = Math.min(activeImage, images.length - 1);
+  const mainImage = images[activeIdx];
+
   const isOnSale =
     selected?.compareAtPrice != null && Number(selected.compareAtPrice) > Number(selected.price);
 
-  const finalImageUrl = card.imageUrl
-    ? `${card.imageUrl}${card.imageUrl.includes('?') ? '&' : '?'}width=200&height=200&crop=center`
-    : 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png';
-
-  // Thumbnail for the modal's product row (left column). Requested at 600px so
-  // it stays crisp on 2x/3x displays despite the small render size.
-  const modalImageUrl = card.imageUrl
-    ? `${card.imageUrl}${card.imageUrl.includes('?') ? '&' : '?'}width=600&height=600&crop=center`
-    : finalImageUrl;
+  const finalImageUrl = sizedImage(card.imageUrl, 200);
+  const modalImageUrl = sizedImage(mainImage?.url, 600);
 
   const adding = addingVariantId != null && selected != null && addingVariantId === selected.id;
   // s-modal needs a DOM-safe id; product gids contain "/" and ":".
@@ -877,11 +897,11 @@ function RecommendationCard({ card, addingVariantId, onAdd }) {
       {card.hasOptions && (
         <s-modal id={modalId} accessibilityLabel={card.title}>
           <s-stack gap="base">
-            {/* Row: product image (left, 25%) | title over price (right, 75%). */}
+            {/* Row: product image (left) | title over price (right). */}
             <s-grid gridTemplateColumns="2fr 2fr" gap="base" alignItems="center">
               <s-image
                 src={modalImageUrl}
-                alt={card.imageAlt}
+                alt={mainImage?.alt || card.imageAlt}
                 aspectRatio="1"
                 objectFit="cover"
                 inlineSize="fill"
@@ -892,6 +912,36 @@ function RecommendationCard({ card, addingVariantId, onAdd }) {
                 <s-text color="subdued">{formatPrice(selected?.price ?? card.price)}</s-text>
               </s-stack>
             </s-grid>
+
+            {/* Tappable thumbnail strip (horizontal scroll) to switch the main
+                image. Only shown when the product has more than one image. */}
+            {images.length > 1 && (
+              <s-scroll-box padding="none">
+                <s-stack direction="inline" gap="small-300">
+                  {images.map((image, index) => (
+                    <s-clickable
+                      key={image.url}
+                      onClick={() => setActiveImage(index)}
+                      borderRadius="base"
+                      border={index === activeIdx ? 'base base solid' : 'none'}
+                      padding="none"
+                      accessibilityLabel={`View image ${index + 1}`}
+                    >
+                      <s-box inlineSize="56px">
+                        <s-image
+                          src={sizedImage(image.url, 160)}
+                          alt={image.alt}
+                          aspectRatio="1"
+                          objectFit="cover"
+                          inlineSize="fill"
+                          borderRadius="base"
+                        />
+                      </s-box>
+                    </s-clickable>
+                  ))}
+                </s-stack>
+              </s-scroll-box>
+            )}
 
             {/* One row of selector buttons per option (e.g. Size, Cup). Buttons
                 fill their cell (inlineSize="fill") and sit on a tight gap. */}

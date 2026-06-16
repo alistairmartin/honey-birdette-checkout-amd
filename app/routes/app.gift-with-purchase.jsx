@@ -84,8 +84,10 @@ export const loader = async ({ request }) => {
 
   // Sync first so per-config discounts are created/updated and each row's
   // discountId is populated before we read the rows back for display.
+  let timeZone = "";
   try {
-    await syncConfigs(admin, session.shop);
+    const result = await syncConfigs(admin, session.shop);
+    timeZone = result?.timeZone || "";
   } catch (err) {
     console.error("Failed to sync GWP V4 configs on load", err);
   }
@@ -166,7 +168,7 @@ export const loader = async ({ request }) => {
 
   const segments = await listSegments(admin);
 
-  return json({ saved, productInfo, discountMap, segments });
+  return json({ saved, productInfo, discountMap, segments, timeZone });
 };
 
 export const action = async ({ request }) => {
@@ -513,7 +515,8 @@ function formatTimestamp(iso) {
 }
 
 export default function GiftWithPurchasePage() {
-  const { saved, productInfo, discountMap, segments } = useLoaderData();
+  const { saved, productInfo, discountMap, segments, timeZone } = useLoaderData();
+  const tzLabel = timeZone || "your store's timezone";
   const shopify = useAppBridge();
   const fetcher = useFetcher();
 
@@ -1050,6 +1053,7 @@ export default function GiftWithPurchasePage() {
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
                       Sets the discount&apos;s active start/end dates in Shopify.
+                      Times are interpreted in {tzLabel}.
                     </Text>
                     <FormLayout.Group>
                       <TextField
@@ -1058,7 +1062,7 @@ export default function GiftWithPurchasePage() {
                         value={builder.valid_from}
                         onChange={(v) => update("valid_from", v)}
                         autoComplete="off"
-                        helpText="Leave blank to start immediately. Interpreted as Australia/Melbourne time."
+                        helpText={`Leave blank to start immediately. Interpreted as ${tzLabel} time.`}
                       />
                       <TextField
                         label="Valid to"
@@ -1066,7 +1070,7 @@ export default function GiftWithPurchasePage() {
                         value={builder.valid_to}
                         onChange={(v) => update("valid_to", v)}
                         autoComplete="off"
-                        helpText="Leave blank for no end. Interpreted as Australia/Melbourne time."
+                        helpText={`Leave blank for no end. Interpreted as ${tzLabel} time.`}
                       />
                     </FormLayout.Group>
 
