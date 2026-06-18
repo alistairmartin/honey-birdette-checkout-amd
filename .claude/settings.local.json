@@ -21,7 +21,8 @@
       "Bash(tar -tzf shopify-ui-extensions-2026.4.0-rc.3.tgz)",
       "Bash(tar -tzf /tmp/shopify-ui-extensions-2026.4.0-rc.3.tgz)",
       "Bash(tar -xzf /tmp/shopify-ui-extensions-2026.4.0-rc.3.tgz -C /tmp/)",
-      "Read(//tmp/package/build/**)"
+      "Read(//tmp/package/build/**)",
+      "Bash(npx esbuild *)"
     ]
   }
 }

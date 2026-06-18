@@ -93,6 +93,31 @@ export function buildFunctionConfigs(rawConfigs) {
     .filter(Boolean);
 }
 
+// Collect every gift product/variant a config can hand out: the primary
+// `product_id` plus any `gift_options[]` (the customer-picks-one set). Returns
+// de-duplicated arrays of Product gids and ProductVariant gids. Only one option
+// is ever in the cart at a time (the checkout extension adds the chosen one), so
+// the discount function can safely target the whole set.
+function collectGiftTargets(c) {
+  const rawIds = [];
+  if (c.product_id != null && c.product_id !== "") rawIds.push(c.product_id);
+  if (Array.isArray(c.gift_options)) {
+    for (const opt of c.gift_options) {
+      const pid = opt && typeof opt === "object" ? opt.product_id : opt;
+      if (pid != null && pid !== "") rawIds.push(pid);
+    }
+  }
+  const productIds = [];
+  const variantIds = [];
+  for (const raw of rawIds) {
+    const pgid = toProductGid(raw);
+    if (pgid && !productIds.includes(pgid)) productIds.push(pgid);
+    const vgid = toVariantGid(raw);
+    if (vgid && !variantIds.includes(vgid)) variantIds.push(vgid);
+  }
+  return { productIds, variantIds };
+}
+
 // Build the slim function-config object for a single raw config, or null when it
 // has no gift product/variant to target. Unlike buildFunctionConfigs this does
 // NOT filter on `enabled` - in the per-config discount model the enable/disable
@@ -100,9 +125,8 @@ export function buildFunctionConfigs(rawConfigs) {
 // omitting it from the metafield.
 export function buildFunctionConfig(c) {
   if (!c || typeof c !== "object") return null;
-  const productId = toProductGid(c.product_id);
-  const variantGid = toVariantGid(c.product_id);
-  if (!productId && !variantGid) return null;
+  const { productIds, variantIds } = collectGiftTargets(c);
+  if (productIds.length === 0 && variantIds.length === 0) return null;
   const pct = Number(c.discount_percentage);
   return {
     enabled: true,
@@ -112,8 +136,11 @@ export function buildFunctionConfig(c) {
         ? pct
         : DEFAULT_DISCOUNT_PERCENTAGE,
     thresholds: thresholdsFromConfig(c),
-    productId: productId || null,
-    variantIds: variantGid ? [variantGid] : [],
+    // `productId` kept for backward-compat with older function bundles; `productIds`
+    // carries the full set so any chosen gift option gets discounted.
+    productId: productIds[0] || null,
+    productIds,
+    variantIds,
     message: String(c.label || c.admin_title || "Gift with purchase"),
   };
 }

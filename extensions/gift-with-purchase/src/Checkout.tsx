@@ -7,6 +7,8 @@ import {
   Text,
   Button,
   InlineStack,
+  Image,
+  View,
   Progress,
   useApi,
   useApplyCartLinesChange,
@@ -274,20 +276,53 @@ const QUERY_BY_CURRENCY: Record<Currency, string> = SUPPORTED_CURRENCIES.reduce(
   {} as Record<Currency, string>,
 );
 
-const NODE_RESOLVE_QUERY = `#graphql
-  query NodeResolve($id: ID!) {
-    node(id: $id) {
-      __typename
-      ... on ProductVariant { id availableForSale product { title } }
-      ... on Product {
-        title
-        variants(first: 1) {
-          nodes { id availableForSale }
+// Currency-aware resolver for gift options. Returns the variant to add plus the
+// title/image/price used to render the "pick one" cards in the buyer's currency.
+function buildGiftResolveQuery(country: string): string {
+  return `#graphql
+    query GiftResolve($id: ID!) @inContext(country: ${country}) {
+      node(id: $id) {
+        __typename
+        ... on ProductVariant {
+          id
+          availableForSale
+          price { amount currencyCode }
+          image { url }
+          product { title featuredImage { url } }
+        }
+        ... on Product {
+          title
+          featuredImage { url }
+          variants(first: 1) {
+            nodes {
+              id
+              availableForSale
+              price { amount currencyCode }
+              image { url }
+            }
+          }
         }
       }
     }
-  }
-`;
+  `;
+}
+
+const GIFT_RESOLVE_QUERY_BY_CURRENCY: Record<Currency, string> = SUPPORTED_CURRENCIES.reduce(
+  (acc, cur) => {
+    acc[cur] = buildGiftResolveQuery(COUNTRY_BY_CURRENCY[cur]);
+    return acc;
+  },
+  {} as Record<Currency, string>,
+);
+
+type ResolvedGiftOption = {
+  productId: string; // the raw option id as configured (string form)
+  variantGid: string | null;
+  title: string | null;
+  image: string | null;
+  price: string | null; // pre-formatted in the active currency
+  available: boolean | null;
+};
 
 function formatMoney(amount: number | string, currencyCode: string = "AUD") {
   const n = Number(amount || 0);
@@ -400,6 +435,19 @@ const config = useMemo(() => {
     mode,
     trigger_type,
     redemption_type,
+    // "auto" drops the gift in the cart on qualify and blocks checkout until it's
+    // there; "manual" shows an optional add button the customer can skip. Forced
+    // to manual-style behaviour whenever there are multiple gift options.
+    add_mode: (String(cfg.add_mode || "auto").toLowerCase() === "manual"
+      ? "manual"
+      : "auto") as "auto" | "manual",
+    // The customer-picks-one set. The admin writes the primary gift as element 0
+    // plus any extras; only present when there are 2+ options.
+    gift_options: Array.isArray(cfg.gift_options)
+      ? cfg.gift_options
+          .map((o: any) => (o && typeof o === "object" ? o.product_id : o))
+          .filter((id: any) => id != null && id !== "")
+      : [],
     admin_title: String(cfg.admin_title || "").trim(),
     // Short label shown as a pill above the progress banner (e.g. "LIMITED OFFER").
     label: String(cfg.label || "").trim(),
@@ -532,97 +580,161 @@ function renderTemplate(tpl: string, vars: Record<string, string>) {
   const {names: allowedCountryNames, iso2: allowedIso2} = allowedCountries;
   const allowedDisplay = describeAllowedCountries(allowedCountries);
 
-  const [giftVariantGid, setGiftVariantGid] = useState<string | null>(null);
-  const [giftTitle, setGiftTitle] = useState<string | null>(null);
-  const [giftAvailable, setGiftAvailable] = useState<boolean | null>(null);
+  // Normalized gift-option ids. With 2+ gift_options the customer picks one;
+  // otherwise the single product_id is the only option.
+  const optionIds = useMemo<string[]>(() => {
+    const ids =
+      config.gift_options.length >= 2
+        ? config.gift_options
+        : config.product_id != null && config.product_id !== ""
+          ? [config.product_id]
+          : [];
+    return ids.map((v: any) => String(v).trim()).filter(Boolean);
+  }, [config.gift_options, config.product_id]);
+
+  const isMultiOption = optionIds.length >= 2;
+
+  // When manual, the customer adds the gift themselves (and may skip it). With
+  // multiple options they always pick one, so multi is implicitly manual.
+  const autoAdd = config.add_mode === "auto" && !isMultiOption;
+
+  const [resolvedOptions, setResolvedOptions] = useState<ResolvedGiftOption[]>([]);
+  // The option the customer chose (multi only). For a single option the
+  // effective selection is pinned to it below.
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function resolveGiftVariant() {
-      const raw = config.product_id;
-      if (!raw) {
-        if (!cancelled) {
-          setGiftVariantGid(null);
-          setGiftTitle(null);
-          setGiftAvailable(null);
-        }
+    async function resolveOptions() {
+      if (optionIds.length === 0) {
+        if (!cancelled) setResolvedOptions([]);
         return;
       }
+      const qStr =
+        GIFT_RESOLVE_QUERY_BY_CURRENCY[activeCurrency] || GIFT_RESOLVE_QUERY_BY_CURRENCY.AUD;
 
-      const rawStr = String(raw).trim();
+      const resolveOne = async (rawStr: string): Promise<ResolvedGiftOption> => {
+        const base: ResolvedGiftOption = {
+          productId: rawStr,
+          variantGid: null,
+          title: null,
+          image: null,
+          price: null,
+          available: null,
+        };
 
-      // If a ProductVariant GID is provided, we're done.
-      if (rawStr.startsWith("gid://shopify/ProductVariant/")) {
-        if (!cancelled) {
-          setGiftVariantGid(rawStr);
-          setGiftAvailable(null);
+        // Candidate IDs to try in order (variant first when numeric/unknown).
+        const candidates: string[] = [];
+        if (rawStr.startsWith("gid://shopify/ProductVariant/")) {
+          candidates.push(rawStr);
+        } else if (rawStr.startsWith("gid://shopify/Product/")) {
+          candidates.push(rawStr);
+        } else if (rawStr.startsWith("gid://")) {
+          candidates.push(rawStr);
+        } else {
+          candidates.push(`gid://shopify/ProductVariant/${rawStr}`);
+          candidates.push(`gid://shopify/Product/${rawStr}`);
         }
-        return;
-      }
 
-      // Build candidate IDs to try in order.
-      const candidates: string[] = [];
+        for (const candidate of candidates) {
+          try {
+            const res: any = await query(qStr, { variables: { id: candidate } });
+            const node = res?.data?.node;
 
-      if (rawStr.startsWith("gid://shopify/Product/")) {
-        // Provided a Product GID - resolve its first variant via GraphQL.
-        candidates.push(rawStr);
-      } else if (rawStr.startsWith("gid://")) {
-        // Unknown GID type - try as-is (will likely fail and fall through).
-        candidates.push(rawStr);
-      } else {
-        // Numeric ID given - try ProductVariant first, then Product.
-        candidates.push(`gid://shopify/ProductVariant/${rawStr}`);
-        candidates.push(`gid://shopify/Product/${rawStr}`);
-      }
-
-      for (const candidate of candidates) {
-        try {
-          const res: any = await query(NODE_RESOLVE_QUERY, { variables: { id: candidate } });
-          const node = res?.data?.node;
-
-          if (node?.__typename === "ProductVariant" && node?.id) {
-            if (!cancelled) {
-              setGiftVariantGid(node.id);
-              if (node?.product?.title) setGiftTitle(node.product.title);
-              setGiftAvailable(typeof node?.availableForSale === 'boolean' ? node.availableForSale : null);
+            if (node?.__typename === "ProductVariant" && node?.id) {
+              return {
+                ...base,
+                variantGid: node.id,
+                title: node?.product?.title ?? null,
+                image: node?.image?.url ?? node?.product?.featuredImage?.url ?? null,
+                price:
+                  node?.price?.amount != null
+                    ? formatMoney(node.price.amount, node.price.currencyCode || activeCurrency)
+                    : null,
+                available:
+                  typeof node?.availableForSale === "boolean" ? node.availableForSale : null,
+              };
             }
-            return;
-          }
 
-          if (node?.__typename === "Product") {
-            const first = node?.variants?.nodes?.find((v: any) => v?.id);
-            if (first?.id) {
-              if (!cancelled) {
-                setGiftVariantGid(first.id);
-                if (node?.title) setGiftTitle(node.title);
-                setGiftAvailable(typeof first?.availableForSale === 'boolean' ? first.availableForSale : null);
+            if (node?.__typename === "Product") {
+              const first = node?.variants?.nodes?.find((v: any) => v?.id);
+              if (first?.id) {
+                return {
+                  ...base,
+                  variantGid: first.id,
+                  title: node?.title ?? null,
+                  image: first?.image?.url ?? node?.featuredImage?.url ?? null,
+                  price:
+                    first?.price?.amount != null
+                      ? formatMoney(first.price.amount, first.price.currencyCode || activeCurrency)
+                      : null,
+                  available:
+                    typeof first?.availableForSale === "boolean" ? first.availableForSale : null,
+                };
               }
-              return;
             }
+          } catch (_e) {
+            // keep trying next candidate
           }
-        } catch (_e) {
-          // keep trying next candidate
         }
-      }
+        return base;
+      };
 
-      // If we reach here, resolution failed.
-      if (!cancelled) {
-        setGiftVariantGid(null);
-        setGiftTitle(null);
-        setGiftAvailable(null);
+      const resolved = await Promise.all(optionIds.map((id) => resolveOne(id)));
+      if (cancelled) return;
+      setResolvedOptions(resolved);
+      if (!resolved.some((o) => o.variantGid)) {
         setBanner({
           status: "critical",
-          message: "Could not resolve a variant ID from the provided product_id. Please provide a ProductVariant ID or a Product ID that has variants.",
+          message:
+            "Could not resolve a variant ID from the provided gift product(s). Please provide a ProductVariant ID or a Product ID that has variants.",
         });
       }
     }
 
-    resolveGiftVariant();
+    resolveOptions();
     return () => {
       cancelled = true;
     };
-  }, [query, config.product_id]);
+  }, [query, JSON.stringify(optionIds), activeCurrency]);
+
+  // For a single option, pin the selection to it. For multi, honour the
+  // customer's pick, defaulting to whichever option is already in the cart
+  // (e.g. after a page reload).
+  const effectiveSelectedId = useMemo(() => {
+    if (!isMultiOption) return resolvedOptions[0]?.productId ?? null;
+    if (selectedProductId && resolvedOptions.some((o) => o.productId === selectedProductId)) {
+      return selectedProductId;
+    }
+    const inCart = resolvedOptions.find(
+      (o) => o.variantGid && lines.some((l) => l.merchandise.id === o.variantGid),
+    );
+    return inCart?.productId ?? null;
+  }, [isMultiOption, resolvedOptions, selectedProductId, lines]);
+
+  const selectedOption = useMemo(
+    () => resolvedOptions.find((o) => o.productId === effectiveSelectedId) ?? null,
+    [resolvedOptions, effectiveSelectedId],
+  );
+
+  // The rest of the component operates on "the selected gift", so the existing
+  // single-gift machinery keeps working for both single and multi offers.
+  const giftVariantGid = selectedOption?.variantGid ?? null;
+  const giftTitle = selectedOption?.title ?? null;
+  const giftAvailable = selectedOption?.available ?? null;
+
+  // Every option's variant id, for detecting/removing whichever gift is in cart.
+  const optionVariantGids = useMemo(
+    () => new Set(resolvedOptions.map((o) => o.variantGid).filter(Boolean) as string[]),
+    [resolvedOptions],
+  );
+
+  // Is any of this offer's gift options currently in the cart?
+  const anyGiftOptionInCart = useMemo(
+    () => lines.some((l) => optionVariantGids.has(l.merchandise.id)),
+    [lines, optionVariantGids],
+  );
 
   // Build an array of variant IDs from cart
   const variantIds = useMemo(() => lines.map((l) => l.merchandise.id), [lines]);
@@ -683,10 +795,11 @@ function renderTemplate(tpl: string, vars: Record<string, string>) {
     return lines.some((l) => l.merchandise.id === giftVariantGid);
   }, [lines, giftVariantGid]);
 
-  // Utility: remove gift line if present
+  // Utility: remove any of this offer's gift lines if present. Targets every
+  // gift option (not just the selected one) so a previously-picked gift is
+  // cleaned up when the customer becomes ineligible or swaps their choice.
 async function removeGiftIfPresent() {
-  if (!giftVariantGid) return;
-  const giftLines = lines.filter((l) => l.merchandise.id === giftVariantGid);
+  const giftLines = lines.filter((l) => optionVariantGids.has(l.merchandise.id));
   if (giftLines.length === 0) return;
   for (const gl of giftLines) {
     const result = await applyCartLinesChange({
@@ -1156,6 +1269,8 @@ const messageText = config.banner_message_before
   }, []);
 
   useBuyerJourneyIntercept(({canBlockProgress}) => {
+    // Manual / multi-option gifts are optional: never block checkout for them.
+    if (!autoAdd) return {behavior: 'allow'};
     if (interceptDisabled) return {behavior: 'allow'};
     if (!canBlockProgress) return {behavior: 'allow'};
     if (!config.enabled || !offerActive) return {behavior: 'allow'};
@@ -1186,15 +1301,21 @@ const messageText = config.banner_message_before
   // Transient failures (network blip, race with another cart mutation) are
   // the most common cause of customers being left without their gift and
   // then blocked by the validation function with no path forward.
-  async function tryAddGift(sourceLabel: string): Promise<{ ok: boolean; message?: string }> {
-    if (!giftVariantGid) return { ok: false, message: "Gift variant not resolved" };
+  async function tryAddGift(
+    sourceLabel: string,
+    variantGidArg?: string | null,
+    titleArg?: string | null,
+  ): Promise<{ ok: boolean; message?: string }> {
+    const variantGid = variantGidArg ?? giftVariantGid;
+    const title = titleArg ?? giftTitle;
+    if (!variantGid) return { ok: false, message: "Gift variant not resolved" };
     const payload = {
       type: "addCartLine" as const,
-      merchandiseId: giftVariantGid,
+      merchandiseId: variantGid,
       quantity: 1,
       attributes: [
         { key: "_promo", value: "true" },
-        { key: "_type", value: renderTemplate(config.admin_title || "", { title: giftTitle || "" }) },
+        { key: "_type", value: renderTemplate(config.admin_title || "", { title: title || "" }) },
         { key: "_source", value: sourceLabel },
         { key: "Promo", value: config.cart_message || "" },
       ],
@@ -1237,6 +1358,61 @@ const messageText = config.banner_message_before
       } else {
         const successMsg = config.banner_message_after
           ? renderTemplate(config.banner_message_after, { title: giftTitle || "your free gift" })
+          : "Your free gift has been added.";
+        setBanner({ status: "success", message: successMsg } as any);
+      }
+    } finally {
+      addInFlight.current = false;
+      setManualAdding(false);
+    }
+  }
+
+  // Manual / multi pick: the customer chose a specific gift option. Records the
+  // selection, removes any other option already in the cart (a swap), then adds
+  // the chosen one. Used both for single manual-add and "pick one of N" offers.
+  async function selectGiftOption(productId: string) {
+    const opt = resolvedOptions.find((o) => o.productId === productId);
+    if (!opt || !opt.variantGid) return;
+    if (manualAdding || addInFlight.current) return;
+    setSelectedProductId(productId);
+    setManualAdding(true);
+    addInFlight.current = true;
+    try {
+      // Remove any previously-picked option (swap to the new choice).
+      for (const l of lines) {
+        if (optionVariantGids.has(l.merchandise.id) && l.merchandise.id !== opt.variantGid) {
+          const removed = await applyCartLinesChange({
+            type: "updateCartLine",
+            id: l.id,
+            quantity: 0,
+          });
+          if ((removed as any)?.type === "error") {
+            setBanner({
+              status: "critical",
+              message: (removed as any)?.message ?? "Failed to update gift",
+            });
+            return;
+          }
+        }
+      }
+      // Already in cart after the swap pass? Nothing more to do.
+      if (lines.some((l) => l.merchandise.id === opt.variantGid)) {
+        const successMsg = config.banner_message_after
+          ? renderTemplate(config.banner_message_after, { title: opt.title || "your free gift" })
+          : "Your free gift has been added.";
+        setBanner({ status: "success", message: successMsg } as any);
+        return;
+      }
+      const result = await tryAddGift(
+        "Checkout Gift With Purchase (pick)",
+        opt.variantGid,
+        opt.title,
+      );
+      if (!result.ok) {
+        setBanner({ status: "critical", message: result.message ?? "Failed to add gift" });
+      } else {
+        const successMsg = config.banner_message_after
+          ? renderTemplate(config.banner_message_after, { title: opt.title || "your free gift" })
           : "Your free gift has been added.";
         setBanner({ status: "success", message: successMsg } as any);
       }
@@ -1296,10 +1472,12 @@ const messageText = config.banner_message_before
     banner.code !== 'region'
   );
 
-  // Show the manual button whenever the customer could be eligible, the
-  // gift isn't in cart, the variant resolved, and either the auto-add has
-  // been stuck for several seconds or an add error has surfaced.
+  // Show the manual fallback button (auto mode only) whenever the customer could
+  // be eligible, the gift isn't in cart, the variant resolved, and either the
+  // auto-add has been stuck for several seconds or an add error has surfaced.
+  // Manual / multi offers have their own deliberate chooser UI instead.
   const showManualAddButton = Boolean(
+    autoAdd &&
     couldBeEligible &&
     !isGiftInCart &&
     giftVariantGid &&
@@ -1321,8 +1499,10 @@ const messageText = config.banner_message_before
       })();
       return;
     }
-    // Guard: if customer qualifies and gift isn't in cart yet, but the variant hasn't resolved, wait.
-    if (qualification.qualifies && !isGiftInCart && !giftVariantGid) {
+    // Guard: in auto mode, if the customer qualifies and the gift isn't in cart
+    // yet but the variant hasn't resolved, wait. (In manual/multi mode an
+    // unresolved/unselected gift is normal - the chooser UI handles it.)
+    if (autoAdd && qualification.qualifies && !isGiftInCart && !giftVariantGid) {
       // Soft info message avoids misleading critical banner titles
       setBanner({ status: "info", message: "Preparing your gift…" } as any);
       return;
@@ -1360,34 +1540,39 @@ const messageText = config.banner_message_before
 
       // 3) If trigger qualifies, ensure gift is added; otherwise, remove it
       if (qualification.qualifies) {
-        // If gift already in cart (e.g., after reload), show success immediately
-        if (isGiftInCart) {
+        // If a gift is already in cart (e.g., after reload), show success.
+        if (anyGiftOptionInCart) {
           const successMsg = config.banner_message_after
             ? renderTemplate(config.banner_message_after, { title: giftTitle || "your free gift" })
             : "Your free gift has been added.";
           setBanner({ status: "success", message: successMsg } as any);
           return;
         }
-        if (!isGiftInCart) {
-          if (!giftVariantGid) {
-            setBanner({ status: "critical", message: "Gift variant is not resolved yet. Please try again." });
-            return;
+        // Manual / multi-option: don't auto-add. Clear any stale banner and let
+        // the chooser UI prompt the customer to add or pick a gift.
+        if (!autoAdd) {
+          setBanner(null);
+          return;
+        }
+        // Auto mode (single gift): add it for the customer.
+        if (!giftVariantGid) {
+          setBanner({ status: "critical", message: "Gift variant is not resolved yet. Please try again." });
+          return;
+        }
+        if (addInFlight.current) return;
+        addInFlight.current = true;
+        try {
+          const result = await tryAddGift("Checkout Gift With Purchase");
+          if (!result.ok) {
+            setBanner({ status: "critical", message: result.message ?? "Failed to add gift" });
+          } else {
+            const successMsg = config.banner_message_after
+              ? renderTemplate(config.banner_message_after, { title: giftTitle || "your free gift" })
+              : "Your free gift has been added.";
+            setBanner({ status: "success", message: successMsg } as any);
           }
-          if (addInFlight.current) return;
-          addInFlight.current = true;
-          try {
-            const result = await tryAddGift("Checkout Gift With Purchase");
-            if (!result.ok) {
-              setBanner({ status: "critical", message: result.message ?? "Failed to add gift" });
-            } else {
-              const successMsg = config.banner_message_after
-                ? renderTemplate(config.banner_message_after, { title: giftTitle || "your free gift" })
-                : "Your free gift has been added.";
-              setBanner({ status: "success", message: successMsg } as any);
-            }
-          } finally {
-            addInFlight.current = false;
-          }
+        } finally {
+          addInFlight.current = false;
         }
       } else {
         await removeGiftIfPresent();
@@ -1397,7 +1582,7 @@ const messageText = config.banner_message_before
 
     // Fire and forget (sequential inside)
     void syncGift();
-  }, [tagsLoading, redemptionGuardSettled, effectiveHasRedeemed, shippingOk, taggedSpend, isGiftInCart, giftVariantGid, giftAvailable, adjustedGoal, offerActive, qualification.qualifies]);
+  }, [tagsLoading, redemptionGuardSettled, effectiveHasRedeemed, shippingOk, taggedSpend, isGiftInCart, anyGiftOptionInCart, autoAdd, giftVariantGid, giftAvailable, adjustedGoal, offerActive, qualification.qualifies]);
 
   // (Optional) show fetch error
   // {tagsError ? <Text size="small">Tag fetch error</Text> : null}
@@ -1423,7 +1608,30 @@ const messageText = config.banner_message_before
   const showStatusBanner = Boolean(
     offerActive && banner && (banner.status === 'success' ? config.show_success_banner : config.show_banners)
   );
-  if (!showProgressBanner && !showStatusBanner && !showManualAddButton && !config.show_testing_information) return null;
+
+  // Manual / multi offers prompt the customer to add or pick their gift once
+  // they qualify. `definitelyEligible` already folds in qualification, region,
+  // redemption and validity checks, so this only shows when it should.
+  const giftChooserEligible = Boolean(
+    !autoAdd && offerActive && definitelyEligible && resolvedOptions.some((o) => o.variantGid)
+  );
+  // Single manual gift: an optional "add it" button until it's in the cart.
+  const showSingleManualAdd = Boolean(
+    giftChooserEligible && !isMultiOption && !anyGiftOptionInCart
+  );
+  // Pick one of N: cards stay visible while qualifying so the customer can also
+  // switch their choice after adding one.
+  const showMultiChooser = Boolean(giftChooserEligible && isMultiOption);
+
+  if (
+    !showProgressBanner &&
+    !showStatusBanner &&
+    !showManualAddButton &&
+    !showSingleManualAdd &&
+    !showMultiChooser &&
+    !config.show_testing_information
+  )
+    return null;
 
   // Render a small debug/status UI
   return (
@@ -1489,6 +1697,100 @@ const messageText = config.banner_message_before
             <Button kind="primary" onPress={addGiftManually} loading={manualAdding}>
               {manualAdding ? "Adding…" : `Add free ${giftTitle || "gift"} to cart`}
             </Button>
+          </BlockStack>
+        </Banner>
+      ) : null}
+
+      {/* Single manual gift: an optional button to add the earned gift. The
+          customer can ignore it and still check out (manual = optional). */}
+      {showSingleManualAdd ? (
+        <Banner status="info" title={bannerTitleAfter || "Your free gift"}>
+          <BlockStack spacing="tight">
+            {config.label ? (
+              <InlineStack inlineAlignment="start">
+                <Badge tone="default" size="small">{config.label}</Badge>
+              </InlineStack>
+            ) : null}
+            <Text>
+              You've earned a free {selectedOption?.title || "gift"}. Add it to your order:
+            </Text>
+            <Button
+              kind="primary"
+              loading={manualAdding}
+              disabled={giftAvailable === false}
+              onPress={() => effectiveSelectedId && selectGiftOption(effectiveSelectedId)}
+            >
+              {manualAdding ? "Adding…" : `Add free ${selectedOption?.title || "gift"}`}
+            </Button>
+          </BlockStack>
+        </Banner>
+      ) : null}
+
+      {/* Pick one of N: product cards, one Select per option. Selecting swaps
+          the cart line. Cards stay visible after a pick so the customer can
+          change their mind. */}
+      {showMultiChooser ? (
+        <Banner
+          status={anyGiftOptionInCart ? "success" : "info"}
+          title={anyGiftOptionInCart ? bannerTitleAfter : "Choose your free gift"}
+        >
+          <BlockStack spacing="base">
+            {config.label ? (
+              <InlineStack inlineAlignment="start">
+                <Badge tone="default" size="small">{config.label}</Badge>
+              </InlineStack>
+            ) : null}
+            <Text>
+              {anyGiftOptionInCart
+                ? "Tap another option to switch your free gift."
+                : "You've earned a free gift. Choose one:"}
+            </Text>
+            {resolvedOptions.map((opt) => {
+              if (!opt.variantGid) return null;
+              const inCart = lines.some((l) => l.merchandise.id === opt.variantGid);
+              const isSelected = effectiveSelectedId === opt.productId && inCart;
+              const soldOut = opt.available === false;
+              const pending = manualAdding && selectedProductId === opt.productId;
+              return (
+                <BlockStack
+                  key={opt.productId}
+                  border="base"
+                  cornerRadius="base"
+                  padding="base"
+                  spacing="tight"
+                >
+                  <InlineStack spacing="base" blockAlignment="center">
+                    {opt.image ? (
+                      <View maxInlineSize={64}>
+                        <Image
+                          source={opt.image}
+                          accessibilityDescription={opt.title || "Free gift"}
+                          border="base"
+                          cornerRadius="base"
+                        />
+                      </View>
+                    ) : null}
+                    <BlockStack spacing="none">
+                      <Text emphasis="bold">{opt.title || "Gift"}</Text>
+                      {opt.price ? <Text appearance="subdued">{opt.price}</Text> : null}
+                      {soldOut ? <Text appearance="critical">Sold out</Text> : null}
+                    </BlockStack>
+                  </InlineStack>
+                  <Button
+                    kind={isSelected ? "secondary" : "primary"}
+                    disabled={soldOut || isSelected}
+                    loading={pending}
+                    onPress={() => selectGiftOption(opt.productId)}
+                  >
+                    {isSelected
+                      ? "Selected"
+                      : anyGiftOptionInCart
+                        ? "Choose this instead"
+                        : "Select"}
+                  </Button>
+                </BlockStack>
+              );
+            })}
           </BlockStack>
         </Banner>
       ) : null}

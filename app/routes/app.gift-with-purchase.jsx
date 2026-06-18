@@ -104,17 +104,26 @@ export const loader = async ({ request }) => {
     updatedAt: row.updatedAt.toISOString(),
   }));
 
+  const toThumbnailGid = (value) => {
+    if (value == null || value === "") return null;
+    const raw = String(value).trim();
+    if (raw.startsWith("gid://shopify/Product/")) return raw;
+    if (raw.startsWith("gid://")) return null; // variant gid - skip thumbnail
+    if (/^\d+$/.test(raw)) return `gid://shopify/Product/${raw}`;
+    return null;
+  };
   const productGids = Array.from(
     new Set(
       saved.flatMap((row) => {
         try {
           const parsed = JSON.parse(row.configJson);
-          if (parsed.product_id == null || parsed.product_id === "") return [];
-          const raw = String(parsed.product_id).trim();
-          if (raw.startsWith("gid://shopify/Product/")) return [raw];
-          if (raw.startsWith("gid://")) return []; // variant gid - skip thumbnail
-          if (/^\d+$/.test(raw)) return [`gid://shopify/Product/${raw}`];
-          return [];
+          const ids = [parsed.product_id];
+          if (Array.isArray(parsed.gift_options)) {
+            for (const opt of parsed.gift_options) {
+              ids.push(opt && typeof opt === "object" ? opt.product_id : opt);
+            }
+          }
+          return ids.map(toThumbnailGid).filter(Boolean);
         } catch {
           return [];
         }
@@ -328,10 +337,15 @@ const INITIAL_BUILDER = {
   product_tag: "",
   min_spend: emptyMinSpend(),
   min_spend_currency: "AUD",
+  add_mode: "auto",
   product_id: "",
   product_title: "",
   product_image: "",
   product_price: "",
+  // Additional gift products. When one or more are set, the offer becomes a
+  // "pick one of N" gift (primary + extras) shown as cards in checkout, and the
+  // customer must choose one (always manual, regardless of add_mode).
+  extra_gift_options: [],
   shipping_countries: "all",
   customer_redeemed_tag: "",
   eligibility: "all",
@@ -362,6 +376,7 @@ function buildConfig(state) {
     redemption_type: state.redemption_type,
     show_banners: state.show_banners,
     show_success_banner: state.show_success_banner,
+    add_mode: state.add_mode === "manual" ? "manual" : "auto",
   };
   if (state.label.trim()) config.label = state.label.trim();
   if (state.admin_title.trim()) config.admin_title = state.admin_title.trim();
@@ -380,11 +395,25 @@ function buildConfig(state) {
     }
     config.min_spend_currency = state.min_spend_currency;
   }
-  const productIdNum = Number(state.product_id);
-  if (state.product_id.trim() && !Number.isNaN(productIdNum)) {
-    config.product_id = productIdNum;
-  } else if (state.product_id.trim()) {
-    config.product_id = state.product_id.trim();
+  const coerceProductId = (raw) => {
+    const str = String(raw ?? "").trim();
+    if (!str) return null;
+    const num = Number(str);
+    return !Number.isNaN(num) ? num : str;
+  };
+  const primaryId = coerceProductId(state.product_id);
+  if (primaryId != null) config.product_id = primaryId;
+  // Build the full gift-option set (primary + extras). Only emit gift_options
+  // when there's more than one distinct gift, so single-gift configs stay clean.
+  const extraIds = (Array.isArray(state.extra_gift_options) ? state.extra_gift_options : [])
+    .map((o) => coerceProductId(o?.product_id))
+    .filter((id) => id != null);
+  const allGiftIds = [primaryId, ...extraIds].filter((id) => id != null);
+  const uniqueGiftIds = allGiftIds.filter(
+    (id, i) => allGiftIds.findIndex((x) => String(x) === String(id)) === i,
+  );
+  if (uniqueGiftIds.length > 1) {
+    config.gift_options = uniqueGiftIds.map((id) => ({ product_id: id }));
   }
   if (state.shipping_countries.trim()) {
     config.shipping_countries = state.shipping_countries.trim();
@@ -467,10 +496,26 @@ function builderFromConfig(c) {
     product_tag: c.product_tag ?? "",
     min_spend,
     min_spend_currency: c.min_spend_currency ?? "AUD",
-    product_id: c.product_id != null ? String(c.product_id) : "",
+    add_mode: c.add_mode === "manual" ? "manual" : "auto",
+    product_id:
+      c.product_id != null
+        ? String(c.product_id)
+        : Array.isArray(c.gift_options) && c.gift_options[0]
+          ? String(c.gift_options[0].product_id ?? c.gift_options[0])
+          : "",
     product_title: "",
     product_image: "",
     product_price: "",
+    // gift_options[0] is the primary gift (mirrors config.product_id); the rest
+    // are the extra options. Hydrate just the extras here.
+    extra_gift_options: Array.isArray(c.gift_options)
+      ? c.gift_options.slice(1).map((o) => ({
+          product_id: String((o && typeof o === "object" ? o.product_id : o) ?? ""),
+          product_title: "",
+          product_image: "",
+          product_price: "",
+        }))
+      : [],
     shipping_countries: c.shipping_countries ?? "all",
     customer_redeemed_tag: c.customer_redeemed_tag ?? "",
     eligibility:
@@ -605,6 +650,56 @@ export default function GiftWithPurchasePage() {
       product_price: priceAmount ? `$${Number(priceAmount).toFixed(2)}` : "",
     }));
   };
+
+  const pickExtraGiftOptions = async () => {
+    const selection = await shopify.resourcePicker({
+      type: "product",
+      multiple: true,
+      action: "select",
+      filter: { variants: false, archived: false },
+    });
+    if (!selection || selection.length === 0) return;
+    const primaryId = String(builder.product_id || "").trim();
+    const mapped = selection.map((product) => {
+      const image =
+        product.images?.[0]?.originalSrc ||
+        product.images?.[0]?.src ||
+        product.images?.[0]?.url ||
+        "";
+      const rawPrice = product.variants?.[0]?.price;
+      const priceAmount =
+        typeof rawPrice === "string" ? rawPrice : rawPrice?.amount ?? "";
+      return {
+        product_id: extractNumericId(product.id),
+        product_title: product.title,
+        product_image: image,
+        product_price: priceAmount ? `$${Number(priceAmount).toFixed(2)}` : "",
+      };
+    });
+    setBuilder((prev) => {
+      const existing = Array.isArray(prev.extra_gift_options)
+        ? prev.extra_gift_options
+        : [];
+      const seen = new Set(
+        [primaryId, ...existing.map((o) => String(o.product_id))].filter(Boolean),
+      );
+      const additions = mapped.filter((o) => {
+        const id = String(o.product_id);
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+      return { ...prev, extra_gift_options: [...existing, ...additions] };
+    });
+  };
+
+  const removeExtraGiftOption = (productId) =>
+    setBuilder((prev) => ({
+      ...prev,
+      extra_gift_options: (prev.extra_gift_options || []).filter(
+        (o) => String(o.product_id) !== String(productId),
+      ),
+    }));
 
   const loadSaved = useCallback(
     (row) => {
@@ -765,6 +860,21 @@ export default function GiftWithPurchasePage() {
                       checked={builder.show_success_banner}
                       onChange={(v) => update("show_success_banner", v)}
                       helpText="Show the success banner after the gift is added. Independent of 'Show banners'."
+                    />
+
+                    <Select
+                      label="Add to cart behavior"
+                      options={[
+                        { label: "Auto-add (added automatically)", value: "auto" },
+                        { label: "Manual (customer taps to add)", value: "manual" },
+                      ]}
+                      value={builder.add_mode}
+                      onChange={(v) => update("add_mode", v === "manual" ? "manual" : "auto")}
+                      helpText={
+                        builder.extra_gift_options.length > 0
+                          ? "Ignored while there are multiple gift options - the customer always picks one and adds it manually."
+                          : "Auto-add drops the gift in the cart as soon as the customer qualifies and blocks checkout until it's there. Manual shows an optional 'Add gift' button the customer can skip."
+                      }
                     />
 
                     <Select
@@ -938,6 +1048,73 @@ export default function GiftWithPurchasePage() {
                       placeholder="e.g. 7612341846150"
                       helpText="Numeric Shopify product ID (the gift added to cart). Pick via Select product to preview image, title and price."
                     />
+
+                    <Divider />
+                    <Text as="h3" variant="headingSm">
+                      More gift options (customer picks one)
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Add extra products to let the customer choose one free gift
+                      from several. The gift above is the first option. With two
+                      or more options the customer always picks one in checkout
+                      (the Add to cart behavior setting is ignored).
+                    </Text>
+                    <InlineStack gap="300" blockAlign="center" wrap={false}>
+                      <Button onClick={pickExtraGiftOptions}>Add gift options</Button>
+                      {builder.extra_gift_options.length === 0 ? (
+                        <Text as="span" variant="bodyMd" tone="subdued">
+                          No extra options (single gift)
+                        </Text>
+                      ) : null}
+                    </InlineStack>
+                    {builder.extra_gift_options.length > 0 ? (
+                      <BlockStack gap="200">
+                        {builder.extra_gift_options.map((opt) => {
+                          const numericId =
+                            String(opt.product_id).match(/\/(\d+)$/)?.[1] ??
+                            String(opt.product_id);
+                          const info = numericId ? productInfo[numericId] : undefined;
+                          const title = opt.product_title || info?.title || "";
+                          const image = opt.product_image || info?.imageUrl || "";
+                          const price = opt.product_price || info?.price || "";
+                          return (
+                            <InlineStack
+                              key={opt.product_id}
+                              gap="300"
+                              blockAlign="center"
+                              align="space-between"
+                              wrap={false}
+                            >
+                              <InlineStack gap="300" blockAlign="center" wrap={false}>
+                                {image ? (
+                                  <Thumbnail source={image} alt={title || "Gift"} size="small" />
+                                ) : null}
+                                <BlockStack gap="050">
+                                  <Text as="span" variant="bodyMd" fontWeight="semibold">
+                                    {title || "Product"}
+                                  </Text>
+                                  {price ? (
+                                    <Text as="span" variant="bodySm">
+                                      {price}
+                                    </Text>
+                                  ) : null}
+                                  <Text as="span" variant="bodySm" tone="subdued">
+                                    ID: {opt.product_id}
+                                  </Text>
+                                </BlockStack>
+                              </InlineStack>
+                              <Button
+                                tone="critical"
+                                variant="tertiary"
+                                onClick={() => removeExtraGiftOption(opt.product_id)}
+                              >
+                                Remove
+                              </Button>
+                            </InlineStack>
+                          );
+                        })}
+                      </BlockStack>
+                    ) : null}
 
                     <Divider />
                     <Text as="h3" variant="headingSm">

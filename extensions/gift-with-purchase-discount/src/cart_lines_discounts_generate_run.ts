@@ -18,7 +18,11 @@ interface OfferConfig {
   // Minimum cart subtotal per ISO currency code (AUD, NZD, USD, CAD, GBP, EUR, AED).
   thresholds?: Record<string, number>;
   // The gift product. Any variant of this product in the cart is discounted.
+  // Kept for backward-compat with older configs; `productIds` is the full set.
   productId?: string | null;
+  // All gift products this offer can hand out (the customer-picks-one set). Any
+  // variant of any of these in the cart is discounted. Only one is ever present.
+  productIds?: string[];
   // Optional explicit variant allow-list (used when only a variant gid is known).
   variantIds?: string[];
   // Discount label shown in checkout/order summaries.
@@ -108,22 +112,30 @@ export function cartLinesDiscountsGenerateRun(
       if (!Number.isFinite(qualifyingSubtotal) || qualifyingSubtotal < threshold) continue;
     }
 
-    const productId = config.productId || undefined;
+    // Gift products this offer can hand out: the full `productIds` set, falling
+    // back to the legacy single `productId` for older configs.
+    const productIds = new Set(
+      Array.isArray(config.productIds) && config.productIds.length
+        ? config.productIds
+        : config.productId
+          ? [config.productId]
+          : [],
+    );
     const variantIds = new Set(
       Array.isArray(config.variantIds) ? config.variantIds : [],
     );
-    if (!productId && variantIds.size === 0) continue;
+    if (productIds.size === 0 && variantIds.size === 0) continue;
 
-    // Find every cart line that is this offer's gift.
+    // Find every cart line that is one of this offer's gifts.
     const targets = input.cart.lines
       .filter((line) => {
         const merchandise = line.merchandise;
         if (!('id' in merchandise)) return false;
         if (variantIds.has(merchandise.id)) return true;
         return Boolean(
-          productId &&
-            'product' in merchandise &&
-            merchandise.product?.id === productId,
+          'product' in merchandise &&
+            merchandise.product?.id &&
+            productIds.has(merchandise.product.id),
         );
       })
       .map((line) => ({cartLine: {id: line.id}}));
