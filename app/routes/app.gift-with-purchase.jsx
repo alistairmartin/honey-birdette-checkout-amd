@@ -296,6 +296,8 @@ const DEFAULT_COPY = {
   banner_message_before: "Spend {{ remaining }} more to get a FREE {{ title }}.",
   banner_title_after: "You scored a free gift!",
   banner_message_after: "We added your free {{ title }} to your cart.",
+  banner_title_added: "Your gift is in your cart",
+  banner_message_added: "Your {{ title }} is in your cart and your discount is applied.",
   banner_title_redeemed: "You've already redeemed your {{ free_gift }}.",
   banner_message_redeemed: "Sorry, you've already redeemed. One per customer.",
   banner_title_region: "Sorry, this gift isn't available in your region.",
@@ -362,6 +364,8 @@ const INITIAL_BUILDER = {
   banner_message_before: DEFAULT_COPY.banner_message_before,
   banner_title_after: DEFAULT_COPY.banner_title_after,
   banner_message_after: DEFAULT_COPY.banner_message_after,
+  banner_title_added: DEFAULT_COPY.banner_title_added,
+  banner_message_added: DEFAULT_COPY.banner_message_added,
   banner_title_redeemed: DEFAULT_COPY.banner_title_redeemed,
   banner_message_redeemed: DEFAULT_COPY.banner_message_redeemed,
   banner_title_region: DEFAULT_COPY.banner_title_region,
@@ -459,6 +463,8 @@ function buildConfig(state) {
   if (state.banner_message_before) config.banner_message_before = state.banner_message_before;
   if (state.banner_title_after) config.banner_title_after = state.banner_title_after;
   if (state.banner_message_after) config.banner_message_after = state.banner_message_after;
+  if (state.banner_title_added) config.banner_title_added = state.banner_title_added;
+  if (state.banner_message_added) config.banner_message_added = state.banner_message_added;
   if (state.banner_title_redeemed) config.banner_title_redeemed = state.banner_title_redeemed;
   if (state.banner_message_redeemed) config.banner_message_redeemed = state.banner_message_redeemed;
   if (state.banner_title_region) config.banner_title_region = state.banner_title_region;
@@ -539,6 +545,8 @@ function builderFromConfig(c) {
     banner_message_before: c.banner_message_before ?? "",
     banner_title_after: c.banner_title_after ?? "",
     banner_message_after: c.banner_message_after ?? "",
+    banner_title_added: c.banner_title_added ?? "",
+    banner_message_added: c.banner_message_added ?? "",
     banner_title_redeemed: c.banner_title_redeemed ?? "",
     banner_message_redeemed: c.banner_message_redeemed ?? "",
     banner_title_region: c.banner_title_region ?? "",
@@ -1032,23 +1040,6 @@ export default function GiftWithPurchasePage() {
                         </InlineStack>
                       );
                     })()}
-                    <TextField
-                      label="Or paste a product ID"
-                      value={builder.product_id}
-                      onChange={(v) => {
-                        setBuilder((prev) => ({
-                          ...prev,
-                          product_id: v,
-                          product_title: "",
-                          product_image: "",
-                          product_price: "",
-                        }));
-                      }}
-                      autoComplete="off"
-                      placeholder="e.g. 7612341846150"
-                      helpText="Numeric Shopify product ID (the gift added to cart). Pick via Select product to preview image, title and price."
-                    />
-
                     <Divider />
                     <Text as="h3" variant="headingSm">
                       More gift options (customer picks one)
@@ -1293,7 +1284,13 @@ export default function GiftWithPurchasePage() {
 
                     <Divider />
                     <Text as="h3" variant="headingSm">
-                      Banner copy - after unlocked
+                      Banner copy - unlocked (gift not yet in cart)
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Shown once the customer qualifies. For manual / pick-one
+                      offers this is the prompt next to the Add button, so word it
+                      as the offer (e.g. &quot;Add Luna to your cart to receive 50%
+                      off&quot;).
                     </Text>
                     <TextField
                       label="Title"
@@ -1307,6 +1304,29 @@ export default function GiftWithPurchasePage() {
                       onChange={(v) => update("banner_message_after", v)}
                       autoComplete="off"
                       multiline={2}
+                    />
+
+                    <Divider />
+                    <Text as="h3" variant="headingSm">
+                      Banner copy - gift added to cart
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Shown once the gift is in the cart - the confirmation state.
+                      Leave blank to reuse the &quot;unlocked&quot; copy above.
+                    </Text>
+                    <TextField
+                      label="Title"
+                      value={builder.banner_title_added}
+                      onChange={(v) => update("banner_title_added", v)}
+                      autoComplete="off"
+                    />
+                    <TextField
+                      label="Message"
+                      value={builder.banner_message_added}
+                      onChange={(v) => update("banner_message_added", v)}
+                      autoComplete="off"
+                      multiline={2}
+                      helpText="Supports {{ title }} (gift product name)."
                     />
 
                     <Divider />

@@ -486,6 +486,10 @@ const config = useMemo(() => {
     banner_message_before: String(cfg.banner_message_before || "").trim(),
     banner_title_after: String(cfg.banner_title_after || "").trim(),
     banner_message_after: String(cfg.banner_message_after || "").trim(),
+    // Distinct "gift is now in the cart" confirmation state. Falls back to the
+    // unlocked/after copy when blank so older configs are unaffected.
+    banner_title_added: String(cfg.banner_title_added || "").trim(),
+    banner_message_added: String(cfg.banner_message_added || "").trim(),
     banner_title_redeemed: String(cfg.banner_title_redeemed || "").trim(),
     banner_message_redeemed: String(cfg.banner_message_redeemed || "").trim(),
     banner_title_region: String(cfg.banner_title_region || "").trim(),
@@ -1239,8 +1243,28 @@ async function removeGiftIfPresent() {
   };
   const bannerTitleBefore = renderTemplate(config.banner_title_before || "You're close!", titleVars);
   const bannerTitleAfter = renderTemplate(config.banner_title_after || "Gift with purchase", titleVars);
+  // Confirmation title once the gift is in the cart. Falls back to the unlocked
+  // title so older configs (no "added" copy) keep their previous wording.
+  const bannerTitleAdded = renderTemplate(
+    config.banner_title_added || config.banner_title_after || "Gift with purchase",
+    titleVars,
+  );
   const bannerTitleRedeemed = renderTemplate(config.banner_title_redeemed || "Gift with purchase", titleVars);
   const bannerTitleRegion = renderTemplate(config.banner_title_region || "Gift with purchase", titleVars);
+
+  // Whether the gift is fully free (100% off) vs a partial / purchase-with-
+  // purchase deal - drives "Add free X" vs "Add X" CTA wording.
+  const giftIsFree = Number(config.discount_percentage ?? 100) >= 100;
+
+  // Confirmation copy shown once the gift is in the cart. Prefers the dedicated
+  // "added" message, then the unlocked/after copy, then a sensible default.
+  const addedSuccessMessage = (title?: string) => {
+    const tpl =
+      config.banner_message_added ||
+      config.banner_message_after ||
+      (giftIsFree ? "Your free gift has been added." : "Your gift has been added.");
+    return renderTemplate(tpl, { title: title || giftTitle || (giftIsFree ? "your free gift" : "your gift") });
+  };
 
 // Build the offer message text using the template if provided
 const messageText = config.banner_message_before
@@ -1633,6 +1657,19 @@ const messageText = config.banner_message_before
   )
     return null;
 
+  // Small product thumbnail shown alongside the gift copy at every step.
+  const giftThumb = (url: string | null | undefined, size = 64) =>
+    url ? (
+      <View maxInlineSize={size}>
+        <Image
+          source={url}
+          accessibilityDescription={giftTitle || "Free gift"}
+          border="base"
+          cornerRadius="base"
+        />
+      </View>
+    ) : null;
+
   // Render a small debug/status UI
   return (
     <BlockStack {...(config.show_testing_information ? { border: "dotted", padding: "tight" } : {})}>
@@ -1645,26 +1682,29 @@ const messageText = config.banner_message_before
           the gift adds and this banner is replaced by the success banner). */}
       {showProgressBanner ? (
         <Banner status="info" title={bannerTitleBefore}>
-          <BlockStack spacing="tight">
-            {config.label ? (
-              <InlineStack inlineAlignment="start">
-                <Badge tone="default" size="small">
-                  {config.label}
-                </Badge>
-              </InlineStack>
-            ) : null}
-            <ProgressBar
-              percent={config.trigger_type === "min_spend" ? progressPercent : (qualification.qualifies ? 100 : 0)}
-            />
-            <InlineStack spacing="base" wrap={false} inlineAlignment="start" blockAlignment="center">
-              <Text>{messageText}</Text>
-              {config.button_url ? (
-                <Button to={String(config.button_url)} kind="primary" target="new">
-                  {config.button_text || "Go to collection"}
-                </Button>
+          <InlineStack spacing="base" blockAlignment="center">
+            {giftThumb(resolvedOptions[0]?.image, 72)}
+            <BlockStack spacing="tight">
+              {config.label ? (
+                <InlineStack inlineAlignment="start">
+                  <Badge tone="default" size="small">
+                    {config.label}
+                  </Badge>
+                </InlineStack>
               ) : null}
-            </InlineStack>
-          </BlockStack>
+              <ProgressBar
+                percent={config.trigger_type === "min_spend" ? progressPercent : (qualification.qualifies ? 100 : 0)}
+              />
+              <InlineStack spacing="base" wrap={false} inlineAlignment="start" blockAlignment="center">
+                <Text>{messageText}</Text>
+                {config.button_url ? (
+                  <Button to={String(config.button_url)} kind="primary" target="new">
+                    {config.button_text || "Go to collection"}
+                  </Button>
+                ) : null}
+              </InlineStack>
+            </BlockStack>
+          </InlineStack>
         </Banner>
       ) : null}
 
@@ -1681,7 +1721,14 @@ const messageText = config.banner_message_before
             bannerTitleRedeemed
           }
         >
-          {banner.message}
+          {banner.status === 'success' && selectedOption?.image ? (
+            <InlineStack spacing="base" blockAlignment="center">
+              {giftThumb(selectedOption.image, 64)}
+              <Text>{banner.message}</Text>
+            </InlineStack>
+          ) : (
+            banner.message
+          )}
         </Banner>
       ) : null}
 
@@ -1695,7 +1742,7 @@ const messageText = config.banner_message_before
               We couldn't add your free {giftTitle || "gift"} automatically. Tap the button to add it now.
             </Text>
             <Button kind="primary" onPress={addGiftManually} loading={manualAdding}>
-              {manualAdding ? "Adding…" : `Add free ${giftTitle || "gift"} to cart`}
+              {(manualAdding ? "Adding…" : `Add free ${giftTitle || "gift"} to cart`).toUpperCase()}
             </Button>
           </BlockStack>
         </Banner>
@@ -1711,16 +1758,19 @@ const messageText = config.banner_message_before
                 <Badge tone="default" size="small">{config.label}</Badge>
               </InlineStack>
             ) : null}
-            <Text>
-              You've earned a free {selectedOption?.title || "gift"}. Add it to your order:
-            </Text>
+            <InlineStack spacing="base" blockAlignment="center">
+              {giftThumb(selectedOption?.image, 64)}
+              <Text>
+                You've earned a free {selectedOption?.title || "gift"}. Add it to your order:
+              </Text>
+            </InlineStack>
             <Button
               kind="primary"
               loading={manualAdding}
               disabled={giftAvailable === false}
               onPress={() => effectiveSelectedId && selectGiftOption(effectiveSelectedId)}
             >
-              {manualAdding ? "Adding…" : `Add free ${selectedOption?.title || "gift"}`}
+              {(manualAdding ? "Adding…" : `Add free ${selectedOption?.title || "gift"}`).toUpperCase()}
             </Button>
           </BlockStack>
         </Banner>
@@ -1782,11 +1832,12 @@ const messageText = config.banner_message_before
                     loading={pending}
                     onPress={() => selectGiftOption(opt.productId)}
                   >
-                    {isSelected
+                    {(isSelected
                       ? "Selected"
                       : anyGiftOptionInCart
                         ? "Choose this instead"
-                        : "Select"}
+                        : "Select"
+                    ).toUpperCase()}
                   </Button>
                 </BlockStack>
               );
