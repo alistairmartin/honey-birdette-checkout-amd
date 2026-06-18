@@ -1258,7 +1258,7 @@ async function removeGiftIfPresent() {
 
   // Confirmation copy shown once the gift is in the cart. Prefers the dedicated
   // "added" message, then the unlocked/after copy, then a sensible default.
-  const addedSuccessMessage = (title?: string) => {
+  const addedSuccessMessage = (title?: string | null) => {
     const tpl =
       config.banner_message_added ||
       config.banner_message_after ||
@@ -1309,7 +1309,7 @@ const messageText = config.banner_message_before
       reason: 'Eligible free gift not yet added to cart',
       errors: [
         {
-          message: 'Our website elves are checking for free gifts...',
+          message: 'Checking for eligible gifts...',
         },
       ],
     };
@@ -1380,10 +1380,7 @@ const messageText = config.banner_message_before
       if (!result.ok) {
         setBanner({ status: "critical", message: result.message ?? "Failed to add gift" });
       } else {
-        const successMsg = config.banner_message_after
-          ? renderTemplate(config.banner_message_after, { title: giftTitle || "your free gift" })
-          : "Your free gift has been added.";
-        setBanner({ status: "success", message: successMsg } as any);
+        setBanner({ status: "success", message: addedSuccessMessage() } as any);
       }
     } finally {
       addInFlight.current = false;
@@ -1421,9 +1418,7 @@ const messageText = config.banner_message_before
       }
       // Already in cart after the swap pass? Nothing more to do.
       if (lines.some((l) => l.merchandise.id === opt.variantGid)) {
-        const successMsg = config.banner_message_after
-          ? renderTemplate(config.banner_message_after, { title: opt.title || "your free gift" })
-          : "Your free gift has been added.";
+        const successMsg = addedSuccessMessage(opt.title);
         setBanner({ status: "success", message: successMsg } as any);
         return;
       }
@@ -1435,9 +1430,7 @@ const messageText = config.banner_message_before
       if (!result.ok) {
         setBanner({ status: "critical", message: result.message ?? "Failed to add gift" });
       } else {
-        const successMsg = config.banner_message_after
-          ? renderTemplate(config.banner_message_after, { title: opt.title || "your free gift" })
-          : "Your free gift has been added.";
+        const successMsg = addedSuccessMessage(opt.title);
         setBanner({ status: "success", message: successMsg } as any);
       }
     } finally {
@@ -1566,10 +1559,7 @@ const messageText = config.banner_message_before
       if (qualification.qualifies) {
         // If a gift is already in cart (e.g., after reload), show success.
         if (anyGiftOptionInCart) {
-          const successMsg = config.banner_message_after
-            ? renderTemplate(config.banner_message_after, { title: giftTitle || "your free gift" })
-            : "Your free gift has been added.";
-          setBanner({ status: "success", message: successMsg } as any);
+          setBanner({ status: "success", message: addedSuccessMessage() } as any);
           return;
         }
         // Manual / multi-option: don't auto-add. Clear any stale banner and let
@@ -1590,10 +1580,7 @@ const messageText = config.banner_message_before
           if (!result.ok) {
             setBanner({ status: "critical", message: result.message ?? "Failed to add gift" });
           } else {
-            const successMsg = config.banner_message_after
-              ? renderTemplate(config.banner_message_after, { title: giftTitle || "your free gift" })
-              : "Your free gift has been added.";
-            setBanner({ status: "success", message: successMsg } as any);
+            setBanner({ status: "success", message: addedSuccessMessage() } as any);
           }
         } finally {
           addInFlight.current = false;
@@ -1715,7 +1702,7 @@ const messageText = config.banner_message_before
           status={banner.status}
           title={
             banner.code === 'sold_out' ? renderTemplate(config.banner_title_sold_out || 'Sold out', titleVars) :
-            banner.status === 'success' ? bannerTitleAfter :
+            banner.status === 'success' ? bannerTitleAdded :
             banner.status === 'warning' ? bannerTitleRegion :
             banner.status === 'info' ? bannerTitleBefore :
             bannerTitleRedeemed
@@ -1761,7 +1748,12 @@ const messageText = config.banner_message_before
             <InlineStack spacing="base" blockAlignment="center">
               {giftThumb(selectedOption?.image, 64)}
               <Text>
-                You've earned a free {selectedOption?.title || "gift"}. Add it to your order:
+                {config.banner_message_after
+                  ? renderTemplate(config.banner_message_after, {
+                      title: selectedOption?.title || (giftIsFree ? "your free gift" : "your gift"),
+                      remaining: formatMoney(remaining, activeCurrency),
+                    })
+                  : `You've earned ${giftIsFree ? "a free " : ""}${selectedOption?.title || "gift"}. Add it to your order:`}
               </Text>
             </InlineStack>
             <Button
@@ -1770,7 +1762,9 @@ const messageText = config.banner_message_before
               disabled={giftAvailable === false}
               onPress={() => effectiveSelectedId && selectGiftOption(effectiveSelectedId)}
             >
-              {(manualAdding ? "Adding…" : `Add free ${selectedOption?.title || "gift"}`).toUpperCase()}
+              {(manualAdding
+                ? "Adding…"
+                : `Add ${giftIsFree ? "free " : ""}${selectedOption?.title || "gift"}`).toUpperCase()}
             </Button>
           </BlockStack>
         </Banner>
@@ -1782,7 +1776,7 @@ const messageText = config.banner_message_before
       {showMultiChooser ? (
         <Banner
           status={anyGiftOptionInCart ? "success" : "info"}
-          title={anyGiftOptionInCart ? bannerTitleAfter : "Choose your free gift"}
+          title={anyGiftOptionInCart ? bannerTitleAdded : "Choose your free gift"}
         >
           <BlockStack spacing="base">
             {config.label ? (
