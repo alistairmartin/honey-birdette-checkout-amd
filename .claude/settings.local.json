@@ -22,7 +22,9 @@
       "Bash(tar -tzf /tmp/shopify-ui-extensions-2026.4.0-rc.3.tgz)",
       "Bash(tar -xzf /tmp/shopify-ui-extensions-2026.4.0-rc.3.tgz -C /tmp/)",
       "Read(//tmp/package/build/**)",
-      "Bash(npx esbuild *)"
+      "Bash(npx esbuild *)",
+      "Bash(grep -nA15 \"CartLineTarget\\\\|ProductDiscountCandidateTarget\\\\|input.*Target\" extensions/gift-with-purchase-discount/schema.graphql)",
+      "Bash(echo \"=== exit $? ===\")"
     ]
   }
 }

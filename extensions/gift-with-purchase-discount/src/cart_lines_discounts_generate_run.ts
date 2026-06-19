@@ -91,7 +91,7 @@ export function cartLinesDiscountsGenerateRun(
 
   const candidates: Array<{
     message: string;
-    targets: Array<{cartLine: {id: string}}>;
+    targets: Array<{cartLine: {id: string; quantity?: number}}>;
     value: {percentage: {value: number}};
   }> = [];
 
@@ -101,15 +101,6 @@ export function cartLinesDiscountsGenerateRun(
     const percentage = Number(config.discount_percentage ?? 100);
     if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100) {
       continue;
-    }
-
-    // Min-spend offers gate on the per-currency subtotal threshold. If there is
-    // no threshold for the buyer's currency, the offer doesn't run in that market.
-    const trigger = String(config.trigger_type || 'min_spend');
-    if (trigger === 'min_spend') {
-      const threshold = config.thresholds?.[currencyCode];
-      if (typeof threshold !== 'number' || threshold <= 0) continue;
-      if (!Number.isFinite(qualifyingSubtotal) || qualifyingSubtotal < threshold) continue;
     }
 
     // Gift products this offer can hand out: the full `productIds` set, falling
@@ -126,25 +117,54 @@ export function cartLinesDiscountsGenerateRun(
     );
     if (productIds.size === 0 && variantIds.size === 0) continue;
 
-    // Find every cart line that is one of this offer's gifts.
-    const targets = input.cart.lines
-      .filter((line) => {
-        const merchandise = line.merchandise;
-        if (!('id' in merchandise)) return false;
-        if (variantIds.has(merchandise.id)) return true;
-        return Boolean(
-          'product' in merchandise &&
-            merchandise.product?.id &&
-            productIds.has(merchandise.product.id),
-        );
-      })
-      .map((line) => ({cartLine: {id: line.id}}));
+    // Every cart line that is one of this offer's gifts.
+    const giftLines = input.cart.lines.filter((line) => {
+      const merchandise = line.merchandise;
+      if (!('id' in merchandise)) return false;
+      if (variantIds.has(merchandise.id)) return true;
+      return Boolean(
+        'product' in merchandise &&
+          merchandise.product?.id &&
+          productIds.has(merchandise.product.id),
+      );
+    });
+    if (!giftLines.length) continue;
 
-    if (!targets.length) continue;
+    // Min-spend offers gate on the per-currency subtotal threshold. If there is
+    // no threshold for the buyer's currency, the offer doesn't run in that market.
+    const trigger = String(config.trigger_type || 'min_spend');
+    if (trigger === 'min_spend') {
+      const threshold = config.thresholds?.[currencyCode];
+      if (typeof threshold !== 'number' || threshold <= 0) continue;
+      // The gift's own value must NOT help unlock its discount: the customer has
+      // to spend the threshold on other products first. Subtract this offer's
+      // gift lines from the qualifying subtotal (gift cards are already removed).
+      const giftLinesTotal = giftLines.reduce((sum, line) => {
+        const amt = Number(line.cost?.subtotalAmount?.amount || 0);
+        return sum + (Number.isFinite(amt) ? amt : 0);
+      }, 0);
+      const eligibleSpend = qualifyingSubtotal - giftLinesTotal;
+      if (!Number.isFinite(eligibleSpend) || eligibleSpend < threshold) continue;
+    }
+
+    // Discount only ONE unit of the gift, even if the customer added several
+    // (or added more than one gift option). Pick the highest unit-price gift
+    // line so they get the best value on the single discounted item.
+    let bestLine = giftLines[0];
+    let bestUnit = -Infinity;
+    for (const line of giftLines) {
+      const sub = Number(line.cost?.subtotalAmount?.amount || 0);
+      const qty = Number(line.quantity || 1) || 1;
+      const unit = sub / qty;
+      if (Number.isFinite(unit) && unit > bestUnit) {
+        bestUnit = unit;
+        bestLine = line;
+      }
+    }
 
     candidates.push({
       message: config.message || `${percentage}% off`,
-      targets,
+      targets: [{cartLine: {id: bestLine.id, quantity: 1}}],
       value: {percentage: {value: percentage}},
     });
   }
