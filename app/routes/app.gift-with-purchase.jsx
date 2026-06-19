@@ -292,6 +292,7 @@ export const action = async ({ request }) => {
 
 const DEFAULT_COPY = {
   admin_title: "{{ free_gift }} GWP - {{ trigger_type }}",
+  banner_subtitle: "",
   banner_title_before: "You're close!",
   banner_message_before: "Spend {{ remaining }} more to get a FREE {{ title }}.",
   banner_title_after: "You scored a free gift!",
@@ -360,6 +361,7 @@ const INITIAL_BUILDER = {
   valid_to: "",
   button_url: "",
   button_text: "",
+  banner_subtitle: DEFAULT_COPY.banner_subtitle,
   banner_title_before: DEFAULT_COPY.banner_title_before,
   banner_message_before: DEFAULT_COPY.banner_message_before,
   banner_title_after: DEFAULT_COPY.banner_title_after,
@@ -459,6 +461,7 @@ function buildConfig(state) {
   }
   if (state.button_url.trim()) config.button_url = state.button_url.trim();
   if (state.button_text.trim()) config.button_text = state.button_text.trim();
+  if (state.banner_subtitle) config.banner_subtitle = state.banner_subtitle;
   if (state.banner_title_before) config.banner_title_before = state.banner_title_before;
   if (state.banner_message_before) config.banner_message_before = state.banner_message_before;
   if (state.banner_title_after) config.banner_title_after = state.banner_title_after;
@@ -541,6 +544,7 @@ function builderFromConfig(c) {
     valid_to: dateTimePartsToLocal(c.valid_date_till, c.valid_time_till),
     button_url: c.button_url ?? "",
     button_text: c.button_text ?? "",
+    banner_subtitle: c.banner_subtitle ?? "",
     banner_title_before: c.banner_title_before ?? "",
     banner_message_before: c.banner_message_before ?? "",
     banner_title_after: c.banner_title_after ?? "",
@@ -1267,6 +1271,13 @@ export default function GiftWithPurchasePage() {
                     <Text as="h3" variant="headingSm">
                       Banner copy - before unlocked
                     </Text>
+                    <TextField
+                      label="Subtitle"
+                      value={builder.banner_subtitle}
+                      onChange={(v) => update("banner_subtitle", v)}
+                      autoComplete="off"
+                      helpText="Optional line shown under the section heading across all states (subdued, like the recommendations subtitle). Blank = hidden."
+                    />
                     <TextField
                       label="Title"
                       value={builder.banner_title_before}

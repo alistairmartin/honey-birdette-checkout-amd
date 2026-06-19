@@ -24,7 +24,13 @@
       "Read(//tmp/package/build/**)",
       "Bash(npx esbuild *)",
       "Bash(grep -nA15 \"CartLineTarget\\\\|ProductDiscountCandidateTarget\\\\|input.*Target\" extensions/gift-with-purchase-discount/schema.graphql)",
-      "Bash(echo \"=== exit $? ===\")"
+      "Bash(echo \"=== exit $? ===\")",
+      "Bash(/Users/alistairmartin/.asdf/installs/nodejs/20.17.0/bin/shopify version *)",
+      "Bash(/opt/homebrew/bin/shopify version *)",
+      "Read(//Users/alistairmartin/**)"
+    ],
+    "additionalDirectories": [
+      "/Users/alistairmartin"
     ]
   }
 }

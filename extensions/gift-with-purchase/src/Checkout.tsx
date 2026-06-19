@@ -2,10 +2,13 @@ import React, {useEffect, useMemo, useRef, useState} from "react";
 import {
   reactExtension,
   Banner,
+  Badge,
   BlockStack,
+  Heading,
   Text,
   Button,
   InlineStack,
+  InlineLayout,
   Image,
   View,
   Progress,
@@ -320,6 +323,8 @@ type ResolvedGiftOption = {
   title: string | null;
   image: string | null;
   price: string | null; // pre-formatted in the active currency
+  priceAmount: number | null; // raw amount, for computing the discounted price
+  priceCurrency: string | null;
   available: boolean | null;
 };
 
@@ -378,15 +383,39 @@ function ProgressBar({percent}: {percent: number}) {
 // square it up to match the storefront tag, so we render our own bordered View
 // with square corners instead. Wrapped in an InlineStack so it shrinks to its
 // content rather than stretching the full row width.
-function SquareLabel({children}: {children: string}) {
+// Small inline pill used to flag the offer (e.g. "LIMITED OFFER"). Uses the
+// native Badge component, left-aligned so it hugs its content.
+function OfferBadge({children}: {children: string}) {
   return (
     <InlineStack inlineAlignment="start">
-      <View border="base" cornerRadius="none" padding="extraTight">
-        <Text size="small" emphasis="bold">
-          {children}
-        </Text>
-      </View>
+      <Badge>{children}</Badge>
     </InlineStack>
+  );
+}
+
+// Lightweight section wrapper used instead of Banner for the offer states.
+// Mirrors the checkout recommendations header: an uppercase heading with an
+// optional subdued subtitle beneath it, over the offer content. No banner
+// chrome or status icon.
+function Section({
+  title,
+  subtitle,
+  children,
+}: {
+  title?: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <BlockStack spacing="base">
+      {title || subtitle ? (
+        <BlockStack spacing="tight">
+          {title ? <Heading>{title.toUpperCase()}</Heading> : null}
+          {subtitle ? <Text appearance="subdued">{subtitle}</Text> : null}
+        </BlockStack>
+      ) : null}
+      {children}
+    </BlockStack>
   );
 }
 
@@ -506,6 +535,10 @@ const config = useMemo(() => {
 
     banner_title_before: String(cfg.banner_title_before || "").trim(),
     banner_message_before: String(cfg.banner_message_before || "").trim(),
+    // Optional subtitle shown directly under the section heading, styled to
+    // match the checkout recommendations subtitle (subdued text under the
+    // heading). Blank = no subtitle line.
+    banner_subtitle: String(cfg.banner_subtitle || "").trim(),
     banner_title_after: String(cfg.banner_title_after || "").trim(),
     banner_message_after: String(cfg.banner_message_after || "").trim(),
     // Distinct "gift is now in the cart" confirmation state. Falls back to the
@@ -647,6 +680,8 @@ function renderTemplate(tpl: string, vars: Record<string, string>) {
           title: null,
           image: null,
           price: null,
+          priceAmount: null,
+          priceCurrency: null,
           available: null,
         };
 
@@ -678,6 +713,8 @@ function renderTemplate(tpl: string, vars: Record<string, string>) {
                   node?.price?.amount != null
                     ? formatMoney(node.price.amount, node.price.currencyCode || activeCurrency)
                     : null,
+                priceAmount: node?.price?.amount != null ? Number(node.price.amount) : null,
+                priceCurrency: node?.price?.currencyCode || activeCurrency,
                 available:
                   typeof node?.availableForSale === "boolean" ? node.availableForSale : null,
               };
@@ -695,6 +732,8 @@ function renderTemplate(tpl: string, vars: Record<string, string>) {
                     first?.price?.amount != null
                       ? formatMoney(first.price.amount, first.price.currencyCode || activeCurrency)
                       : null,
+                  priceAmount: first?.price?.amount != null ? Number(first.price.amount) : null,
+                  priceCurrency: first?.price?.currencyCode || activeCurrency,
                   available:
                     typeof first?.availableForSale === "boolean" ? first.availableForSale : null,
                 };
@@ -1687,6 +1726,81 @@ const messageText = config.banner_message_before
       </View>
     ) : null;
 
+  // Honey Club-style offer card: a single bordered row with the gift preview
+  // (thumbnail + bold title + subdued descriptor) on the left and the action
+  // button pinned to the right, vertically centred. Shared across every offer
+  // state so the GWP banners read like the loyalty "rewards" cards.
+  const OfferCard = ({
+    image,
+    title,
+    subtitle,
+    price,
+    button,
+    imageSize = 64,
+  }: {
+    image?: string | null;
+    title?: React.ReactNode;
+    subtitle?: React.ReactNode;
+    price?: React.ReactNode;
+    button?: React.ReactNode;
+    imageSize?: number;
+  }) => {
+    // Lay the row out as columns so the button is pushed flush to the right
+    // edge (no empty gap beside it): [thumb?] [content fills] [button?].
+    const columns: ("auto" | "fill")[] = [];
+    const cells: React.ReactNode[] = [];
+    if (image) {
+      columns.push("auto");
+      cells.push(<View key="thumb">{giftThumb(image, imageSize)}</View>);
+    }
+    columns.push("fill");
+    cells.push(
+      <BlockStack key="content" spacing="none">
+        {title ? (
+          <Heading>{typeof title === "string" ? title.toUpperCase() : title}</Heading>
+        ) : null}
+        {subtitle ? <Text appearance="subdued">{subtitle}</Text> : null}
+        {price || null}
+      </BlockStack>,
+    );
+    if (button) {
+      columns.push("auto");
+      cells.push(<View key="action">{button}</View>);
+    }
+    return (
+      <View border="base" cornerRadius="base" padding="base">
+        <InlineLayout columns={columns} spacing="base" blockAlignment="center">
+          {cells}
+        </InlineLayout>
+      </View>
+    );
+  };
+
+  // Discounted gift pricing. The customer pays the configured % off the product
+  // price; we show that post-discount price prominently with the full price
+  // beside it as the compare-at reference. (Checkout Text has no strikethrough,
+  // so the original renders subdued rather than struck through.)
+  const giftPrice = (
+    opt?: {priceAmount?: number | null; priceCurrency?: string | null} | null,
+  ): React.ReactNode => {
+    if (!opt || opt.priceAmount == null) return null;
+    const currency = opt.priceCurrency || activeCurrency;
+    const pct = Math.max(0, Math.min(100, Number(config.discount_percentage ?? 100)));
+    const discounted = opt.priceAmount * (1 - pct / 100);
+    return (
+      <InlineStack spacing="tight" blockAlignment="center">
+        <Text emphasis="bold">
+          {discounted <= 0 ? "FREE" : formatMoney(discounted, currency)}
+        </Text>
+        {pct > 0 ? (
+          <Text appearance="subdued" accessibilityRole="deletion">
+            {formatMoney(opt.priceAmount, currency)}
+          </Text>
+        ) : null}
+      </InlineStack>
+    );
+  };
+
   // Render a small debug/status UI
   return (
     <BlockStack {...(config.show_testing_information ? { border: "dotted", padding: "tight" } : {})}>
@@ -1698,31 +1812,32 @@ const messageText = config.banner_message_before
           bar reads 0% until the qualifying item is in the cart (at which point
           the gift adds and this banner is replaced by the success banner). */}
       {showProgressBanner ? (
-        <Banner status="info" title={bannerTitleBefore}>
-          <InlineStack spacing="base" blockAlignment="center">
-            {giftThumb(resolvedOptions[0]?.image, 72)}
-            <BlockStack spacing="tight">
-              {config.label ? <SquareLabel>{config.label}</SquareLabel> : null}
-              <ProgressBar
-                percent={config.trigger_type === "min_spend" ? progressPercent : (qualification.qualifies ? 100 : 0)}
-              />
-              {messageText || config.button_url ? (
-                <InlineStack spacing="base" inlineAlignment="start" blockAlignment="center">
-                  {messageText ? (
-                    <View inlineSize="fill">
-                      <Text>{messageText}</Text>
-                    </View>
-                  ) : null}
-                  {config.button_url ? (
-                    <Button to={String(config.button_url)} kind="primary" target="new">
-                      {config.button_text || "Go to collection"}
-                    </Button>
-                  ) : null}
-                </InlineStack>
-              ) : null}
-            </BlockStack>
-          </InlineStack>
-        </Banner>
+        <Section title={bannerTitleBefore} subtitle={config.banner_subtitle}>
+          {config.label ? <OfferBadge>{config.label}</OfferBadge> : null}
+          <BlockStack spacing="tight">
+            <ProgressBar
+              percent={config.trigger_type === "min_spend" ? progressPercent : (qualification.qualifies ? 100 : 0)}
+            />
+            {config.trigger_type === "min_spend" && remaining > 0 ? (
+              <Text size="small" appearance="subdued">
+                Spend {formatMoney(remaining, activeCurrency)} more
+              </Text>
+            ) : null}
+          </BlockStack>
+          <OfferCard
+            image={resolvedOptions[0]?.image}
+            title={resolvedOptions[0]?.title || giftTitle || "Your free gift"}
+            subtitle={messageText || (giftIsFree ? "Free item included" : undefined)}
+            price={giftPrice(resolvedOptions[0])}
+            button={
+              config.button_url ? (
+                <Button to={String(config.button_url)} kind="primary" target="new">
+                  {config.button_text || "Go to collection"}
+                </Button>
+              ) : undefined
+            }
+          />
+        </Section>
       ) : null}
 
       {/* Existing status banner from logic (success / warning / critical).
@@ -1739,10 +1854,12 @@ const messageText = config.banner_message_before
           }
         >
           {banner.status === 'success' && selectedOption?.image ? (
-            <InlineStack spacing="base" blockAlignment="center">
-              {giftThumb(selectedOption.image, 64)}
-              {banner.message ? <Text>{banner.message}</Text> : null}
-            </InlineStack>
+            <OfferCard
+              image={selectedOption.image}
+              title={selectedOption.title || giftTitle || "Your free gift"}
+              subtitle={banner.message || (giftIsFree ? "Free item included" : undefined)}
+              price={giftPrice(selectedOption)}
+            />
           ) : (
             banner.message || null
           )}
@@ -1754,41 +1871,42 @@ const messageText = config.banner_message_before
           button to add it themselves so they can still complete checkout. */}
       {showManualAddButton ? (
         <Banner status="warning" title="Add your free gift">
-          <InlineStack spacing="base" blockAlignment="center">
-            <View inlineSize="fill">
-              <Text>
-                We couldn't add your free {giftTitle || "gift"} automatically. Tap the button to add it now.
-              </Text>
-            </View>
-            <Button kind="primary" onPress={addGiftManually} loading={manualAdding}>
-              {(manualAdding ? "Adding…" : "Add").toUpperCase()}
-            </Button>
-          </InlineStack>
+          <OfferCard
+            image={selectedOption?.image}
+            title={giftTitle || "Your free gift"}
+            subtitle={`We couldn't add your free ${giftTitle || "gift"} automatically. Tap the button to add it now.`}
+            price={giftPrice(selectedOption)}
+            button={
+              <Button kind="primary" onPress={addGiftManually} loading={manualAdding}>
+                {(manualAdding ? "Adding…" : "Add").toUpperCase()}
+              </Button>
+            }
+          />
         </Banner>
       ) : null}
 
       {/* Single manual gift: an optional button to add the earned gift. The
           customer can ignore it and still check out (manual = optional). */}
       {showSingleManualAdd ? (
-        <Banner status="info" title={bannerTitleAfter || "Your free gift"}>
-          <BlockStack spacing="tight">
-            {config.label ? <SquareLabel>{config.label}</SquareLabel> : null}
-            {/* Honey Club-style layout: copy in a bordered box on the left, a
-                short button on the right, instead of a long full-width CTA. */}
-            <InlineStack spacing="base" blockAlignment="center">
-              <View inlineSize="fill" border="base" cornerRadius="none" padding="base">
-                <InlineStack spacing="base" blockAlignment="center">
-                  {giftThumb(selectedOption?.image, 64)}
-                  {config.banner_message_after ? (
-                    <Text>
-                      {renderTemplate(config.banner_message_after, {
-                        title: selectedOption?.title || (giftIsFree ? "your free gift" : "your gift"),
-                        remaining: formatMoney(remaining, activeCurrency),
-                      })}
-                    </Text>
-                  ) : null}
-                </InlineStack>
-              </View>
+        <Section title={bannerTitleAfter || "Your free gift"} subtitle={config.banner_subtitle}>
+          {/* Honey Club-style layout: gift preview + descriptor on the left, a
+              short action button on the right, instead of a full-width CTA. */}
+          {config.label ? <OfferBadge>{config.label}</OfferBadge> : null}
+          <OfferCard
+            image={selectedOption?.image}
+            title={selectedOption?.title || giftTitle || "Your free gift"}
+            subtitle={
+              config.banner_message_after
+                ? renderTemplate(config.banner_message_after, {
+                    title: selectedOption?.title || (giftIsFree ? "your free gift" : "your gift"),
+                    remaining: formatMoney(remaining, activeCurrency),
+                  })
+                : giftIsFree
+                  ? "Free item included"
+                  : undefined
+            }
+            price={giftPrice(selectedOption)}
+            button={
               <Button
                 kind="primary"
                 loading={manualAdding}
@@ -1797,75 +1915,60 @@ const messageText = config.banner_message_before
               >
                 {(manualAdding ? "Adding…" : "Add").toUpperCase()}
               </Button>
-            </InlineStack>
-          </BlockStack>
-        </Banner>
+            }
+          />
+        </Section>
       ) : null}
 
       {/* Pick one of N: product cards, one Select per option. Selecting swaps
           the cart line. Cards stay visible after a pick so the customer can
           change their mind. */}
       {showMultiChooser ? (
-        <Banner
-          status={anyGiftOptionInCart ? "success" : "info"}
-          title={anyGiftOptionInCart ? bannerTitleAdded : "Choose your free gift"}
-        >
-          <BlockStack spacing="base">
-            {config.label ? <SquareLabel>{config.label}</SquareLabel> : null}
-            <Text>
-              {anyGiftOptionInCart
-                ? "Tap another option to switch your free gift."
-                : "You've earned a free gift. Choose one:"}
-            </Text>
-            {resolvedOptions.map((opt) => {
+        <Section title={anyGiftOptionInCart ? bannerTitleAdded : "Choose your free gift"} subtitle={config.banner_subtitle}>
+          {config.label ? <OfferBadge>{config.label}</OfferBadge> : null}
+          <Text>
+            {anyGiftOptionInCart
+              ? "Tap another option to switch your free gift."
+              : "You've earned a free gift. Choose one:"}
+          </Text>
+          {resolvedOptions.map((opt) => {
               if (!opt.variantGid) return null;
               const inCart = lines.some((l) => l.merchandise.id === opt.variantGid);
               const isSelected = effectiveSelectedId === opt.productId && inCart;
               const soldOut = opt.available === false;
               const pending = manualAdding && selectedProductId === opt.productId;
               return (
-                <BlockStack
+                <OfferCard
                   key={opt.productId}
-                  border="base"
-                  cornerRadius="base"
-                  padding="base"
-                  spacing="tight"
-                >
-                  <InlineStack spacing="base" blockAlignment="center">
-                    {opt.image ? (
-                      <View maxInlineSize={64}>
-                        <Image
-                          source={opt.image}
-                          accessibilityDescription={opt.title || "Free gift"}
-                          border="base"
-                          cornerRadius="base"
-                        />
-                      </View>
-                    ) : null}
-                    <BlockStack spacing="none">
-                      <Text emphasis="bold">{opt.title || "Gift"}</Text>
-                      {opt.price ? <Text appearance="subdued">{opt.price}</Text> : null}
-                      {soldOut ? <Text appearance="critical">Sold out</Text> : null}
-                    </BlockStack>
-                  </InlineStack>
-                  <Button
-                    kind={isSelected ? "secondary" : "primary"}
-                    disabled={soldOut || isSelected}
-                    loading={pending}
-                    onPress={() => selectGiftOption(opt.productId)}
-                  >
-                    {(isSelected
-                      ? "Selected"
-                      : anyGiftOptionInCart
-                        ? "Choose this instead"
-                        : "Select"
-                    ).toUpperCase()}
-                  </Button>
-                </BlockStack>
+                  image={opt.image}
+                  title={opt.title || "Gift"}
+                  subtitle={
+                    soldOut ? (
+                      <Text appearance="critical">Sold out</Text>
+                    ) : giftIsFree ? (
+                      "Free item included"
+                    ) : undefined
+                  }
+                  price={soldOut ? undefined : giftPrice(opt)}
+                  button={
+                    <Button
+                      kind={isSelected ? "secondary" : "primary"}
+                      disabled={soldOut || isSelected}
+                      loading={pending}
+                      onPress={() => selectGiftOption(opt.productId)}
+                    >
+                      {(isSelected
+                        ? "Selected"
+                        : anyGiftOptionInCart
+                          ? "Choose this instead"
+                          : "Select"
+                      ).toUpperCase()}
+                    </Button>
+                  }
+                />
               );
             })}
-          </BlockStack>
-        </Banner>
+        </Section>
       ) : null}
 
     {config.show_testing_information ? (
