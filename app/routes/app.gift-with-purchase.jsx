@@ -1045,6 +1045,15 @@ export default function GiftWithPurchasePage() {
                                   ID: {builder.product_id}
                                 </Text>
                               </BlockStack>
+                              {numericId ? (
+                                <Button
+                                  url={`shopify://admin/products/${numericId}`}
+                                  target="_blank"
+                                  variant="plain"
+                                >
+                                  Open product
+                                </Button>
+                              ) : null}
                             </InlineStack>
                           ) : (
                             <Text as="span" variant="bodyMd" tone="subdued">

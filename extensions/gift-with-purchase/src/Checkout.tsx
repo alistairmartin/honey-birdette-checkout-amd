@@ -797,6 +797,16 @@ function renderTemplate(tpl: string, vars: Record<string, string>) {
   const giftTitle = selectedOption?.title ?? null;
   const giftAvailable = selectedOption?.available ?? null;
 
+  // The resolve effect has finished (it populates one entry per configured
+  // option). Until then we don't yet know whether the gift loads.
+  const optionsResolved = optionIds.length > 0 && resolvedOptions.length > 0;
+  // None of the configured gift products could be resolved to a buyable
+  // variant via the Storefront API - e.g. the product is a draft, unpublished
+  // to this sales channel, or the configured ID is wrong. Rather than show the
+  // customer a technical error, we hide the whole offer (see the render gate
+  // below). Still surfaced in testing mode so merchants can diagnose it.
+  const giftUnresolvable = optionsResolved && !resolvedOptions.some((o) => o.variantGid);
+
   // Every option's variant id, for detecting/removing whichever gift is in cart.
   const optionVariantGids = useMemo(
     () => new Set(resolvedOptions.map((o) => o.variantGid).filter(Boolean) as string[]),
@@ -1387,6 +1397,9 @@ const messageText = config.banner_message_before
     if (tagsLoading) return {behavior: 'allow'};
     if (!redemptionGuardSettled) return {behavior: 'allow'};
     if (effectiveHasRedeemed || !shippingOk || giftAvailable === false) return {behavior: 'allow'};
+    // Gift can't be loaded (draft / unpublished / bad ID): the offer is hidden,
+    // so never block checkout waiting for a gift that will never add.
+    if (giftUnresolvable) return {behavior: 'allow'};
     if (!qualification.qualifies) return {behavior: 'allow'};
     if (isGiftInCart) return {behavior: 'allow'};
 
@@ -1699,6 +1712,13 @@ const messageText = config.banner_message_before
   // Hide the component entirely when offer is inactive, unless debug is enabled
   if (!offerActive && !config.show_testing_information) return null;
 
+  // Hide the offer when its gift product can't be loaded (draft, unpublished to
+  // this sales channel, or a bad ID). The customer just sees no offer instead
+  // of a technical "couldn't resolve variant" error. Sold-out is intentionally
+  // NOT hidden here - it has its own merchant-configurable message. Still shown
+  // in testing mode so merchants can see the diagnostics and fix the config.
+  if (giftUnresolvable && !config.show_testing_information) return null;
+
   // Decide whether any visible content would render. If not, return null so the
   // component doesn't leave an empty bordered box in checkout.
   const showProgressBanner = Boolean(
@@ -1877,7 +1897,13 @@ const messageText = config.banner_message_before
             banner.status === 'success' ? bannerTitleAdded :
             banner.status === 'warning' ? bannerTitleRegion :
             banner.status === 'info' ? bannerTitleBefore :
-            bannerTitleRedeemed
+            // Only the genuine "already redeemed" critical state borrows the
+            // redeemed headline. Other critical errors (e.g. variant could not
+            // be resolved, generic add failures) carried no code and wrongly
+            // showed "You've already claimed this offer"; give them a neutral
+            // title instead.
+            banner.code === 'redeemed' ? bannerTitleRedeemed :
+            bannerTitleAfter
           }
         >
           {banner.status === 'success' && selectedOption?.image ? (
@@ -2003,6 +2029,16 @@ const messageText = config.banner_message_before
       <>
         {/* Optional: tiny diagnostics */}
         <Text size="small">Trigger type: {config.trigger_type} | Qualifies: {qualification.qualifies ? "yes" : "no"}</Text>
+        <Text size="small">
+          Gift option IDs (config): {optionIds.length ? optionIds.join(", ") : "-"}
+        </Text>
+        <Text size="small">
+          Gift resolve: {resolvedOptions.length === 0
+            ? "(resolving…)"
+            : resolvedOptions
+                .map((o) => `${o.productId} -> ${o.variantGid ? `${o.variantGid}${o.available === false ? " (sold out)" : ""}` : "UNRESOLVED"}`)
+                .join(" | ")}
+        </Text>
         {config.trigger_type === "subscription" ? (
           <Text size="small">Subscription line scan: {subscriptionDebug || "(no non-gift lines)"}</Text>
         ) : null}

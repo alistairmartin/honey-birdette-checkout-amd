@@ -18,7 +18,8 @@
       "Bash(npx --no-install tsc -p tsconfig.json --noEmit)",
       "Bash(grep -rA8 \"interface MetafieldRemoveCartChange\" extensions/checkout-recommendations/node_modules/@shopify/ui-extensions/build/ts)",
       "Bash(echo \"EXIT: $?\")",
-      "Bash(npx remix *)"
+      "Bash(npx remix *)",
+      "Bash(grep -n \"isMultiOption = \\\\|const couldBeEligible\\\\|Could not resolve a variant\\\\|if \\(\\\\s*$\\\\|!showProgressBanner\\\\|return null;\" src/Checkout.tsx)"
     ]
   }
 }
