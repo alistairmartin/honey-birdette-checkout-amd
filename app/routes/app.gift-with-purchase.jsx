@@ -341,6 +341,7 @@ const INITIAL_BUILDER = {
   min_spend: emptyMinSpend(),
   min_spend_currency: "AUD",
   add_mode: "auto",
+  auto_remove_gift: false,
   product_id: "",
   product_title: "",
   product_image: "",
@@ -383,6 +384,7 @@ function buildConfig(state) {
     show_banners: state.show_banners,
     show_success_banner: state.show_success_banner,
     add_mode: state.add_mode === "manual" ? "manual" : "auto",
+    auto_remove_gift: !!state.auto_remove_gift,
   };
   if (state.label.trim()) config.label = state.label.trim();
   if (state.admin_title.trim()) config.admin_title = state.admin_title.trim();
@@ -506,6 +508,7 @@ function builderFromConfig(c) {
     min_spend,
     min_spend_currency: c.min_spend_currency ?? "AUD",
     add_mode: c.add_mode === "manual" ? "manual" : "auto",
+    auto_remove_gift: c.auto_remove_gift === true,
     product_id:
       c.product_id != null
         ? String(c.product_id)
@@ -887,6 +890,13 @@ export default function GiftWithPurchasePage() {
                           ? "Ignored while there are multiple gift options - the customer always picks one and adds it manually."
                           : "Auto-add drops the gift in the cart as soon as the customer qualifies and blocks checkout until it's there. Manual shows an optional 'Add gift' button the customer can skip."
                       }
+                    />
+
+                    <Checkbox
+                      label="Auto-remove gift when not eligible"
+                      checked={builder.auto_remove_gift}
+                      onChange={(v) => update("auto_remove_gift", v)}
+                      helpText="When off (default), a gift product the customer added themselves stays in their cart even before they hit the threshold - so they can buy it outright or redeem it at the discount once they qualify. When on, the checkout strips the gift product whenever the customer isn't currently eligible. Gifts the app auto-added are always tidied up either way."
                     />
 
                     <Select

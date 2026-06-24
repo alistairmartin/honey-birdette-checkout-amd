@@ -407,7 +407,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <BlockStack spacing="base">
+    <BlockStack spacing="tight">
       {title || subtitle ? (
         <BlockStack spacing="tight">
           {title ? <Heading>{title.toUpperCase()}</Heading> : null}
@@ -492,6 +492,14 @@ const config = useMemo(() => {
     add_mode: (String(cfg.add_mode || "auto").toLowerCase() === "manual"
       ? "manual"
       : "auto") as "auto" | "manual",
+    // When true, the extension strips the gift product out of the cart whenever
+    // the customer isn't currently eligible (under threshold, redeemed, wrong
+    // region, sold out). Default false so a shopper who added the product
+    // themselves (e.g. buying it outright, or to redeem at a discount once they
+    // hit the threshold) keeps it in their cart. Note: gift lines the app itself
+    // added (carrying the `_promo` attribute) are always cleaned up regardless,
+    // so free-gift offers still tidy up after themselves.
+    auto_remove_gift: Boolean(cfg.auto_remove_gift),
     // The customer-picks-one set. The admin writes the primary gift as element 0
     // plus any extras; only present when there are 2+ options.
     gift_options: Array.isArray(cfg.gift_options)
@@ -863,8 +871,20 @@ function renderTemplate(tpl: string, vars: Record<string, string>) {
   // Utility: remove any of this offer's gift lines if present. Targets every
   // gift option (not just the selected one) so a previously-picked gift is
   // cleaned up when the customer becomes ineligible or swaps their choice.
+  //
+  // By default (auto_remove_gift off) we only remove lines the app itself added
+  // - those carry the `_promo=true` attribute we stamp on in tryAddGift. A line
+  // the shopper added themselves (same product, but no `_promo` attribute) is
+  // left in the cart so the checkout never yanks a product they chose to buy.
+  // With auto_remove_gift on, any line matching a gift variant is removed.
 async function removeGiftIfPresent() {
-  const giftLines = lines.filter((l) => optionVariantGids.has(l.merchandise.id));
+  const isPromoLine = (l: any) =>
+    Array.isArray(l?.attributes) &&
+    l.attributes.some((a: any) => a?.key === "_promo" && String(a?.value) === "true");
+  const giftLines = lines.filter((l) => {
+    if (!optionVariantGids.has(l.merchandise.id)) return false;
+    return config.auto_remove_gift || isPromoLine(l);
+  });
   if (giftLines.length === 0) return;
   for (const gl of giftLines) {
     const result = await applyCartLinesChange({
@@ -1737,6 +1757,7 @@ const messageText = config.banner_message_before
     price,
     button,
     imageSize = 64,
+    bordered = true,
   }: {
     image?: string | null;
     title?: React.ReactNode;
@@ -1744,6 +1765,10 @@ const messageText = config.banner_message_before
     price?: React.ReactNode;
     button?: React.ReactNode;
     imageSize?: number;
+    // When false, render the row without its own border/padding. Used inside the
+    // success Banner, which already supplies a bordered container - the extra
+    // OfferCard border there reads as a messy double box around the product.
+    bordered?: boolean;
   }) => {
     // Lay the row out as columns so the button is pushed flush to the right
     // edge (no empty gap beside it): [thumb?] [content fills] [button?].
@@ -1768,7 +1793,9 @@ const messageText = config.banner_message_before
       cells.push(<View key="action">{button}</View>);
     }
     return (
-      <View border="base" cornerRadius="base" padding="base">
+      <View
+        {...(bordered ? { border: "base", cornerRadius: "base", padding: "base" } : {})}
+      >
         <InlineLayout columns={columns} spacing="base" blockAlignment="center">
           {cells}
         </InlineLayout>
@@ -1855,6 +1882,7 @@ const messageText = config.banner_message_before
         >
           {banner.status === 'success' && selectedOption?.image ? (
             <OfferCard
+              bordered={false}
               image={selectedOption.image}
               title={selectedOption.title || giftTitle || "Your free gift"}
               subtitle={banner.message || (giftIsFree ? "Free item included" : undefined)}
