@@ -13,8 +13,10 @@ import {
   View,
   Progress,
   useApi,
+  useAttributes,
   useApplyCartLinesChange,
   useBuyerJourneyIntercept,
+  useCheckoutSettings,
   useExtensionEditor,
   useCartLines,
   useAppMetafields,
@@ -121,6 +123,24 @@ function parseTimeZoneFromMetafield(raw: unknown): string {
 // intercept, so multiple gifts run side by side without interfering.
 function Extension() {
   const { query, extension } = useApi();
+  // Hide the whole GWP block on draft-order checkouts (e.g. a merchant-created
+  // invoice). Draft orders have un-editable cart lines/discounts, so the gift
+  // auto-add and its buyer-journey block can't work; showing the offer would
+  // just confuse the buyer. `orderSubmission` is 'DRAFT_ORDER' vs 'ORDER'.
+  const checkoutSettings = useCheckoutSettings();
+  const isDraftOrder = checkoutSettings?.orderSubmission === "DRAFT_ORDER";
+  // Also hide on Honey List gift checkouts (Order A). Line items aren't exposed
+  // to extensions there (cart lines come back empty on a draft-order invoice, and
+  // `_`-prefixed line attributes are stripped), so we key off the order-level
+  // `honey_list` marker the Honey List app stamps on the draft (ORDER_ATTR in
+  // that app's config). Order-level attributes are the only reliable channel.
+  // `honey_list` is the purpose-built marker; `hl_*` (e.g. `hl_gift_owner`, which
+  // the checkout banner relies on) is always present too. Match either so this
+  // fires regardless of which Honey List app version is deployed.
+  const orderAttributes = useAttributes();
+  const isHoneyListCheckout = (orderAttributes || []).some(
+    (a) => a?.key === "honey_list" || (typeof a?.key === "string" && a.key.startsWith("hl_")),
+  );
   // Defined when rendering inside the Checkout Editor preview; undefined on the
   // live storefront. Used to gate test-mode configs.
   const editor = useExtensionEditor();
@@ -160,6 +180,7 @@ function Extension() {
   }, [query]);
 
   if (!loaded) return null;
+  if (isDraftOrder || isHoneyListCheckout) return null;
 
   const activeConfigs = configs.filter((c) => {
     if (c?.enabled === false) return false;

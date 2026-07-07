@@ -39,6 +39,7 @@ name = "Show Testing Information?"
 key = "show_test_mode_configs"
 type = "boolean"
 name = "Show Test Mode Configs?"
+description = "IMPORTANT: must be turned off (set to False) if this is the live published checkout."
 
 # Customer tags metafield, used for one-per-customer redemption checks.
 [[extensions.metafields]]

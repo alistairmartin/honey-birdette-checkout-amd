@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/honey-birdette-design-system-76e7e758-2c4c-4e5a-910b-78d4316b8311/colors_and_type.css">
+  <link rel="stylesheet" href="_ds/honey-birdette-design-system-76e7e758-2c4c-4e5a-910b-78d4316b8311/styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+  <script src="_ds/honey-birdette-design-system-76e7e758-2c4c-4e5a-910b-78d4316b8311/_ds_bundle.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; background: #FFFFFF; }
+    body { font-family: var(--hb-font-sans); color: #111111; }
+    a { color: #111111; }
+    a:hover { color: #555555; }
+    @keyframes hbToastIn { from { transform: translate(-50%, 16px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+    @keyframes hbFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes hbPanelIn { from { transform: translateY(14px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    ::selection { background: #E9E3DA; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#FFFFFF">
+
+  <!-- ══════════ PROTOTYPE DEMO BAR ══════════ -->
+  <sc-if value="{{ showDemoBar }}" hint-placeholder-val="{{ true }}">
+    <div style="background:#111111;color:#FFFFFF;display:flex;align-items:center;justify-content:space-between;padding:8px 20px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;font-weight:500;position:relative;z-index:30">
+      <div style="display:flex;align-items:center;gap:16px">
+        <span style="color:#888888">Prototype</span>
+        <div style="display:flex;gap:2px">
+          <button onClick="{{ demoGoAccount }}" style="background:{{ tabAccountBg }};color:{{ tabAccountFg }};border:0;padding:6px 12px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;cursor:pointer;font-family:inherit">Account</button>
+          <button onClick="{{ demoGoCollection }}" style="background:{{ tabCollectionBg }};color:{{ tabCollectionFg }};border:0;padding:6px 12px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;cursor:pointer;font-family:inherit">Collection</button>
+          <button onClick="{{ demoGoPdp }}" style="background:{{ tabPdpBg }};color:{{ tabPdpFg }};border:0;padding:6px 12px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;cursor:pointer;font-family:inherit">Product</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="display:inline-flex;align-items:center;gap:6px;color:{{ loginPillColor }}"><i class="{{ loginIcon }}" style="font-size:12px"></i>{{ loginLabel }}</span>
+        <button onClick="{{ demoToggleLogin }}" style="background:transparent;color:#FFFFFF;border:1px solid rgba(255,255,255,0.32);padding:6px 12px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;cursor:pointer;font-family:inherit" style-hover="border-color:#FFFFFF">{{ loginBtnLabel }}</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ══════════ STORE HEADER ══════════ -->
+  <x-import component-from-global-scope="HBHeader" on-cart="{{ openCart }}" cart-count="{{ cartCount }}" on-nav="{{ headerNav }}" hint-size="100%,120px"></x-import>
+
+  <!-- ══════════ COLLECTION PAGE ══════════ -->
+  <sc-if value="{{ isCollection }}" hint-placeholder-val="{{ true }}">
+    <main data-screen-label="Collection page" style="flex:1;max-width:1440px;width:100%;margin:0 auto;padding:0 40px 96px;box-sizing:border-box">
+
+      <div style="padding:40px 0 8px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#888888;font-weight:500">Home&nbsp;&nbsp;/&nbsp;&nbsp;Lingerie</div>
+
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;padding:8px 0 28px;border-bottom:1px solid rgba(0,0,0,0.08)">
+        <div>
+          <h1 style="margin:0;font-family:var(--hb-font-sans);font-weight:500;font-size:32px;line-height:1.1;letter-spacing:0.15rem;text-transform:uppercase;color:#111111">Lingerie</h1>
+          <div style="margin-top:10px;font-size:12px;color:#555555;letter-spacing:0.05em">{{ productCount }} styles</div>
+        </div>
+
+        <!-- SHOP IN MY SIZE toggle -->
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+          <button onClick="{{ toggleMySize }}" style="display:flex;align-items:center;gap:14px;background:{{ toggleBg }};color:{{ toggleFg }};border:1px solid #111111;padding:12px 18px;cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:0.075rem;text-transform:uppercase;font-weight:500;transition:all 220ms cubic-bezier(0.22,0.61,0.36,1)">
+            <i class="ph ph-ruler" style="font-size:16px"></i>
+            <span>Shop in my size</span>
+            <span style="width:34px;height:18px;border:1px solid {{ toggleTrackBorder }};position:relative;display:inline-block;background:{{ toggleTrackBg }};transition:all 220ms cubic-bezier(0.22,0.61,0.36,1)">
+              <span style="position:absolute;top:2px;left:{{ toggleKnobLeft }};width:12px;height:12px;background:{{ toggleKnobBg }};transition:left 220ms cubic-bezier(0.22,0.61,0.36,1)"></span>
+            </span>
+          </button>
+          <sc-if value="{{ toggleOn }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:10px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#555555;font-weight:500">
+              <span>{{ sizeSummary }}</span>
+              <button onClick="{{ openSizeModal }}" style="background:none;border:0;padding:0;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#111111;text-decoration:underline;text-underline-offset:3px">Edit</button>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <!-- product grid -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:24px;row-gap:48px;padding-top:32px">
+        <sc-for list="{{ products }}" as="p" hint-placeholder-count="8">
+          <div style="display:flex;flex-direction:column">
+            <div style="aspect-ratio:3/4;position:relative;overflow:hidden;background:{{ p.bg }};cursor:pointer" onClick="{{ p.open }}">
+              <sc-if value="{{ p.hasBadge }}" hint-placeholder-val="{{ false }}">
+                <span style="position:absolute;top:12px;left:12px;background:{{ p.badgeBg }};color:#FFFFFF;font-size:10px;letter-spacing:0.1em;padding:5px 10px;font-weight:500;text-transform:uppercase;z-index:1">{{ p.badge }}</span>
+              </sc-if>
+              <span style="position:absolute;top:12px;right:12px;color:#FFFFFF;font-size:18px;z-index:1"><i class="ph ph-heart"></i></span>
+              <!-- quick add bar -->
+              <button onClick="{{ p.onQuick }}" style="position:absolute;left:12px;right:12px;bottom:12px;display:flex;align-items:center;justify-content:center;gap:8px;background:{{ p.quickBg }};color:{{ p.quickFg }};border:0;padding:13px 10px;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:0.075rem;text-transform:uppercase;font-weight:500;transition:opacity 220ms cubic-bezier(0.22,0.61,0.36,1)" style-hover="opacity:0.85">
+                <i class="{{ p.quickIcon }}" style="font-size:14px"></i>
+                <span>{{ p.quickLabel }}</span>
+              </button>
+            </div>
+            <div style="margin-top:12px;font-size:12px;letter-spacing:0.075em;text-transform:uppercase;color:#111111;font-weight:500;cursor:pointer" onClick="{{ p.open }}">{{ p.name }}</div>
+            <div style="margin-top:4px;font-size:12px;color:#555555">{{ p.priceLabel }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ══════════ PRODUCT PAGE ══════════ -->
+  <sc-if value="{{ isPdp }}" hint-placeholder-val="{{ false }}">
+    <main data-screen-label="Product page" style="flex:1;max-width:1440px;width:100%;margin:0 auto;padding:0 40px 96px;box-sizing:border-box">
+      <div style="padding:32px 0 24px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#888888;font-weight:500;display:flex;gap:8px;align-items:center">
+        <button onClick="{{ goCollection }}" style="background:none;border:0;padding:0;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#111111;display:inline-flex;align-items:center;gap:6px"><i class="ph ph-caret-left"></i>Lingerie</button>
+        <span>/</span><span>{{ pdpName }}</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 480px;gap:64px;align-items:start">
+        <div style="aspect-ratio:3/4;background:{{ pdpBg }};position:relative">
+          <sc-if value="{{ pdpHasBadge }}" hint-placeholder-val="{{ false }}">
+            <span style="position:absolute;top:16px;left:16px;background:{{ pdpBadgeBg }};color:#FFFFFF;font-size:10px;letter-spacing:0.1em;padding:5px 10px;font-weight:500;text-transform:uppercase">{{ pdpBadge }}</span>
+          </sc-if>
+        </div>
+
+        <div style="position:sticky;top:140px">
+          <h1 style="margin:0;font-family:var(--hb-font-sans);font-weight:500;font-size:24px;line-height:1.1;letter-spacing:0.12rem;text-transform:uppercase;color:#111111">{{ pdpName }}</h1>
+          <div style="margin-top:10px;font-size:16px;color:#111111">{{ pdpPriceLabel }}</div>
+          <div style="margin-top:6px;font-size:12px;color:#555555;letter-spacing:0.03em">{{ pdpColor }}</div>
+
+          <!-- saved-size note -->
+          <sc-if value="{{ pdpPrefApplied }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:24px;display:flex;align-items:center;gap:10px;background:#F1ECE4;padding:12px 14px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#111111">
+              <i class="ph ph-check-circle" style="font-size:15px"></i>
+              <span>Your size — {{ pdpSizeLabel }}</span>
+              <button onClick="{{ pdpToggleSelector }}" style="margin-left:auto;background:none;border:0;padding:0;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#111111;text-decoration:underline;text-underline-offset:3px">{{ pdpSelectorCta }}</button>
+              <button onClick="{{ openSizeModal }}" style="background:none;border:0;padding:0;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#888888;text-decoration:underline;text-underline-offset:3px">Edit profile</button>
+            </div>
+          </sc-if>
+
+          <!-- bra: band + cup -->
+          <sc-if value="{{ pdpShowBraSel }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:28px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#111111">Band</div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ pdpBandOpts }}" as="o" hint-placeholder-count="5">
+                <button onClick="{{ o.pick }}" style="min-width:46px;height:44px;padding:0 10px;background:{{ o.bg }};color:{{ o.fg }};border:1px solid {{ o.border }};cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:0.05em;font-weight:500;transition:all 120ms">{{ o.v }}</button>
+              </sc-for>
+            </div>
+            <div style="margin-top:20px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#111111">Cup</div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ pdpCupOpts }}" as="o" hint-placeholder-count="8">
+                <button onClick="{{ o.pick }}" style="min-width:46px;height:44px;padding:0 10px;background:{{ o.bg }};color:{{ o.fg }};border:1px solid {{ o.border }};cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:0.05em;font-weight:500;transition:all 120ms">{{ o.v }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <!-- non-bra: single size row -->
+          <sc-if value="{{ pdpShowSizeSel }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:28px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#111111">Size</div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ pdpSizeOpts }}" as="o" hint-placeholder-count="6">
+                <button onClick="{{ o.pick }}" style="min-width:46px;height:44px;padding:0 10px;background:{{ o.bg }};color:{{ o.fg }};border:1px solid {{ o.border }};cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:0.05em;font-weight:500;transition:all 120ms">{{ o.v }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <button onClick="{{ pdpAdd }}" style="margin-top:32px;width:100%;background:#000000;color:#FFFFFF;border:0;padding:18px 36px;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:0.075rem;text-transform:uppercase;font-weight:500;line-height:1;opacity:{{ pdpAddOpacity }};transition:opacity 220ms" style-hover="opacity:0.85">{{ pdpAddLabel }}</button>
+          <div style="margin-top:14px;text-align:center;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#555555;font-weight:500">45 day returns &amp; free shipping over $150</div>
+        </div>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ══════════ ACCOUNT — SIZE PROFILE EXTENSION ══════════ -->
+  <sc-if value="{{ isAccount }}" hint-placeholder-val="{{ false }}">
+    <main data-screen-label="Account size profile" style="flex:1;background:#F4F2EC">
+      <div style="max-width:1440px;margin:0 auto;padding:0 40px 96px;box-sizing:border-box;display:grid;grid-template-columns:220px 1fr;gap:64px">
+
+        <!-- account nav -->
+        <nav style="padding-top:48px;display:flex;flex-direction:column;gap:2px">
+          <div style="font-family:var(--hb-font-display);font-style:italic;font-size:28px;font-weight:700;color:#111111;margin-bottom:20px;line-height:1.2;padding-bottom:0.1em">Ciao, Betta!</div>
+          <a href="#" style="padding:11px 12px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#111111;background:#FFFFFF;text-decoration:none">Orders</a>
+          <a href="#" style="padding:11px 12px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#555555;text-decoration:none">Addresses</a>
+          <a href="#" style="padding:11px 12px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#555555;text-decoration:none">VIP Girls Society</a>
+        </nav>
+
+        <!-- account content: size profile bar + page body -->
+        <div style="padding-top:48px;max-width:760px">
+
+          <!-- SIZE PROFILE BAR — drop-in for every account page -->
+          <div data-comment-anchor="size-profile-bar" style="background:#FFFFFF;border:1px solid rgba(0,0,0,0.08);display:flex;align-items:center;gap:18px;padding:18px 22px">
+            <i class="ph ph-ruler" style="font-size:20px;color:#111111"></i>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+              <span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#111111">My size profile</span>
+              <span style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#888888;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sizeBarSummary }}</span>
+            </div>
+            <button onClick="{{ openSizeModal }}" style="margin-left:auto;flex-shrink:0;background:#000000;color:#FFFFFF;border:0;padding:13px 24px;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:0.075rem;text-transform:uppercase;font-weight:500;line-height:1;transition:opacity 220ms" style-hover="opacity:0.85">{{ sizeBarCta }}</button>
+          </div>
+          <div style="margin-top:10px;font-size:10px;letter-spacing:0.06em;color:#888888">Bar renders on every account page · synced to customer.metafields.custom.size_profile.</div>
+
+          <!-- page body (Orders shown as example) -->
+          <h1 style="margin:44px 0 0;font-family:var(--hb-font-sans);font-weight:500;font-size:24px;letter-spacing:0.12rem;text-transform:uppercase;color:#111111">Orders</h1>
+          <div style="margin-top:24px;background:#FFFFFF;padding:56px 32px;text-align:center">
+            <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#555555;font-weight:500">No orders yet</div>
+            <button onClick="{{ goCollection }}" style="margin-top:18px;background:transparent;color:#111111;border:0;border-bottom:1px solid #111111;padding:10px 0;cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:0.075rem;text-transform:uppercase;font-weight:500;line-height:1">Shop now</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ══════════ FOOTER ══════════ -->
+  <x-import component-from-global-scope="HBFooter" hint-size="100%,300px"></x-import>
+</div>
+
+<!-- ══════════ CART DRAWER ══════════ -->
+<x-import component-from-global-scope="HBCartDrawer" open="{{ cartOpen }}" items="{{ cartItems }}" on-close="{{ closeCart }}" on-remove="{{ removeCartItem }}" hint-size="0,0"></x-import>
+
+<!-- ══════════ SIZE PROFILE MODAL ══════════ -->
+<sc-if value="{{ sizeModalOpen }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Size profile modal" style="position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;padding:24px">
+    <div onClick="{{ closeSizeModal }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.32);animation:hbFadeIn 220ms cubic-bezier(0.22,0.61,0.36,1)"></div>
+    <div style="position:relative;background:#FFFFFF;width:560px;max-width:100%;max-height:90vh;overflow-y:auto;padding:36px 40px 40px;box-sizing:border-box;animation:hbPanelIn 420ms cubic-bezier(0.22,0.61,0.36,1);box-shadow:0 12px 32px rgba(0,0,0,0.14)">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+        <div>
+          <div style="font-family:var(--hb-font-display);font-style:italic;font-size:30px;font-weight:700;color:#111111;line-height:1.2;padding-bottom:0.1em">Your size, Betta</div>
+          <div style="margin-top:6px;font-size:12px;color:#555555;line-height:1.5">Set it once — we&rsquo;ll pick it everywhere you add to bag.</div>
+        </div>
+        <button onClick="{{ closeSizeModal }}" style="background:none;border:0;padding:4px;cursor:pointer;font-size:18px;color:#111111"><i class="ph ph-x"></i></button>
+      </div>
+
+      <sc-if value="{{ isGuest }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:20px;display:flex;align-items:center;gap:10px;background:#F1ECE4;padding:12px 14px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#111111">
+          <i class="ph ph-device-mobile" style="font-size:15px"></i>
+          <span>Saved on this device</span>
+          <button onClick="{{ openSignIn }}" style="margin-left:auto;background:none;border:0;padding:0;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#111111;text-decoration:underline;text-underline-offset:3px">Sign in to save to account</button>
+        </div>
+      </sc-if>
+
+      <div style="margin-top:26px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#888888;font-weight:500">Bra — Band</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <sc-for list="{{ bandOpts }}" as="o" hint-placeholder-count="5">
+          <button onClick="{{ o.pick }}" style="min-width:46px;height:42px;padding:0 10px;background:{{ o.bg }};color:{{ o.fg }};border:1px solid {{ o.border }};cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;transition:all 120ms">{{ o.v }}</button>
+        </sc-for>
+      </div>
+      <div style="margin-top:16px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#888888;font-weight:500">Bra — Cup</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <sc-for list="{{ cupOpts }}" as="o" hint-placeholder-count="8">
+          <button onClick="{{ o.pick }}" style="min-width:46px;height:42px;padding:0 10px;background:{{ o.bg }};color:{{ o.fg }};border:1px solid {{ o.border }};cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;transition:all 120ms">{{ o.v }}</button>
+        </sc-for>
+      </div>
+      <div style="margin-top:16px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#888888;font-weight:500">Thong</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <sc-for list="{{ thongOpts }}" as="o" hint-placeholder-count="6">
+          <button onClick="{{ o.pick }}" style="min-width:46px;height:42px;padding:0 10px;background:{{ o.bg }};color:{{ o.fg }};border:1px solid {{ o.border }};cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;transition:all 120ms">{{ o.v }}</button>
+        </sc-for>
+      </div>
+      <div style="margin-top:16px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#888888;font-weight:500">Brief</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <sc-for list="{{ briefOpts }}" as="o" hint-placeholder-count="6">
+          <button onClick="{{ o.pick }}" style="min-width:46px;height:42px;padding:0 10px;background:{{ o.bg }};color:{{ o.fg }};border:1px solid {{ o.border }};cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;transition:all 120ms">{{ o.v }}</button>
+        </sc-for>
+      </div>
+      <div style="margin-top:16px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#888888;font-weight:500">Dress</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <sc-for list="{{ dressOpts }}" as="o" hint-placeholder-count="6">
+          <button onClick="{{ o.pick }}" style="min-width:46px;height:42px;padding:0 10px;background:{{ o.bg }};color:{{ o.fg }};border:1px solid {{ o.border }};cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;transition:all 120ms">{{ o.v }}</button>
+        </sc-for>
+      </div>
+
+      <button onClick="{{ saveSizes }}" style="margin-top:30px;width:100%;background:#000000;color:#FFFFFF;border:0;padding:17px;cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:0.075rem;text-transform:uppercase;font-weight:500;line-height:1;transition:opacity 220ms" style-hover="opacity:0.85">Save my sizes</button>
+    </div>
+  </div>
+</sc-if>
+
+<!-- ══════════ SIGN IN MODAL ══════════ -->
+<sc-if value="{{ signInOpen }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Sign in modal" style="position:fixed;inset:0;z-index:41;display:flex;align-items:center;justify-content:center;padding:24px">
+    <div onClick="{{ closeSignIn }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.32);animation:hbFadeIn 220ms cubic-bezier(0.22,0.61,0.36,1)"></div>
+    <div style="position:relative;background:#FFFFFF;width:420px;max-width:100%;padding:40px;box-sizing:border-box;animation:hbPanelIn 420ms cubic-bezier(0.22,0.61,0.36,1);box-shadow:0 12px 32px rgba(0,0,0,0.14)">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between">
+        <h2 style="margin:0;font-family:var(--hb-font-sans);font-weight:500;font-size:16px;letter-spacing:0.1rem;text-transform:uppercase;color:#111111">Sign in</h2>
+        <button onClick="{{ closeSignIn }}" style="background:none;border:0;padding:4px;cursor:pointer;font-size:18px;color:#111111"><i class="ph ph-x"></i></button>
+      </div>
+      <p style="margin:12px 0 0;font-size:13px;line-height:1.55;color:#555555;font-weight:400">Sign in to save your size profile to your account — it follows you on every device.</p>
+      <div style="margin-top:24px;display:flex;flex-direction:column;gap:12px">
+        <input type="email" placeholder="EMAIL" style="border:1px solid rgba(0,0,0,0.18);border-radius:0;padding:14px;font-family:inherit;font-size:12px;letter-spacing:0.08em;color:#111111;outline:none;box-sizing:border-box;width:100%">
+        <input type="password" placeholder="PASSWORD" style="border:1px solid rgba(0,0,0,0.18);border-radius:0;padding:14px;font-family:inherit;font-size:12px;letter-spacing:0.08em;color:#111111;outline:none;box-sizing:border-box;width:100%">
+      </div>
+      <button onClick="{{ signIn }}" style="margin-top:18px;width:100%;background:#000000;color:#FFFFFF;border:0;padding:17px;cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:0.075rem;text-transform:uppercase;font-weight:500;line-height:1;transition:opacity 220ms" style-hover="opacity:0.85">Sign in &amp; save</button>
+      <button onClick="{{ guestContinue }}" style="margin-top:14px;width:100%;background:none;border:0;padding:8px;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:#555555;text-decoration:underline;text-underline-offset:4px">Continue as guest — save sizes to this device</button>
+    </div>
+  </div>
+</sc-if>
+
+<!-- ══════════ TOAST ══════════ -->
+<sc-if value="{{ toastVisible }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:50;background:#000000;color:#FFFFFF;display:flex;align-items:center;gap:12px;padding:15px 24px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;animation:hbToastIn 220ms cubic-bezier(0.22,0.61,0.36,1);box-shadow:0 12px 32px rgba(0,0,0,0.14)">
+    <i class="{{ toastIcon }}" style="font-size:15px"></i>
+    <span>{{ toastMsg }}</span>
+  </div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showDemoBar&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;toggleDefaultOn&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Prototype&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.LS_KEY = 'hb_sizepref_proto_v1';
+    let persisted = {};
+    try { persisted = JSON.parse(localStorage.getItem(this.LS_KEY) || '{}'); } catch (e) {}
+    this.state = {
+      view: 'collection',
+      pdpId: null,
+      loggedIn: persisted.loggedIn ?? false,
+      sizes: persisted.sizes ?? { band: null, cup: null, thong: null, brief: null, dress: null },
+      draft: null,
+      toggle: persisted.toggle ?? (this.props.toggleDefaultOn ?? false),
+      pendingToggle: false,
+      cart: [],
+      cartOpen: false,
+      sizeModalOpen: false,
+      signInOpen: false,
+      pdpSel: { band: null, cup: null, size: null },
+      toast: null
+    };
+  }
+
+  persist() {
+    const { loggedIn, sizes, toggle } = this.state;
+    try { localStorage.setItem(this.LS_KEY, JSON.stringify({ loggedIn, sizes, toggle })); } catch (e) {}
+  }
+
+  set(patch, cb) { this.setState(patch, () => { this.persist(); cb && cb(); }); }
+
+  componentWillUnmount() { clearTimeout(this._toastT); }
+
+  // ── data ────────────────────────────────────────────
+  get catalog() {
+    return [
+      { id: 'eva',       name: 'Eva Bra',          type: 'bra',   price: 89.95,  color: 'Black',     bg: 'linear-gradient(160deg,#1a1412,#3a2a20)', badge: 'NEW' },
+      { id: 'blossom',   name: 'Blossom Thong',    type: 'thong', price: 49.95,  color: 'Champagne', bg: 'linear-gradient(160deg,#c9b291,#a08157)' },
+      { id: 'fleur',     name: 'Fleur Brief',      type: 'brief', price: 54.95,  color: 'Ivory',     bg: 'linear-gradient(160deg,#e5dccb,#c4b394)' },
+      { id: 'sienna',    name: 'Sienna Slip Dress', type: 'dress', price: 189.95, color: 'Ruby',      bg: 'linear-gradient(160deg,#4a1218,#7a2230)', badge: 'NEW' },
+      { id: 'coco',      name: 'Coco Bra',         type: 'bra',   price: 99.95,  color: 'Noir',      bg: 'linear-gradient(160deg,#2a2018,#54402c)', badge: 'SALE', salePrice: 69.95 },
+      { id: 'lola',      name: 'Lola Thong',       type: 'thong', price: 44.95,  color: 'Black',     bg: 'linear-gradient(160deg,#191512,#39302a)' },
+      { id: 'valentina', name: 'Valentina Brief',  type: 'brief', price: 59.95,  color: 'Gold',      bg: 'linear-gradient(160deg,#8a6a3a,#b8945e)' },
+      { id: 'margot',    name: 'Margot Gown',      type: 'dress', price: 169.95, color: 'Champagne', bg: 'linear-gradient(160deg,#b39a76,#8a6c48)' }
+    ];
+  }
+  get bands()   { return ['8', '10', '12', '14', '16']; }
+  get cups()    { return ['A', 'B', 'C', 'D', 'DD', 'E', 'F', 'G']; }
+  get bottoms() { return ['XS', 'S', 'M', 'L', 'XL', 'XXL']; }
+  get dresses() { return ['6', '8', '10', '12', '14', '16']; }
+
+  // preferred size string for a product type, or null
+  prefFor(type, sizes) {
+    const s = sizes || this.state.sizes;
+    if (type === 'bra')   return s.band && s.cup ? s.band + s.cup : null;
+    if (type === 'thong') return s.thong || null;
+    if (type === 'brief') return s.brief || null;
+    if (type === 'dress') return s.dress || null;
+    return null;
+  }
+  anyPrefs() { const s = this.state.sizes; return Boolean((s.band && s.cup) || s.thong || s.brief || s.dress); }
+
+  // ── actions ─────────────────────────────────────────
+  showToast(msg, icon) {
+    clearTimeout(this._toastT);
+    this.setState({ toast: { msg, icon: icon || 'ph ph-check' } });
+    this._toastT = setTimeout(() => this.setState({ toast: null }), 2600);
+  }
+
+  addToCart(p, size) {
+    const item = { name: p.name.toUpperCase(), color: p.color, size, price: p.salePrice ?? p.price, bg: p.bg };
+    this.setState({ cart: [...this.state.cart, item] });
+    this.showToast('Added — ' + p.name + ' · ' + size, 'ph ph-handbag-simple');
+  }
+
+  openDraft() {
+    const s = this.state.sizes;
+    return { band: s.band, cup: s.cup, thong: s.thong, brief: s.brief, dress: s.dress };
+  }
+
+  goPdp(p) {
+    const pref = this.prefFor(p.type);
+    const sel = { band: null, cup: null, size: null };
+    if (this.anyPrefs()) {
+      if (p.type === 'bra') { sel.band = this.state.sizes.band; sel.cup = this.state.sizes.cup; }
+      else sel.size = this.prefFor(p.type);
+    }
+    const prefApplied = Boolean(pref && ((p.type === 'bra' && sel.band && sel.cup) || sel.size));
+    this.setState({ view: 'pdp', pdpId: p.id, pdpSel: sel, pdpSelectorOpen: !prefApplied });
+    window.scrollTo(0, 0);
+  }
+
+  quickAdd(p) {
+    if (!this.state.toggle) { this.goPdp(p); return; }
+    const pref = this.prefFor(p.type);
+    if (pref) { this.addToCart(p, pref); return; }
+    // toggle on but this size type missing
+    this.setState({ sizeModalOpen: true, draft: this.openDraft() });
+  }
+
+  tapToggle() {
+    if (this.state.toggle) { this.set({ toggle: false }); return; }
+    if (this.anyPrefs()) { this.set({ toggle: true }); return; }
+    // no sizes yet
+    if (!this.state.loggedIn) this.setState({ signInOpen: true, pendingToggle: true });
+    else this.setState({ sizeModalOpen: true, draft: this.openDraft(), pendingToggle: true });
+  }
+
+  saveSizes() {
+    const d = this.state.draft || this.openDraft();
+    const turnOn = this.state.pendingToggle && Boolean((d.band && d.cup) || d.thong || d.brief || d.dress);
+    this.set({ sizes: d, sizeModalOpen: false, pendingToggle: false, toggle: turnOn ? true : this.state.toggle }, () => {
+      this.showToast(this.state.loggedIn ? 'Size profile saved to your account' : 'Sizes saved to this device', 'ph ph-check-circle');
+    });
+  }
+
+  signIn() {
+    const had = this.anyPrefs();
+    this.set({ loggedIn: true, signInOpen: false }, () => {
+      if (had) {
+        this.showToast('Signed in — sizes saved to your account', 'ph ph-user-check');
+        if (this.state.pendingToggle) this.set({ toggle: true, pendingToggle: false });
+      } else {
+        this.setState({ sizeModalOpen: true, draft: this.openDraft() });
+      }
+    });
+  }
+
+  // chip option builders
+  chipOpts(list, cur, onPick) {
+    return list.map(v => ({
+      v,
+      bg: v === cur ? '#000000' : '#FFFFFF',
+      fg: v === cur ? '#FFFFFF' : '#111111',
+      border: v === cur ? '#000000' : 'rgba(0,0,0,0.18)',
+      pick: () => onPick(v)
+    }));
+  }
+
+  renderVals() {
+    const st = this.state;
+    const showDemoBar = this.props.showDemoBar ?? true;
+    const draft = st.draft || this.openDraft();
+    const setDraft = (k) => (v) => this.setState({ draft: { ...draft, [k]: draft[k] === v ? null : v } });
+
+    // products for grid
+    const products = this.catalog.map(p => {
+      const pref = this.prefFor(p.type);
+      const quickReady = st.toggle && pref;
+      const needsSize = st.toggle && !pref;
+      return {
+        ...p,
+        hasBadge: Boolean(p.badge),
+        badgeBg: p.badge === 'SALE' ? '#EA2121' : '#111111',
+        priceLabel: p.salePrice ? '$' + p.salePrice.toFixed(2) + '  ·  was $' + p.price.toFixed(2) : '$' + p.price.toFixed(2),
+        quickLabel: quickReady ? 'Quick add — ' + pref : (needsSize ? 'Set your ' + (p.type === 'bra' ? 'bra' : p.type) + ' size' : 'Select size'),
+        quickIcon: quickReady ? 'ph ph-lightning' : (needsSize ? 'ph ph-ruler' : 'ph ph-plus'),
+        quickBg: quickReady ? '#000000' : 'rgba(255,255,255,0.92)',
+        quickFg: quickReady ? '#FFFFFF' : '#111111',
+        onQuick: (e) => { e.stopPropagation(); this.quickAdd(p); },
+        open: () => this.goPdp(p)
+      };
+    });
+
+    // pdp
+    const pdp = this.catalog.find(p => p.id === st.pdpId) || this.catalog[0];
+    const isBra = pdp.type === 'bra';
+    const sel = st.pdpSel;
+    const pdpSizeStr = isBra ? (sel.band && sel.cup ? sel.band + sel.cup : null) : sel.size;
+    const pdpPref = this.prefFor(pdp.type);
+    const pdpPrefApplied = Boolean(pdpPref && pdpSizeStr === pdpPref);
+    const price = pdp.salePrice ?? pdp.price;
+
+    // size summary for toggle
+    const s = st.sizes;
+    const parts = [];
+    if (s.band && s.cup) parts.push('Bra ' + s.band + s.cup);
+    if (s.thong) parts.push('Thong ' + s.thong);
+    if (s.brief) parts.push('Brief ' + s.brief);
+    if (s.dress) parts.push('Dress ' + s.dress);
+
+    const tab = (v) => st.view === v;
+
+    return {
+      // demo bar
+      showDemoBar,
+      demoGoAccount: () => this.setState({ view: 'account', draft: this.openDraft() }),
+      demoGoCollection: () => this.setState({ view: 'collection' }),
+      demoGoPdp: () => this.goPdp(this.catalog[0]),
+      tabAccountBg: tab('account') ? '#FFFFFF' : 'rgba(255,255,255,0.12)',
+      tabAccountFg: tab('account') ? '#111111' : '#FFFFFF',
+      tabCollectionBg: tab('collection') ? '#FFFFFF' : 'rgba(255,255,255,0.12)',
+      tabCollectionFg: tab('collection') ? '#111111' : '#FFFFFF',
+      tabPdpBg: tab('pdp') ? '#FFFFFF' : 'rgba(255,255,255,0.12)',
+      tabPdpFg: tab('pdp') ? '#111111' : '#FFFFFF',
+      loginLabel: st.loggedIn ? 'Signed in — Betta H.' : 'Guest — not signed in',
+      loginPillColor: st.loggedIn ? '#9BD4AE' : '#CCCCCC',
+      loginIcon: st.loggedIn ? 'ph-fill ph-user-circle' : 'ph ph-user-circle',
+      loginBtnLabel: st.loggedIn ? 'Sign out' : 'Sign in',
+      demoToggleLogin: () => {
+        if (st.loggedIn) this.set({ loggedIn: false, toggle: false });
+        else this.setState({ signInOpen: true });
+      },
+
+      // header / views
+      headerNav: () => this.setState({ view: 'collection' }),
+      isCollection: st.view === 'collection',
+      isPdp: st.view === 'pdp',
+      isAccount: st.view === 'account',
+      isGuest: !st.loggedIn,
+      goCollection: () => this.setState({ view: 'collection' }),
+
+      // cart
+      cartCount: st.cart.length,
+      cartItems: st.cart,
+      cartOpen: st.cartOpen,
+      openCart: () => this.setState({ cartOpen: true }),
+      closeCart: () => this.setState({ cartOpen: false }),
+      removeCartItem: (idx) => this.setState({ cart: st.cart.filter((_, i) => i !== idx) }),
+
+      // collection
+      products,
+      productCount: this.catalog.length,
+      toggleOn: st.toggle,
+      toggleMySize: () => this.tapToggle(),
+      toggleBg: st.toggle ? '#000000' : '#FFFFFF',
+      toggleFg: st.toggle ? '#FFFFFF' : '#111111',
+      toggleTrackBg: st.toggle ? '#FFFFFF' : '#FFFFFF',
+      toggleTrackBorder: st.toggle ? '#FFFFFF' : 'rgba(0,0,0,0.32)',
+      toggleKnobBg: st.toggle ? '#000000' : 'rgba(0,0,0,0.32)',
+      toggleKnobLeft: st.toggle ? '18px' : '2px',
+      sizeSummary: parts.join(' · ') || 'No sizes saved',
+
+      // pdp
+      pdpName: pdp.name,
+      pdpBg: pdp.bg,
+      pdpColor: pdp.color,
+      pdpHasBadge: Boolean(pdp.badge),
+      pdpBadge: pdp.badge,
+      pdpBadgeBg: pdp.badge === 'SALE' ? '#EA2121' : '#111111',
+      pdpPriceLabel: pdp.salePrice ? '$' + pdp.salePrice.toFixed(2) + '  ·  was $' + pdp.price.toFixed(2) : '$' + pdp.price.toFixed(2),
+      pdpIsBra: isBra,
+      pdpIsNotBra: !isBra,
+      pdpPrefApplied,
+      pdpSizeLabel: pdpSizeStr || '',
+      pdpShowBraSel: isBra && (st.pdpSelectorOpen || !pdpPrefApplied),
+      pdpShowSizeSel: !isBra && (st.pdpSelectorOpen || !pdpPrefApplied),
+      pdpSelectorOpen: st.pdpSelectorOpen,
+      pdpSelectorCta: st.pdpSelectorOpen ? 'Hide sizes' : 'Change size',
+      pdpToggleSelector: () => this.setState({ pdpSelectorOpen: !st.pdpSelectorOpen }),
+      pdpBandOpts: this.chipOpts(this.bands, sel.band, v => this.setState({ pdpSel: { ...sel, band: v } })),
+      pdpCupOpts: this.chipOpts(this.cups, sel.cup, v => this.setState({ pdpSel: { ...sel, cup: v } })),
+      pdpSizeOpts: this.chipOpts(pdp.type === 'dress' ? this.dresses : this.bottoms, sel.size, v => this.setState({ pdpSel: { ...sel, size: v } })),
+      pdpAddLabel: pdpSizeStr ? 'Add to bag — ' + pdpSizeStr + ' · $' + price.toFixed(2) : 'Select a size',
+      pdpAddOpacity: pdpSizeStr ? 1 : 0.35,
+      pdpAdd: () => { if (pdpSizeStr) this.addToCart(pdp, pdpSizeStr); },
+
+      // size profile form (account + modal share draft)
+      bandOpts: this.chipOpts(this.bands, draft.band, setDraft('band')),
+      cupOpts: this.chipOpts(this.cups, draft.cup, setDraft('cup')),
+      thongOpts: this.chipOpts(this.bottoms, draft.thong, setDraft('thong')),
+      briefOpts: this.chipOpts(this.bottoms, draft.brief, setDraft('brief')),
+      dressOpts: this.chipOpts(this.dresses, draft.dress, setDraft('dress')),
+      saveSizes: () => this.saveSizes(),
+      saveNote: st.loggedIn ? 'Saved to your customer account' : 'Saved to this device until you sign in',
+      sizeBarSummary: parts.length ? parts.join(' · ') : 'No sizes saved yet — set them once, shop faster everywhere',
+      sizeBarCta: parts.length ? 'Update sizes' : 'Set my sizes',
+
+      // modals
+      sizeModalOpen: st.sizeModalOpen,
+      openSizeModal: () => this.setState({ sizeModalOpen: true, draft: this.openDraft() }),
+      closeSizeModal: () => this.setState({ sizeModalOpen: false, pendingToggle: false }),
+      signInOpen: st.signInOpen,
+      openSignIn: () => this.setState({ signInOpen: true, sizeModalOpen: false }),
+      closeSignIn: () => this.setState({ signInOpen: false, pendingToggle: false }),
+      signIn: () => this.signIn(),
+      guestContinue: () => this.setState({ signInOpen: false, sizeModalOpen: true, draft: this.openDraft() }),
+
+      // toast
+      toastVisible: Boolean(st.toast),
+      toastMsg: st.toast ? st.toast.msg : '',
+      toastIcon: st.toast ? st.toast.icon : 'ph ph-check'
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "1ff77f37375f9a6603f22ecd67e5e832"
-name = "Honey Birdette Checkout (AMD)"
+name = "AMD Checkout"
 handle = "honey-birdette-checkout-amd"
 application_url = "https://honey-birdette-checkout-amd.onrender.com"
 embedded = true

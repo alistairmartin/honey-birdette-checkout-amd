@@ -1,0 +1,36 @@
+# Size Preference - Customer Account UI extension
+# Renders a "My size profile" card in the account profile. Customers save their
+# bra band + cup, thong, brief and dress sizes once; the sizes are stored on
+# store-owned customer metafields (namespace `size_preference`) so the theme can
+# read them everywhere (collection quick-add, PDP pre-select).
+#
+# Reads/writes go through the app backend route /api/size-preference, authenticated
+# with the customer-account session token (see app/routes/api.size-preference.jsx).
+# The extension itself cannot write Admin metafields directly.
+api_version = "2025-07"
+
+[[extensions]]
+name = "Size Preference"
+handle = "size-preference"
+uid = "ef6cbe83-94cd-4853-ac89-64e67239f42b8a16433d"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/SizeProfileBlock.tsx"
+target = "customer-account.profile.block.render"
+
+[extensions.capabilities]
+# api_access: lets the extension query Shopify; network_access: lets it call the
+# app backend to read/write the size-preference customer metafields.
+api_access = true
+network_access = true
+
+[access_scopes]
+scopes = "read_customers, write_customers"
+
+[extensions.settings]
+  [[extensions.settings.fields]]
+  key = "api_url"
+  type = "single_line_text_field"
+  name = "App backend URL"
+  description = "Base URL of the AMD Checkout app that reads/writes the size metafields (e.g. https://honey-birdette-checkout-amd.onrender.com). No trailing slash."

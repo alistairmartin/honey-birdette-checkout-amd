@@ -1,0 +1,16 @@
+{
+  "title": "My size profile",
+  "subtitle": "Set your sizes once — we'll pick them everywhere you add to bag.",
+  "empty": "No sizes saved yet — set them once, shop faster everywhere.",
+  "braBand": "Bra — Band",
+  "braCup": "Bra — Cup",
+  "thong": "Thong",
+  "brief": "Brief",
+  "dress": "Dress",
+  "save": "Save my sizes",
+  "saving": "Saving…",
+  "saved": "Size profile saved to your account.",
+  "loadError": "We couldn't load your size profile. Please try again.",
+  "saveError": "We couldn't save your sizes. Please try again.",
+  "braHint": "Bra size applies once both band and cup are set."
+}

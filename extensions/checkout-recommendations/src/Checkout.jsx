@@ -600,8 +600,25 @@ const resolveRecommendations = async ({ metaType, countryCode, slotLimit, lines,
 // ---------------------------------------------------------------------------
 
 function Extension() {
+  // Hide recommendations on draft-order checkouts (merchant-created invoices):
+  // cart lines aren't buyer-editable there, so "Add" wouldn't work.
+  // `orderSubmission` is 'DRAFT_ORDER' vs 'ORDER'.
+  const isDraftOrder = shopify.checkoutSettings?.value?.orderSubmission === 'DRAFT_ORDER';
+
   const lines = shopify.lines.value;
   const settings = shopify.settings.value || {};
+
+  // Hide on Honey List gift checkouts (Order A). Line items aren't exposed to
+  // extensions there (cart lines are empty on a draft-order invoice; `_`-prefixed
+  // line attributes are stripped), so key off the order-level `honey_list` marker
+  // the Honey List app stamps on the draft (ORDER_ATTR in that app's config).
+  // `honey_list` is the purpose-built marker; `hl_*` (e.g. `hl_gift_owner`, which
+  // the checkout banner relies on) is always present too. Match either so this
+  // fires regardless of which Honey List app version is deployed.
+  const orderAttributes = shopify.attributes?.value ?? [];
+  const isHoneyListCheckout = orderAttributes.some(
+    (a) => a.key === 'honey_list' || (typeof a.key === 'string' && a.key.startsWith('hl_')),
+  );
   const countryCode = shopify.localization?.country?.value?.isoCode;
   const subtotal = shopify.cost?.subtotalAmount?.value;
 
@@ -803,6 +820,10 @@ function Extension() {
     );
   }
 
+  // Draft-order or Honey List gift checkout: render nothing regardless of
+  // resolved cards/debug.
+  if (isDraftOrder || isHoneyListCheckout) return null;
+
   // Nothing to show and debugging is off: render nothing.
   if (!content && !debugPanel) return null;
 
@@ -840,8 +861,8 @@ function RecommendationCard({ card, addingVariantId, onAdd }) {
     card.variants.find((v) => v.id === card.variantId) ||
     card.variants[0];
 
-  // Gallery: all product images, with the active one shown large in the modal.
-  const images = card.images?.length ? card.images : [{ url: card.imageUrl, alt: card.imageAlt }];
+  // Gallery: up to 7 product images, with the active one shown large in the modal.
+  const images = (card.images?.length ? card.images : [{ url: card.imageUrl, alt: card.imageAlt }]).slice(0, 7);
   const [activeImage, setActiveImage] = useState(0);
   const activeIdx = Math.min(activeImage, images.length - 1);
   const mainImage = images[activeIdx];

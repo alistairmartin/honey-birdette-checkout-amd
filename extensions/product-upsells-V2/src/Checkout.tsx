@@ -21,6 +21,8 @@ import {
   useCartLines,
   useApplyCartLinesChange,
   useApi,
+  useAttributes,
+  useCheckoutSettings,
   useSettings,
   useTranslate,
   Style,
@@ -35,6 +37,11 @@ export default reactExtension("purchase.checkout.block.render", () => <App />);
 
 function App() {
   const { query, i18n } = useApi();
+  // Hide the upsell/giftbox block on draft-order checkouts (merchant-created
+  // invoices). Cart lines aren't buyer-editable there, so the "Add" actions
+  // wouldn't work. `orderSubmission` is 'DRAFT_ORDER' vs 'ORDER'.
+  const checkoutSettings = useCheckoutSettings();
+  const isDraftOrder = checkoutSettings?.orderSubmission === "DRAFT_ORDER";
   const { myshopifyDomain } = useShop();
   const shippingAddress = useShippingAddress();
   const applyCartLinesChange = useApplyCartLinesChange();
@@ -70,6 +77,18 @@ function App() {
 
   // Grab active cart lines and settings
   const lines = useCartLines();
+
+  // Hide on Honey List gift checkouts (Order A). Line items aren't exposed to
+  // extensions there (cart lines are empty on a draft-order invoice; `_`-prefixed
+  // line attributes are stripped), so key off the order-level `honey_list` marker
+  // the Honey List app stamps on the draft (ORDER_ATTR in that app's config).
+  // `honey_list` is the purpose-built marker; `hl_*` (e.g. `hl_gift_owner`, which
+  // the checkout banner relies on) is always present too. Match either so this
+  // fires regardless of which Honey List app version is deployed.
+  const orderAttributes = useAttributes();
+  const isHoneyListCheckout = (orderAttributes || []).some(
+    (a) => a?.key === "honey_list" || (typeof a?.key === "string" && a.key.startsWith("hl_")),
+  );
   const {
     // Product 1
     product1,
@@ -472,6 +491,10 @@ useEffect(() => {
   ].some(Boolean);
 
   if (!variantsLoaded) {
+    return null;
+  }
+
+  if (isDraftOrder || isHoneyListCheckout) {
     return null;
   }
 
