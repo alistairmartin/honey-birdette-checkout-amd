@@ -18,7 +18,11 @@ import { SIZE_PREFERENCE_GROUP } from "./sizePreferenceMetafields.server";
 
 export const GROUPS = [SIZE_PREFERENCE_GROUP];
 
-const DEFAULT_ACCESS = { admin: "MERCHANT_READ_WRITE", storefront: "PUBLIC_READ" };
+// Store-owned (non-`$app`) customer metafields that more than the defining app
+// must write (app backend write route + CA account extension) require
+// admin: PUBLIC_READ_WRITE. Shopify rejects MERCHANT_READ_WRITE here with
+// "Setting this access control is not permitted. It must be one of [public_read_write]".
+const DEFAULT_ACCESS = { admin: "PUBLIC_READ_WRITE", storefront: "PUBLIC_READ" };
 
 function definitionsQuery(namespace, ownerType) {
   return `#graphql
