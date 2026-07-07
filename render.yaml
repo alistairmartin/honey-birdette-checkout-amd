@@ -12,7 +12,9 @@ services:
     dockerfilePath: ./Dockerfile
     plan: starter            # Starter is required to attach a persistent disk
     region: singapore        # closest Render region to the AU store
-    autoDeploy: false        # deploy manually so it never races a `shopify app deploy`
+    autoDeploy: true         # redeploy the backend on every push to the tracked branch.
+                             # Independent of `shopify app deploy` (that ships extensions);
+                             # this only rebuilds the Remix admin app from the Dockerfile.
     disk:
       name: sqlite-data
       mountPath: /data       # DATABASE_URL points here so sessions survive restarts
