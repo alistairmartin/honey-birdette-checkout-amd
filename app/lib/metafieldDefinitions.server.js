@@ -12,17 +12,20 @@
 //     definitions: [{ key, name, description, type, choices?, access? }]
 //   }
 // `choices` (optional) becomes a `choices` validation. `access` (optional)
-// overrides the default { admin: MERCHANT_READ_WRITE, storefront: PUBLIC_READ }.
+// overrides the default { storefront: PUBLIC_READ, customerAccount: READ_WRITE }.
+//
+// NOTE: `admin` is deliberately NOT set. On this store the `size_preference`
+// namespace pins admin access to PUBLIC_READ_WRITE (so more than one app can
+// read/write), and MetafieldAdminAccessInput only accepts MERCHANT_READ /
+// MERCHANT_READ_WRITE — passing admin at all triggers Shopify's
+// "Setting this access control is not permitted. It must be one of
+// [public_read_write]" error. Omit admin and Shopify defaults it correctly.
 
 import { SIZE_PREFERENCE_GROUP } from "./sizePreferenceMetafields.server";
 
 export const GROUPS = [SIZE_PREFERENCE_GROUP];
 
-// Store-owned (non-`$app`) customer metafields that more than the defining app
-// must write (app backend write route + CA account extension) require
-// admin: PUBLIC_READ_WRITE. Shopify rejects MERCHANT_READ_WRITE here with
-// "Setting this access control is not permitted. It must be one of [public_read_write]".
-const DEFAULT_ACCESS = { admin: "PUBLIC_READ_WRITE", storefront: "PUBLIC_READ" };
+const DEFAULT_ACCESS = { storefront: "PUBLIC_READ", customerAccount: "READ_WRITE" };
 
 function definitionsQuery(namespace, ownerType) {
   return `#graphql

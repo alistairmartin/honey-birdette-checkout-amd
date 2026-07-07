@@ -37,9 +37,9 @@ export const action = async ({ request }) => {
       const result = await installGroup(admin, groupId);
       return json({ ok: result.ok, groupId, results: result.results, error: result.error ?? null });
     }
-    return json({ ok: false, error: `Unknown intent: ${intent}` }, { status: 400 });
+    return json({ ok: false, groupId, error: `Unknown intent: ${intent}` }, { status: 400 });
   } catch (err) {
-    return json({ ok: false, error: err?.message ?? String(err) }, { status: 500 });
+    return json({ ok: false, groupId, error: err?.message ?? String(err) }, { status: 500 });
   }
 };
 
