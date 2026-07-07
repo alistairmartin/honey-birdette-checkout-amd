@@ -33,6 +33,7 @@ Store: Honey Birdette AU (www.honeybirdette.com).
 | `skirt` | `XXS`, `XS`, `S`, `M`, `L`, `XL`, `XXL` |
 | `swimsuit` | `XXS`, `XS`, `S`, `M`, `L`, `XL`, `XXL` |
 | `top` | `XXS`, `XS`, `S`, `M`, `L`, `XL`, `XXL` |
+| `bodysuit` | `XXS`, `XS`, `S`, `M`, `L`, `XL`, `XXL` |
 | `hosiery` | `S`, `M`, `L` |
 | `robe` | `S/M`, `M/L` |
 | `latex` | `S/M`, `M/L` |
@@ -62,30 +63,31 @@ On a PDP / quick-add, pick the preference key from the product's **product type*
 | Robe | `robe` | match `S/M` or `M/L` to the `Size` option |
 | Latex | `latex` | match `S/M` or `M/L` to the `Size` option |
 | Bra | `band` + `cup` | match `band` to `Size`, `cup` to `Cup` |
-| **Bustier, Bodysuit, Chemise, Dress** | **`band` + `cup`** | see section 3 |
+| Bodysuit | `bodysuit` OR `band`+`cup` | letter Size -> `bodysuit`; band+`Cup` option -> bra size (see section 3) |
+| **Bustier, Chemise, Dress** | **`band` + `cup`** | see section 3 |
 
 ---
 
-## 3. IMPORTANT - band+cup product types (Bustier, Bodysuit, Chemise, Dress)
+## 3. IMPORTANT - product types that can be band+cup (Bodysuit, Bustier, Chemise, Dress)
 
-These four product types are **not** stored as their own size categories. There is no
-`dress` / `bodysuit` / `bustier` / `chemise` metafield. This is deliberate: in the catalog
-these are frequently sold as **band + cup** (bra sizing, e.g. `Size` = `10/12/14/16/18`
-plus a `Cup` = `A-G` option), so they map to the customer's saved **bra** size.
+These product types are sold **two different ways** in the catalog: some as a single letter
+`Size` (XXS-XXL), some as **band + cup** (bra sizing, e.g. `Size` = `10/12/14/16/18` plus a
+`Cup` = `A-G` option). **Branch on the presence of a `Cup` option, not on the product type.**
 
-**Rule for these product types:**
+**Rule (per product):**
 
-1. Inspect the product's option names. If it has a **`Cup`** option (and a numeric `Size`),
-   treat it as band+cup:
-   - pre-select the `Size` option from `band`
-   - pre-select the `Cup` option from `cup`
+1. If the product has a **`Cup`** option (numeric `Size` + `Cup`) -> treat as band+cup:
+   - pre-select the `Size` option from `band`, the `Cup` option from `cup`
    - only pre-select when BOTH `band` and `cup` are set.
-2. If the same product instead uses a **single letter `Size`** option (XS-XXL) and no `Cup`
-   option, there is **no stored preference for it** - leave it unselected. (Accepted
-   limitation of reusing the bra size; we do not store a separate letter size for these types.)
+2. If the product has a **single letter `Size`** option and no `Cup`:
+   - **Bodysuit** has its own `bodysuit` preference (letter XXS-XXL) - use it. (e.g. the Onyx
+     Bodysuit is `XXS-XXL`.)
+   - **Bustier, Chemise, Dress** do NOT have their own letter category - there is no stored
+     preference, so leave the size unselected. (Accepted limitation: only their band+cup
+     versions pre-select, from the saved bra size.)
 
-Do not assume every Bodysuit/Chemise/Dress is band+cup - some are letter-sized. Branch on the
-presence of the `Cup` option, not on the product type alone.
+If you later find a lot of letter-sized Bustier/Chemise/Dress traffic, ask the account side to
+add those as letter categories too (same pattern as `bodysuit`).
 
 > Note: the catalog has band+cup items up to **band 18**, but the bra `band` preference
 > currently caps at `16`. A customer who wears band 18 cannot express it yet. Flag back to
@@ -177,7 +179,8 @@ used for AU), set the `choices` from the actual data, then create the definition
 - [ ] Read the 12 keys from `customer.metafields.size_preference.*`
 - [ ] Collection quick-add: pre-select the size chip/variant from the matching key
 - [ ] PDP: pre-select the variant option from the matching key
-- [ ] Band+cup product types (Bustier/Bodysuit/Chemise/Dress): pre-select from `band`+`cup`
-      ONLY when the product has a `Cup` option; leave letter-sized ones alone
+- [ ] Bodysuit/Bustier/Chemise/Dress: if the product has a `Cup` option, pre-select from
+      `band`+`cup`; if it is a letter `Size`, use `bodysuit` for bodysuits and leave
+      Bustier/Chemise/Dress unselected (no letter category for those)
 - [ ] Case-insensitive / trimmed option matching; no forced wrong size
 - [ ] Guest localStorage fallback with the same keys

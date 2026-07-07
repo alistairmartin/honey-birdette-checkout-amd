@@ -24,6 +24,7 @@ const OPTIONS = {
   skirt: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
   swimsuit: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
   top: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+  bodysuit: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
   hosiery: ["S", "M", "L"],
   robe: ["S/M", "M/L"],
   latex: ["S/M", "M/L"],
@@ -34,6 +35,15 @@ const EMPTY_SIZES = KEYS.reduce((acc, k) => ({ ...acc, [k]: null }), {});
 
 // band + cup render under Bra headings; everything else uses its own locale key.
 const LABEL_KEY = { band: "braBand", cup: "braCup" };
+
+// Categories grouped by body area for the form. Every key in OPTIONS must appear
+// in exactly one group. `title` is a locale key. Reorder / regroup here freely.
+const GROUPS = [
+  { title: "groupBrasTops", keys: ["band", "cup", "corset", "top", "bodysuit"] },
+  { title: "groupKnickers", keys: ["thong", "brief"] },
+  { title: "groupLegwear", keys: ["suspender", "hosiery"] },
+  { title: "groupApparel", keys: ["skirt", "swimsuit", "robe", "latex"] },
+];
 
 const DEFAULT_API_URL = "https://honey-birdette-checkout-amd.onrender.com";
 
@@ -113,11 +123,11 @@ function SizeProfileBlock() {
     };
   }, []);
 
-  // Tap a chip: select it, or deselect if it's already the current value.
+  // Choose a size from the dropdown; the empty option clears it (-> null).
   function pick(key, value) {
     setSaved(false);
     setSaveError(false);
-    setDraft((prev) => ({ ...prev, [key]: prev[key] === value ? null : value }));
+    setDraft((prev) => ({ ...prev, [key]: value || null }));
   }
 
   async function save() {
@@ -177,17 +187,22 @@ function SizeProfileBlock() {
           </s-banner>
         )}
 
-        {KEYS.map((key) => (
-          <>
-            <ChipGroup
-              key={key}
-              label={t(LABEL_KEY[key] || key)}
-              options={OPTIONS[key]}
-              value={draft[key]}
-              onPick={(v) => pick(key, v)}
-            />
-            {key === "cup" && <s-text color="subdued">{t("braHint")}</s-text>}
-          </>
+        {GROUPS.map((group) => (
+          <s-stack key={group.title} gap="base">
+            <s-text type="strong">{t(group.title)}</s-text>
+            {group.keys.map((key) => (
+              <>
+                <SizeSelect
+                  key={key}
+                  label={t(LABEL_KEY[key] || key)}
+                  options={OPTIONS[key]}
+                  value={draft[key]}
+                  onPick={(v) => pick(key, v)}
+                />
+                {key === "cup" && <s-text color="subdued">{t("braHint")}</s-text>}
+              </>
+            ))}
+          </s-stack>
         ))}
 
         {saveError && (
@@ -215,22 +230,22 @@ function SizeProfileBlock() {
   );
 }
 
-function ChipGroup({ label, options, value, onPick }) {
+// One dropdown per size category. The leading empty option lets the customer
+// clear a size (submits as "" -> stored as null). The select renders its own
+// label, so no separate label text is needed.
+function SizeSelect({ label, options, value, onPick }) {
   return (
-    <s-stack gap="small-300">
-      <s-text color="subdued" type="strong">{label}</s-text>
-      <s-grid gridTemplateColumns="repeat(auto-fit, minmax(56px, 1fr))" gap="small-500">
-        {options.map((opt) => (
-          <s-button
-            key={opt}
-            inlineSize="fill"
-            variant={value === opt ? "primary" : "secondary"}
-            onClick={() => onPick(opt)}
-          >
-            {opt}
-          </s-button>
-        ))}
-      </s-grid>
-    </s-stack>
+    <s-select
+      label={label}
+      value={value || ""}
+      onChange={(event) => onPick(event.currentTarget.value)}
+    >
+      <s-option value="">{t("unset")}</s-option>
+      {options.map((opt) => (
+        <s-option key={opt} value={opt}>
+          {opt}
+        </s-option>
+      ))}
+    </s-select>
   );
 }

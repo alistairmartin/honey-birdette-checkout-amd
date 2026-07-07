@@ -11,6 +11,7 @@
   "skirt": "Skirt",
   "swimsuit": "Swimsuit",
   "top": "Top",
+  "bodysuit": "Bodysuit",
   "hosiery": "Hosiery",
   "robe": "Robe",
   "latex": "Latex",
@@ -19,5 +20,10 @@
   "saved": "Size profile saved to your account.",
   "loadError": "We couldn't load your size profile. Please try again.",
   "saveError": "We couldn't save your sizes. Please try again.",
-  "braHint": "Bra size applies once both band and cup are set."
+  "braHint": "Bra size applies once both band and cup are set.",
+  "unset": "Select a size",
+  "groupBrasTops": "Bras & tops",
+  "groupKnickers": "Knickers",
+  "groupLegwear": "Legwear",
+  "groupApparel": "Apparel & swim"
 }

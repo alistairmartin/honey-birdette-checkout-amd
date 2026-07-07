@@ -11,7 +11,7 @@ import { authenticate, unauthenticated } from "../shopify.server";
 // signed JWT, so a caller can't impersonate another customer or shop via the body.
 //
 // The metafields (band, cup, thong, brief, suspender, corset, skirt, swimsuit,
-// top, hosiery, robe, latex) are documented in
+// top, bodysuit, hosiery, robe, latex) are documented in
 // info/design_handoff_size_preference/METAFIELDS.md. This route trusts that the
 // definitions already exist; it only sets/deletes values.
 
@@ -29,6 +29,7 @@ const ALLOWED = {
   skirt: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
   swimsuit: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
   top: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+  bodysuit: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
   hosiery: ["S", "M", "L"],
   robe: ["S/M", "M/L"],
   latex: ["S/M", "M/L"],
