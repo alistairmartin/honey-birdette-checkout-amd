@@ -7,7 +7,7 @@
 # Reads/writes go through the app backend route /api/size-preference, authenticated
 # with the customer-account session token (see app/routes/api.size-preference.jsx).
 # The extension itself cannot write Admin metafields directly.
-api_version = "2025-07"
+api_version = "2026-07"
 
 [[extensions]]
 name = "Size Preference"

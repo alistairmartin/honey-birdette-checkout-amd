@@ -1,9 +1,14 @@
 // Size Preference metafield group descriptor.
 //
-// 5 store-owned customer metafield definitions under the `size_preference`
-// namespace (band, cup, thong, brief, dress). "Store-owned" (not app-reserved
-// `$app`) + storefront PUBLIC_READ so the theme can read the logged-in customer's
-// own values in Liquid / Storefront API.
+// Store-owned customer metafield definitions under the `size_preference`
+// namespace: band, cup (bra), thong, brief, suspender, corset, skirt, swimsuit,
+// top (letter XXS-XXL), hosiery (S-L) and robe, latex (combined S/M, M/L).
+// Choices mirror the real AU variant options per product type. "Store-owned"
+// (not app-reserved `$app`) + storefront PUBLIC_READ so the theme can read the
+// logged-in customer's own values in Liquid / Storefront API.
+//
+// Band+cup product types (bustier, bodysuit, chemise, dress) are intentionally
+// NOT separate categories: the theme pre-selects those from the saved bra band+cup.
 //
 // Registered in app/lib/metafieldDefinitions.server.js and surfaced on the
 // Metafield definitions admin page. Pairs with the write route
@@ -13,7 +18,7 @@ export const SIZE_PREFERENCE_GROUP = {
   id: "size-preference",
   title: "Size preference",
   description:
-    "Customer size profile (bra band + cup, thong, brief, dress). Read by the account extension and the theme for quick-add / PDP pre-select.",
+    "Customer size profile (bra band + cup, thong, brief, suspender, corset, skirt, swimsuit, top, hosiery, robe, latex). Read by the account extension and the theme for quick-add / PDP pre-select.",
   ownerType: "CUSTOMER",
   namespace: "size_preference",
   // `choices` validations enforce the allowed AU sizes and give merchants a
@@ -21,38 +26,87 @@ export const SIZE_PREFERENCE_GROUP = {
   definitions: [
     {
       key: "band",
-      name: "Size preference — Bra band",
+      name: "Size preference - Bra band",
       description: "Customer's saved bra band size (AU).",
       type: "single_line_text_field",
       choices: ["8", "10", "12", "14", "16"],
     },
     {
       key: "cup",
-      name: "Size preference — Bra cup",
+      name: "Size preference - Bra cup",
       description: "Customer's saved bra cup size (AU).",
       type: "single_line_text_field",
       choices: ["A", "B", "C", "D", "DD", "E", "F", "G"],
     },
     {
       key: "thong",
-      name: "Size preference — Thong",
+      name: "Size preference - Thong",
       description: "Customer's saved thong size (AU).",
       type: "single_line_text_field",
-      choices: ["XS", "S", "M", "L", "XL", "XXL"],
+      choices: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
     },
     {
       key: "brief",
-      name: "Size preference — Brief",
+      name: "Size preference - Brief",
       description: "Customer's saved brief size (AU).",
       type: "single_line_text_field",
-      choices: ["XS", "S", "M", "L", "XL", "XXL"],
+      choices: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
     },
     {
-      key: "dress",
-      name: "Size preference — Dress",
-      description: "Customer's saved dress size (AU).",
+      key: "suspender",
+      name: "Size preference - Suspender",
+      description: "Customer's saved suspender size (AU).",
       type: "single_line_text_field",
-      choices: ["6", "8", "10", "12", "14", "16"],
+      choices: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+    },
+    {
+      key: "corset",
+      name: "Size preference - Corset",
+      description: "Customer's saved corset size (AU).",
+      type: "single_line_text_field",
+      choices: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+    },
+    {
+      key: "skirt",
+      name: "Size preference - Skirt",
+      description: "Customer's saved skirt size (AU).",
+      type: "single_line_text_field",
+      choices: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+    },
+    {
+      key: "swimsuit",
+      name: "Size preference - Swimsuit",
+      description: "Customer's saved swimsuit size (AU).",
+      type: "single_line_text_field",
+      choices: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+    },
+    {
+      key: "top",
+      name: "Size preference - Top",
+      description: "Customer's saved top size (AU).",
+      type: "single_line_text_field",
+      choices: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+    },
+    {
+      key: "hosiery",
+      name: "Size preference - Hosiery",
+      description: "Customer's saved hosiery size (AU).",
+      type: "single_line_text_field",
+      choices: ["S", "M", "L"],
+    },
+    {
+      key: "robe",
+      name: "Size preference - Robe",
+      description: "Customer's saved robe size (AU).",
+      type: "single_line_text_field",
+      choices: ["S/M", "M/L"],
+    },
+    {
+      key: "latex",
+      name: "Size preference - Latex",
+      description: "Customer's saved latex size (AU).",
+      type: "single_line_text_field",
+      choices: ["S/M", "M/L"],
     },
   ],
 };

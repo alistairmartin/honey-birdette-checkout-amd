@@ -10,7 +10,8 @@ import { authenticate, unauthenticated } from "../shopify.server";
 // `sessionToken.dest` is the shop's *.myshopify.com URL — both come from the
 // signed JWT, so a caller can't impersonate another customer or shop via the body.
 //
-// The 5 metafields (band, cup, thong, brief, dress) are documented in
+// The metafields (band, cup, thong, brief, suspender, corset, skirt, swimsuit,
+// top, hosiery, robe, latex) are documented in
 // info/design_handoff_size_preference/METAFIELDS.md. This route trusts that the
 // definitions already exist; it only sets/deletes values.
 
@@ -21,9 +22,16 @@ const TYPE = "single_line_text_field";
 const ALLOWED = {
   band: ["8", "10", "12", "14", "16"],
   cup: ["A", "B", "C", "D", "DD", "E", "F", "G"],
-  thong: ["XS", "S", "M", "L", "XL", "XXL"],
-  brief: ["XS", "S", "M", "L", "XL", "XXL"],
-  dress: ["6", "8", "10", "12", "14", "16"],
+  thong: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+  brief: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+  suspender: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+  corset: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+  skirt: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+  swimsuit: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+  top: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+  hosiery: ["S", "M", "L"],
+  robe: ["S/M", "M/L"],
+  latex: ["S/M", "M/L"],
 };
 const KEYS = Object.keys(ALLOWED);
 
@@ -31,7 +39,7 @@ const READ_QUERY = `#graphql
   query CustomerSizePreference($ownerId: ID!) {
     customer(id: $ownerId) {
       id
-      metafields(first: 10, namespace: "${NAMESPACE}") {
+      metafields(first: 50, namespace: "${NAMESPACE}") {
         nodes { key value }
       }
     }
