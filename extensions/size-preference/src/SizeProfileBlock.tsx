@@ -175,7 +175,10 @@ function SizeProfileBlock() {
 
   return (
     <s-box border="base" padding="base" borderRadius="base">
-      <s-stack gap="loose">
+      {/* large-300 between sections/groups; each group uses base internally so
+          its heading stays close to its own selects (valid tokens: none,
+          small-500..small-100, base, large-100..large-500 - NOT "loose"). */}
+      <s-stack gap="large-300">
         <s-stack gap="small-300">
           <s-heading>{t("title")}</s-heading>
           <s-text color="subdued">{summary || t("subtitle")}</s-text>

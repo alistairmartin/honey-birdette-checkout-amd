@@ -331,6 +331,7 @@ const INITIAL_BUILDER = {
   mode: "live",
   trigger_type: "min_spend",
   redemption_type: "one_per_order",
+  max_total_uses: "",
   show_banners: true,
   show_success_banner: true,
   label: "LIMITED OFFER",
@@ -429,6 +430,13 @@ function buildConfig(state) {
   if (state.redemption_type === "one_per_customer" && state.customer_redeemed_tag.trim()) {
     config.customer_redeemed_tag = state.customer_redeemed_tag.trim();
   }
+  // Cap on how many times this offer's discount can be used in total. Positive
+  // integer only; blank/0 means unlimited. Enforced by the app deactivating the
+  // discount once its usage reaches this, and by the checkout showing "sold out".
+  const maxTotalUses = Number(state.max_total_uses);
+  if (Number.isFinite(maxTotalUses) && maxTotalUses > 0) {
+    config.max_total_uses = Math.floor(maxTotalUses);
+  }
   config.combines_with = {
     orderDiscounts: !!state.combines_order,
     productDiscounts: !!state.combines_product,
@@ -495,6 +503,7 @@ function builderFromConfig(c) {
     mode: c.mode === "test" ? "test" : "live",
     trigger_type: c.trigger_type ?? "min_spend",
     redemption_type,
+    max_total_uses: c.max_total_uses != null ? String(c.max_total_uses) : "",
     show_banners: c.show_banners !== false,
     show_success_banner: c.show_success_banner !== false,
     label: c.label ?? "",
@@ -1162,6 +1171,16 @@ export default function GiftWithPurchasePage() {
                         helpText="Customers carrying this tag are treated as having already redeemed. Set by your post-order flow."
                       />
                     )}
+                    <TextField
+                      label="Maximum total uses"
+                      type="number"
+                      min={0}
+                      value={builder.max_total_uses}
+                      onChange={(v) => update("max_total_uses", v)}
+                      autoComplete="off"
+                      placeholder="Leave blank for unlimited"
+                      helpText="Cap on how many times this gift's discount can be used in total. Once reached, the app deactivates the discount and checkout shows the sold-out message. Blank or 0 = unlimited. Note: the used count updates asynchronously, so a small overshoot near the cap is possible."
+                    />
 
                     <Divider />
                     <Text as="h3" variant="headingSm">

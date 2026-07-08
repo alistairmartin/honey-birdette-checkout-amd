@@ -544,6 +544,12 @@ const config = useMemo(() => {
     // Passed through to the discount function via the metafield; not used by the
     // extension UI directly (the function makes the gift line free / % off).
     discount_percentage: Number(cfg.discount_percentage ?? 100),
+    // DB row id the app stamps onto each config in the shop metafield, used to
+    // ask the backend for this offer's discount usage (sold-out gate).
+    config_id: String(cfg.id || "").trim(),
+    // Cap on total discount uses. 0 = unlimited. The backend enforces the hard
+    // stop (deactivates the discount); this drives the checkout sold-out state.
+    max_total_uses: Number(cfg.max_total_uses || 0),
     product_id: cfg.product_id, // can be gid or numeric
     shipping_countries: String(cfg.shipping_countries || ""),
     // Only honour the redeemed tag in one-per-customer mode. Blanking it here
@@ -1046,6 +1052,56 @@ async function removeGiftIfPresent() {
 
   const effectiveHasRedeemed = hasRedeemed || remoteHasRedeemed === true;
 
+  // Max-total-uses sold-out gate. The storefront API can't read a discount's
+  // usage count, so we ask the app backend (which reads asyncUsageCount via the
+  // Admin API and deactivates the discount once the cap is hit). We identify the
+  // offer by the config's row id, stamped into the shop metafield by the app.
+  const GWP_USAGE_URL =
+    "https://honey-birdette-checkout-amd.onrender.com/api/checkout/gwp-usage-check";
+  const [usageSoldOut, setUsageSoldOut] = useState(false);
+  // Whether the usage check has resolved. Uncapped offers are "checked" from the
+  // start; capped offers gate the auto-add until we know the sold-out state, so
+  // we never add a gift line while its discount is (or is about to be) off - that
+  // would add the gift at full price.
+  const usageCapConfigured = config.max_total_uses > 0 && Boolean(config.config_id);
+  const [usageChecked, setUsageChecked] = useState(false);
+  useEffect(() => {
+    // Only relevant when this offer has a cap and we know which config to ask
+    // about. Uncapped offers never call the backend.
+    if (!usageCapConfigured) {
+      setUsageSoldOut(false);
+      setUsageChecked(true);
+      return;
+    }
+    let cancelled = false;
+    setUsageChecked(false);
+    (async () => {
+      try {
+        const token = await sessionToken.get();
+        const res = await fetch(GWP_USAGE_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ config_id: config.config_id }),
+        });
+        if (cancelled) return;
+        const data = await res.json().catch(() => ({}));
+        setUsageSoldOut(Boolean(data?.soldOut));
+      } catch (_err) {
+        // Fail open: if the backend is unreachable, don't hide a valid gift.
+        // The app's sync-time enforcement is the backstop.
+        if (!cancelled) setUsageSoldOut(false);
+      } finally {
+        if (!cancelled) setUsageChecked(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [usageCapConfigured, config.config_id, sessionToken]);
+
   const redemptionGuardSettled = useMemo(() => {
     if (!config.customer_redeemed_tag) return true; // merchant didn't configure check
     if (customerPresent) return customerMetafieldsObserved; // logged-in: wait for metafield
@@ -1418,6 +1474,8 @@ const messageText = config.banner_message_before
     if (tagsLoading) return {behavior: 'allow'};
     if (!redemptionGuardSettled) return {behavior: 'allow'};
     if (effectiveHasRedeemed || !shippingOk || giftAvailable === false) return {behavior: 'allow'};
+    // Usage cap reached: the offer is sold out, so never block checkout for it.
+    if (usageSoldOut) return {behavior: 'allow'};
     // Gift can't be loaded (draft / unpublished / bad ID): the offer is hidden,
     // so never block checkout waiting for a gift that will never add.
     if (giftUnresolvable) return {behavior: 'allow'};
@@ -1571,7 +1629,8 @@ const messageText = config.banner_message_before
     !offerActive ||
     effectiveHasRedeemed ||
     !shippingOk ||
-    giftAvailable === false
+    giftAvailable === false ||
+    usageSoldOut
   );
 
   const definitelyEligible = Boolean(
@@ -1632,6 +1691,9 @@ const messageText = config.banner_message_before
     // after first render - adding then removing in that gap caused the bug
     // the merchant reported.
     if (!redemptionGuardSettled) return;
+    // Defer auto-add for a capped offer until the usage check resolves, so we
+    // never add the gift line while the discount is (or is about to be) off.
+    if (usageCapConfigured && !usageChecked) return;
     // If outside the configured validity window, ensure gift is removed
     if (!offerActive) {
       (async () => {
@@ -1678,6 +1740,16 @@ const messageText = config.banner_message_before
         return;
       }
 
+      // 2c) If the discount's usage cap is reached -> treat as sold out. The app
+      // has (or will) deactivate the discount, so the gift would no longer be
+      // free; remove any promo gift line and show the sold-out message.
+      if (usageSoldOut) {
+        await removeGiftIfPresent();
+        const soldMsg = config.sold_out_message || "Sorry, sold out.";
+        setBanner({ status: "warning", message: soldMsg, code: "sold_out" } as any);
+        return;
+      }
+
       // 3) If trigger qualifies, ensure gift is added; otherwise, remove it
       if (qualification.qualifies) {
         // If a gift is already in cart (e.g., after reload), show success.
@@ -1716,7 +1788,7 @@ const messageText = config.banner_message_before
 
     // Fire and forget (sequential inside)
     void syncGift();
-  }, [tagsLoading, redemptionGuardSettled, effectiveHasRedeemed, shippingOk, taggedSpend, isGiftInCart, anyGiftOptionInCart, autoAdd, giftVariantGid, giftAvailable, adjustedGoal, offerActive, qualification.qualifies]);
+  }, [tagsLoading, redemptionGuardSettled, effectiveHasRedeemed, shippingOk, taggedSpend, isGiftInCart, anyGiftOptionInCart, autoAdd, giftVariantGid, giftAvailable, adjustedGoal, offerActive, qualification.qualifies, usageSoldOut, usageCapConfigured, usageChecked]);
 
   // (Optional) show fetch error
   // {tagsError ? <Text size="small">Tag fetch error</Text> : null}
@@ -1743,7 +1815,7 @@ const messageText = config.banner_message_before
   // Decide whether any visible content would render. If not, return null so the
   // component doesn't leave an empty bordered box in checkout.
   const showProgressBanner = Boolean(
-    config.show_banners && offerActive && !effectiveHasRedeemed && shippingOk && !qualification.qualifies && !isGiftInCart &&
+    config.show_banners && offerActive && !effectiveHasRedeemed && shippingOk && !usageSoldOut && !qualification.qualifies && !isGiftInCart &&
     (config.trigger_type !== "min_spend" || adjustedGoal > 0)
   );
   const showStatusBanner = Boolean(
@@ -1883,9 +1955,11 @@ const messageText = config.banner_message_before
         <Section title={bannerTitleBefore} subtitle={config.banner_subtitle}>
           {config.label ? <OfferBadge>{config.label}</OfferBadge> : null}
           <BlockStack spacing="tight">
-            <ProgressBar
-              percent={config.trigger_type === "min_spend" ? progressPercent : (qualification.qualifies ? 100 : 0)}
-            />
+            {config.trigger_type !== "buy_x_get_y" ? (
+              <ProgressBar
+                percent={config.trigger_type === "min_spend" ? progressPercent : (qualification.qualifies ? 100 : 0)}
+              />
+            ) : null}
             {config.trigger_type === "min_spend" && remaining > 0 ? (
               <Text size="small" appearance="subdued">
                 Spend {formatMoney(remaining, activeCurrency)} more

@@ -132,6 +132,25 @@ const GET_DISCOUNT_STATUS = `#graphql
   }
 `;
 
+// Usage count + status for an automatic app discount. `asyncUsageCount` is the
+// number of times the discount has been applied (updated asynchronously, so it
+// can lag the true count by a little). Used to enforce a config's max-total-uses
+// cap by deactivating the discount once the cap is reached.
+const GET_DISCOUNT_USAGE = `#graphql
+  query GwpAppV1DiscountUsage($id: ID!) {
+    discountNode(id: $id) {
+      id
+      discount {
+        __typename
+        ... on DiscountAutomaticApp {
+          status
+          asyncUsageCount
+        }
+      }
+    }
+  }
+`;
+
 const CUSTOMERS_BY_EMAIL = `#graphql
   query GwpAppV1CustomersByEmail($query: String!) {
     customers(first: 50, query: $query) {
@@ -467,6 +486,44 @@ async function readDiscountState(admin, discountId) {
   }
 }
 
+// Read a discount's async usage count and status. Returns { used, status },
+// defaulting to used:0 / status:null when the node can't be read.
+async function readDiscountUsage(admin, discountId) {
+  if (!discountId) return { used: 0, status: null };
+  try {
+    const data = await gql(admin, GET_DISCOUNT_USAGE, { id: discountId });
+    const d = data?.discountNode?.discount;
+    return { used: Number(d?.asyncUsageCount || 0), status: d?.status ?? null };
+  } catch (err) {
+    console.error("Reading GWP discount usage failed", err);
+    return { used: 0, status: null };
+  }
+}
+
+// Positive integer max-total-uses cap from a config, or 0 when uncapped.
+function usageLimitFromConfig(config) {
+  const n = Number(config?.max_total_uses || 0);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+// Deactivate the config's discount if its usage has reached the configured
+// max-total-uses cap. No-op when uncapped, under the cap, or already inactive.
+// Deliberately never RE-activates: once a merchant (or this cap) turns a
+// discount off, resuming is a manual choice so we don't resurrect an offer the
+// merchant deactivated for another reason.
+async function enforceUsageLimit(admin, discountId, config) {
+  const limit = usageLimitFromConfig(config);
+  if (!discountId || !limit) return;
+  const { used, status } = await readDiscountUsage(admin, discountId);
+  if (used >= limit && status === "ACTIVE") {
+    try {
+      await gql(admin, DISCOUNT_DEACTIVATE, { id: discountId });
+    } catch (err) {
+      console.error("Deactivating GWP discount at usage cap failed", err);
+    }
+  }
+}
+
 async function deleteDiscount(admin, discountId) {
   if (!discountId) return;
   try {
@@ -601,9 +658,12 @@ export async function syncConfigs(admin, shop) {
     }
     return { row, config };
   });
+  // Stamp each config with its DB row id so the checkout extension can identify
+  // which discount to ask about for the max-total-uses sold-out check. The id is
+  // authoritative from the row and is never persisted back into configJson.
   const configs = parsed
-    .map((p) => p.config)
-    .filter((c) => c != null && typeof c === "object");
+    .filter((p) => p.config != null && typeof p.config === "object")
+    .map((p) => ({ ...p.config, id: p.row.id }));
 
   const ctx = await gql(admin, GET_CONTEXT);
   const installationId = ctx?.currentAppInstallation?.id ?? null;
@@ -649,7 +709,12 @@ export async function syncConfigs(admin, shop) {
       config,
       timeZone,
     });
-    if (id) discountCount += 1;
+    if (id) {
+      discountCount += 1;
+      // Re-check the usage cap on every sync so a discount that has hit its
+      // max-total-uses is turned off even without a checkout hitting the route.
+      await enforceUsageLimit(admin, id, config);
+    }
   }
 
   return { count: configs.length, discountCount, timeZone };
@@ -744,6 +809,40 @@ export async function createConfigDiscount(admin, shop, configId) {
 // Delete a config's discount. Call before deleting the config row.
 export async function deleteConfigDiscount(admin, discountId) {
   await deleteDiscount(admin, discountId);
+}
+
+// Usage/sold-out state for one config's discount, for the checkout extension's
+// max-total-uses sold-out gate. Reads the discount's async usage count, and when
+// it has reached the cap deactivates the discount (hard stop) so the function
+// stops discounting the gift. Returns { soldOut, used, limit }. `soldOut` is
+// false (and limit null) when the config is uncapped, missing, or has no
+// discount yet, so the extension shows the offer normally.
+export async function getConfigUsageState(admin, shop, configId) {
+  if (!configId) return { soldOut: false, used: null, limit: null };
+  const row = await prisma.gwpAppV1Config.findFirst({
+    where: { id: String(configId), shop },
+  });
+  if (!row?.discountId) return { soldOut: false, used: null, limit: null };
+
+  let config = null;
+  try {
+    config = JSON.parse(row.configJson);
+  } catch {
+    config = null;
+  }
+  const limit = usageLimitFromConfig(config);
+  if (!limit) return { soldOut: false, used: null, limit: null };
+
+  const { used, status } = await readDiscountUsage(admin, row.discountId);
+  const soldOut = used >= limit;
+  if (soldOut && status === "ACTIVE") {
+    try {
+      await gql(admin, DISCOUNT_DEACTIVATE, { id: row.discountId });
+    } catch (err) {
+      console.error("Deactivating GWP discount at usage cap (route) failed", err);
+    }
+  }
+  return { soldOut, used, limit };
 }
 
 // List the shop's customer segments for the eligibility picker in the builder.
