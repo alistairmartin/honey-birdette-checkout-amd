@@ -151,6 +151,15 @@ const GET_DISCOUNT_USAGE = `#graphql
   }
 `;
 
+const PRODUCTS_BY_TAG = `#graphql
+  query GwpAppV1ProductsByTag($query: String!, $cursor: String) {
+    products(first: 250, query: $query, after: $cursor) {
+      nodes { id }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
 const CUSTOMERS_BY_EMAIL = `#graphql
   query GwpAppV1CustomersByEmail($query: String!) {
     customers(first: 50, query: $query) {
@@ -412,6 +421,66 @@ async function buildContextInput(admin, config, current) {
   return { all: "ALL" };
 }
 
+// Ceiling on how many qualifying product gids we embed in the discount metafield.
+// A gid is ~33 chars, so 1000 keeps the payload well under the 64KB metafield
+// value limit. A tag matching more products than this is almost certainly the
+// wrong tag for a gift trigger.
+const MAX_QUALIFYING_PRODUCTS = 1000;
+
+// Resolve a product tag to the Product gids carrying it, paging until exhausted
+// or until MAX_QUALIFYING_PRODUCTS is reached. Returns [] for a blank tag.
+//
+// The discount function can't read product tags off cart lines, so a trigger that
+// requires a tagged "buy X" product only enforces server-side if we hand it the
+// ids. This runs on every syncConfigs() - which the builder route's loader calls
+// on each visit - so the list re-resolves whenever merchandising retags a product.
+// Between syncs the list can go stale: a newly tagged product won't unlock the
+// gift until the next sync, and an untagged one keeps working until then. The
+// checkout extension reads live tags, so it gates correctly either way; this list
+// is the function's backstop against a gift line reaching checkout unqualified.
+async function resolveQualifyingProductIds(admin, productTag) {
+  const tag = String(productTag || "").trim();
+  if (!tag) return [];
+  // Shopify search syntax: single-quoted term, backslash-escaped.
+  const escaped = tag.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const query = `tag:'${escaped}'`;
+
+  const ids = [];
+  let cursor = null;
+  try {
+    for (;;) {
+      const data = await gql(admin, PRODUCTS_BY_TAG, { query, cursor });
+      const page = data?.products;
+      for (const node of page?.nodes ?? []) {
+        if (node?.id) ids.push(node.id);
+      }
+      if (ids.length >= MAX_QUALIFYING_PRODUCTS) {
+        console.warn(
+          `GWP: tag "${tag}" matches more than ${MAX_QUALIFYING_PRODUCTS} products; ` +
+            `truncating the qualifying list. Products beyond the cap will not unlock the gift.`,
+        );
+        return ids.slice(0, MAX_QUALIFYING_PRODUCTS);
+      }
+      if (!page?.pageInfo?.hasNextPage) break;
+      cursor = page.pageInfo.endCursor;
+    }
+  } catch (err) {
+    console.error(`GWP: resolving products for tag "${tag}" failed`, err);
+    // Fail closed. The function skips a buy_x_and_min_spend offer with an empty
+    // qualifying list, so a lookup failure withholds the gift rather than giving
+    // it away to carts that never had the tagged product.
+    return [];
+  }
+  return ids;
+}
+
+// The qualifying-product ids a config's function payload needs, or [] when its
+// trigger doesn't gate on a tagged product.
+async function qualifyingProductIdsFor(admin, config) {
+  if (String(config?.trigger_type || "") !== "buy_x_and_min_spend") return [];
+  return resolveQualifyingProductIds(admin, config?.product_tag);
+}
+
 // Create a new automatic app discount bound to the function, carrying one
 // config's slim payload, with the given title. Created active unless `active`
 // is false. Returns the new discount gid.
@@ -538,7 +607,8 @@ async function deleteDiscount(admin, discountId) {
 // active state from enabled/mode. A disabled config is always deactivated.
 // Returns the discount gid, or null when the config has no gift product.
 async function ensureConfigDiscount(admin, { functionId, row, config, timeZone }) {
-  const fnConfig = buildFunctionConfig(config);
+  const qualifyingProductIds = await qualifyingProductIdsFor(admin, config);
+  const fnConfig = buildFunctionConfig(config, qualifyingProductIds);
   if (!fnConfig) {
     // No gift product to target. Retire any discount the config used to own.
     if (row.discountId) {

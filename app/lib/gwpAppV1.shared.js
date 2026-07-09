@@ -45,6 +45,27 @@ export const DEFAULT_THRESHOLDS = {
 // Free gift by default. PWP offers set this lower (e.g. 50 for 50% off).
 export const DEFAULT_DISCOUNT_PERCENTAGE = 100;
 
+// The rules that can unlock a gift.
+//   min_spend           - spend N on products carrying `product_tag` (whole cart
+//                         when the tag is blank).
+//   subscription        - any cart line with a selling plan.
+//   buy_x_get_y         - at least one cart line carrying `product_tag`.
+//   buy_x_and_min_spend - BOTH: one line carrying `product_tag`, AND N spent
+//                         across the whole cart (the tag does not narrow the
+//                         spend here, unlike min_spend). Gift cards never count.
+export const TRIGGER_TYPES = [
+  { label: "Min spend", value: "min_spend" },
+  { label: "Subscription", value: "subscription" },
+  { label: "Buy X get Y", value: "buy_x_get_y" },
+  { label: "Buy X + min spend", value: "buy_x_and_min_spend" },
+];
+
+// Triggers whose gift is gated on a per-currency spend threshold.
+export function triggerUsesMinSpend(triggerType) {
+  const t = String(triggerType || "min_spend");
+  return t === "min_spend" || t === "buy_x_and_min_spend";
+}
+
 // Metafield wiring.
 export const SHOP_METAFIELD_NAMESPACE = "$app:gift-with-purchase";
 export const SHOP_METAFIELD_KEY = "configs";
@@ -123,14 +144,27 @@ function collectGiftTargets(c) {
 // NOT filter on `enabled` - in the per-config discount model the enable/disable
 // state is carried by activating/deactivating the config's own discount, not by
 // omitting it from the metafield.
-export function buildFunctionConfig(c) {
+//
+// `qualifyingProductIds` is the config's `product_tag` already resolved to Product
+// gids by the caller (see resolveQualifyingProductIds in gwpAppV1.server.js). Only
+// buy_x_and_min_spend uses it: the function can't read product tags, so it needs
+// the ids to enforce the "buy X" half of the trigger itself.
+export function buildFunctionConfig(c, qualifyingProductIds = []) {
   if (!c || typeof c !== "object") return null;
   const { productIds, variantIds } = collectGiftTargets(c);
   if (productIds.length === 0 && variantIds.length === 0) return null;
   const pct = Number(c.discount_percentage);
+  const trigger_type = String(c.trigger_type || "min_spend");
   return {
     enabled: true,
-    trigger_type: String(c.trigger_type || "min_spend"),
+    trigger_type,
+    ...(trigger_type === "buy_x_and_min_spend"
+      ? {
+          qualifying_product_ids: Array.isArray(qualifyingProductIds)
+            ? qualifyingProductIds
+            : [],
+        }
+      : {}),
     discount_percentage:
       Number.isFinite(pct) && pct > 0 && pct <= 100
         ? pct

@@ -38,6 +38,8 @@ import {
   SUPPORTED_CURRENCIES,
   DEFAULT_THRESHOLDS,
   DEFAULT_DISCOUNT_PERCENTAGE,
+  TRIGGER_TYPES,
+  triggerUsesMinSpend,
 } from "../lib/gwpAppV1.shared";
 
 // Gift With Purchase: the merchant builds and saves each offer here. Every
@@ -293,6 +295,7 @@ export const action = async ({ request }) => {
 const DEFAULT_COPY = {
   admin_title: "{{ free_gift }} GWP - {{ trigger_type }}",
   banner_subtitle: "",
+  banner_buy_x_hint: "Add a qualifying product to unlock this offer",
   banner_title_before: "You're close!",
   banner_message_before: "Spend {{ remaining }} more to get a FREE {{ title }}.",
   banner_title_after: "You scored a free gift!",
@@ -364,6 +367,7 @@ const INITIAL_BUILDER = {
   button_url: "",
   button_text: "",
   banner_subtitle: DEFAULT_COPY.banner_subtitle,
+  banner_buy_x_hint: DEFAULT_COPY.banner_buy_x_hint,
   banner_title_before: DEFAULT_COPY.banner_title_before,
   banner_message_before: DEFAULT_COPY.banner_message_before,
   banner_title_after: DEFAULT_COPY.banner_title_after,
@@ -472,6 +476,7 @@ function buildConfig(state) {
   if (state.button_url.trim()) config.button_url = state.button_url.trim();
   if (state.button_text.trim()) config.button_text = state.button_text.trim();
   if (state.banner_subtitle) config.banner_subtitle = state.banner_subtitle;
+  if (state.banner_buy_x_hint) config.banner_buy_x_hint = state.banner_buy_x_hint;
   if (state.banner_title_before) config.banner_title_before = state.banner_title_before;
   if (state.banner_message_before) config.banner_message_before = state.banner_message_before;
   if (state.banner_title_after) config.banner_title_after = state.banner_title_after;
@@ -557,6 +562,7 @@ function builderFromConfig(c) {
     button_url: c.button_url ?? "",
     button_text: c.button_text ?? "",
     banner_subtitle: c.banner_subtitle ?? "",
+    banner_buy_x_hint: c.banner_buy_x_hint ?? "",
     banner_title_before: c.banner_title_before ?? "",
     banner_message_before: c.banner_message_before ?? "",
     banner_title_after: c.banner_title_after ?? "",
@@ -814,7 +820,8 @@ export default function GiftWithPurchasePage() {
   ];
 
   const showProductTag = builder.trigger_type !== "subscription";
-  const showMinSpend = builder.trigger_type === "min_spend";
+  const showMinSpend = triggerUsesMinSpend(builder.trigger_type);
+  const showBuyXHint = builder.trigger_type === "buy_x_and_min_spend";
   const showRedeemedTag = builder.redemption_type === "one_per_customer";
 
   return (
@@ -910,14 +917,10 @@ export default function GiftWithPurchasePage() {
 
                     <Select
                       label="Trigger type"
-                      options={[
-                        { label: "Min spend", value: "min_spend" },
-                        { label: "Subscription", value: "subscription" },
-                        { label: "Buy X get Y", value: "buy_x_get_y" },
-                      ]}
+                      options={TRIGGER_TYPES}
                       value={builder.trigger_type}
                       onChange={(v) => update("trigger_type", v)}
-                      helpText="Picks the rule that unlocks the gift."
+                      helpText="Picks the rule that unlocks the gift. Buy X + min spend requires both a tagged product in the cart and the spend threshold."
                     />
 
                     <TextField
@@ -973,8 +976,21 @@ export default function GiftWithPurchasePage() {
                         helpText={
                           builder.trigger_type === "min_spend"
                             ? "Only cart lines whose product carries this tag count toward the spend threshold. Leave blank to count the whole cart. Gift cards never count."
-                            : "Cart lines whose product carries this tag count toward the trigger."
+                            : builder.trigger_type === "buy_x_and_min_spend"
+                              ? "The customer must have at least one product carrying this tag in the cart. It does NOT narrow the spend threshold - that's measured across the whole cart. Required: a blank tag never qualifies."
+                              : "Cart lines whose product carries this tag count toward the trigger."
                         }
+                      />
+                    )}
+
+                    {showBuyXHint && (
+                      <TextField
+                        label="Progress hint when the tagged product is missing"
+                        value={builder.banner_buy_x_hint}
+                        onChange={(v) => update("banner_buy_x_hint", v)}
+                        autoComplete="off"
+                        placeholder="e.g. Add a Victoriana piece to unlock this offer"
+                        helpText="Shown under the progress bar while the cart has no product carrying the tag above."
                       />
                     )}
 
@@ -984,6 +1000,11 @@ export default function GiftWithPurchasePage() {
                         <Text as="h3" variant="headingSm">
                           Min spend thresholds
                         </Text>
+                        {builder.trigger_type === "buy_x_and_min_spend" && (
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Measured across the whole cart, excluding gift cards and the gift itself.
+                          </Text>
+                        )}
                         <FormLayout.Group>
                           {SUPPORTED_CURRENCIES.slice(0, 4).map((code) => (
                             <TextField

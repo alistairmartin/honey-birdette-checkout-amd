@@ -9,14 +9,20 @@ import {
 // page (app/lib/gwpAppV1.shared.js -> buildFunctionConfigs).
 interface OfferConfig {
   enabled?: boolean;
-  // "min_spend" | "subscription" | "buy_x_get_y". Only min_spend is gated on
-  // subtotal here; the other triggers are gated by the checkout extension, which
-  // only adds the gift line when the offer qualifies.
+  // "min_spend" | "subscription" | "buy_x_get_y" | "buy_x_and_min_spend".
+  // min_spend and buy_x_and_min_spend are gated on subtotal here; the other two
+  // are gated by the checkout extension, which only adds the gift line when the
+  // offer qualifies.
   trigger_type?: string;
   // Percentage off the gift line. 100 = free gift; 50 = half price, etc.
   discount_percentage?: number;
   // Minimum cart subtotal per ISO currency code (AUD, NZD, USD, CAD, GBP, EUR, AED).
   thresholds?: Record<string, number>;
+  // buy_x_and_min_spend only: the products that satisfy the "buy X" half of the
+  // trigger. The admin resolves the config's `product_tag` to Product gids on
+  // every sync, because functions can't read product tags from the cart. An empty
+  // or missing list fails the gate closed - see the trigger check below.
+  qualifying_product_ids?: string[];
   // The gift product. Any variant of this product in the cart is discounted.
   // Kept for backward-compat with older configs; `productIds` is the full set.
   productId?: string | null;
@@ -130,10 +136,36 @@ export function cartLinesDiscountsGenerateRun(
     });
     if (!giftLines.length) continue;
 
-    // Min-spend offers gate on the per-currency subtotal threshold. If there is
-    // no threshold for the buyer's currency, the offer doesn't run in that market.
     const trigger = String(config.trigger_type || 'min_spend');
-    if (trigger === 'min_spend') {
+
+    // "Buy X" half of buy_x_and_min_spend: the cart must hold at least one
+    // non-gift line whose product is in the resolved qualifying set. Functions
+    // can't read product tags, so the admin resolves the config's `product_tag`
+    // to Product gids on every sync. If that resolution produced nothing, the
+    // gate can't be checked here - fail closed rather than give the gift away.
+    if (trigger === 'buy_x_and_min_spend') {
+      const qualifyingIds = new Set(
+        Array.isArray(config.qualifying_product_ids)
+          ? config.qualifying_product_ids
+          : [],
+      );
+      if (qualifyingIds.size === 0) continue;
+      const giftLineIds = new Set(giftLines.map((line) => line.id));
+      const hasQualifyingLine = input.cart.lines.some((line) => {
+        if (giftLineIds.has(line.id)) return false;
+        const merchandise = line.merchandise;
+        return Boolean(
+          'product' in merchandise &&
+            merchandise.product?.id &&
+            qualifyingIds.has(merchandise.product.id),
+        );
+      });
+      if (!hasQualifyingLine) continue;
+    }
+
+    // Spend-gated offers check the per-currency subtotal threshold. If there is
+    // no threshold for the buyer's currency, the offer doesn't run in that market.
+    if (trigger === 'min_spend' || trigger === 'buy_x_and_min_spend') {
       const threshold = config.thresholds?.[currencyCode];
       if (typeof threshold !== 'number' || threshold <= 0) continue;
       // The gift's own value must NOT help unlock its discount: the customer has

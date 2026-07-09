@@ -491,8 +491,10 @@ function GiftOffer({config: rawConfig, storeTimeZone}: {config: any; storeTimeZo
 const config = useMemo(() => {
   const cfg = (rawConfig && typeof rawConfig === "object" ? rawConfig : {}) as any;
   const rawTrigger = String(cfg.trigger_type || "min_spend").toLowerCase();
-  const trigger_type: "min_spend" | "subscription" | "buy_x_get_y" =
-    rawTrigger === "subscription" || rawTrigger === "buy_x_get_y" ? rawTrigger : "min_spend";
+  const trigger_type: "min_spend" | "subscription" | "buy_x_get_y" | "buy_x_and_min_spend" =
+    rawTrigger === "subscription" || rawTrigger === "buy_x_get_y" || rawTrigger === "buy_x_and_min_spend"
+      ? rawTrigger
+      : "min_spend";
   const mode: "live" | "test" = String(cfg.mode || "live").toLowerCase() === "test" ? "test" : "live";
   // Redemption limit. "one_per_order" disables the per-customer redeemed-tag
   // check entirely; "one_per_customer" enforces it via the tag. Configs from
@@ -574,6 +576,9 @@ const config = useMemo(() => {
     // match the checkout recommendations subtitle (subdued text under the
     // heading). Blank = no subtitle line.
     banner_subtitle: String(cfg.banner_subtitle || "").trim(),
+    // buy_x_and_min_spend only: line shown under the progress bar while the cart
+    // still has no product carrying `product_tag`.
+    banner_buy_x_hint: String(cfg.banner_buy_x_hint || "").trim(),
     banner_title_after: String(cfg.banner_title_after || "").trim(),
     banner_message_after: String(cfg.banner_message_after || "").trim(),
     // Distinct "gift is now in the cart" confirmation state. Falls back to the
@@ -1198,12 +1203,24 @@ async function removeGiftIfPresent() {
     return map;
   }, [tagData]);
 
-  // Compute the spend that counts toward the min-spend threshold. When a
-  // product_tag is set, only lines carrying that tag count. When it's blank the
-  // tag is optional, so the whole cart counts - excluding the gift line itself
-  // and any gift cards.
+  // Triggers whose gift is gated on a spend threshold.
+  const usesMinSpend =
+    config.trigger_type === "min_spend" || config.trigger_type === "buy_x_and_min_spend";
+
+  // Which lines count toward the spend threshold. For min_spend the product_tag
+  // narrows the spend to tagged lines. For buy_x_and_min_spend the tag identifies
+  // the required "buy X" product instead, and the threshold is measured across the
+  // whole cart - so the spend calc ignores the tag, as if it were blank.
+  const spendTag = useMemo(
+    () => (config.trigger_type === "buy_x_and_min_spend" ? "" : config.product_tag),
+    [config.trigger_type, config.product_tag],
+  );
+
+  // Compute the spend that counts toward the min-spend threshold. When spendTag
+  // is set, only lines carrying that tag count. When it's blank the whole cart
+  // counts - excluding the gift line itself and any gift cards.
   const taggedSpend = useMemo(() => {
-    const tag = config.product_tag.toLowerCase();
+    const tag = spendTag.toLowerCase();
     let total = 0;
     for (const line of lines) {
       const vId = line.merchandise.id;
@@ -1219,7 +1236,7 @@ async function removeGiftIfPresent() {
       total += unit * (isFinite(qty) ? qty : 1);
     }
     return total;
-  }, [lines, variantProductTags, variantPriceMap, config.product_tag, giftCardVariantIds, giftVariantGid]);
+  }, [lines, variantProductTags, variantPriceMap, spendTag, giftCardVariantIds, giftVariantGid]);
 
   // Calculate cart-level discounts, excluding shipping-only discounts so we don't inflate the GWP goal
   const totalCartDiscounts = useMemo(() => {
@@ -1261,10 +1278,10 @@ async function removeGiftIfPresent() {
     return totalCartDiscounts + totalLineItemDiscounts;
   }, [totalCartDiscounts, totalLineItemDiscounts]);
 
-  // Sum line-item discount allocations only on tagged lines (e.g. a product
-  // discount applied directly to a qualifying SKU).
+  // Sum line-item discount allocations only on the lines that count toward the
+  // threshold (e.g. a product discount applied directly to a qualifying SKU).
   const taggedLineItemDiscounts = useMemo(() => {
-    const tag = config.product_tag.toLowerCase();
+    const tag = spendTag.toLowerCase();
     let total = 0;
     for (const line of lines) {
       const vId = line.merchandise.id;
@@ -1283,7 +1300,7 @@ async function removeGiftIfPresent() {
       }
     }
     return total;
-  }, [lines, variantProductTags, config.product_tag, giftCardVariantIds, giftVariantGid]);
+  }, [lines, variantProductTags, spendTag, giftCardVariantIds, giftVariantGid]);
 
   // Gross spend across the non-gift cart, used to apportion order-level
   // discounts back onto tagged lines.
@@ -1370,22 +1387,34 @@ async function removeGiftIfPresent() {
       .join(" | ");
   }, [lines, giftVariantGid]);
 
+  // Does the cart hold at least one non-gift line carrying `product_tag`? This is
+  // the "buy X" half of buy_x_get_y and buy_x_and_min_spend.
+  const hasTaggedLine = useMemo(() => {
+    const tag = (config.product_tag || "").toLowerCase();
+    if (!tag) return false;
+    return lines.some((l) => {
+      if (giftVariantGid && l.merchandise.id === giftVariantGid) return false;
+      const tags = variantProductTags[l.merchandise.id] || [];
+      return tags.some((t) => t.toLowerCase() === tag);
+    });
+  }, [config.product_tag, lines, variantProductTags, giftVariantGid]);
+
+  const hitsSpendGoal = adjustedGoal > 0 && taggedSpend >= adjustedGoal;
+
   const qualification = useMemo(() => {
     if (config.trigger_type === "subscription") {
       return { qualifies: hasSubscriptionLine };
     }
     if (config.trigger_type === "buy_x_get_y") {
-      const tag = (config.product_tag || "").toLowerCase();
-      if (!tag) return { qualifies: false };
-      const hasBuy = lines.some((l) => {
-        if (giftVariantGid && l.merchandise.id === giftVariantGid) return false;
-        const tags = variantProductTags[l.merchandise.id] || [];
-        return tags.some((t) => t.toLowerCase() === tag);
-      });
-      return { qualifies: hasBuy };
+      return { qualifies: hasTaggedLine };
     }
-    return { qualifies: adjustedGoal > 0 && taggedSpend >= adjustedGoal };
-  }, [config.trigger_type, config.product_tag, lines, variantProductTags, giftVariantGid, adjustedGoal, taggedSpend, hasSubscriptionLine]);
+    if (config.trigger_type === "buy_x_and_min_spend") {
+      // Both halves must hold. A blank tag can never satisfy the buy-X half, so
+      // this fails closed the same way the discount function does.
+      return { qualifies: hasTaggedLine && hitsSpendGoal };
+    }
+    return { qualifies: hitsSpendGoal };
+  }, [config.trigger_type, hasTaggedLine, hitsSpendGoal, hasSubscriptionLine]);
 
   // --- Validity window check: is offer currently active? ---
   const offerActive = useMemo(() => {
@@ -1816,7 +1845,7 @@ const messageText = config.banner_message_before
   // component doesn't leave an empty bordered box in checkout.
   const showProgressBanner = Boolean(
     config.show_banners && offerActive && !effectiveHasRedeemed && shippingOk && !usageSoldOut && !qualification.qualifies && !isGiftInCart &&
-    (config.trigger_type !== "min_spend" || adjustedGoal > 0)
+    (!usesMinSpend || adjustedGoal > 0)
   );
   const showStatusBanner = Boolean(
     offerActive && banner && (banner.status === 'success' ? config.show_success_banner : config.show_banners)
@@ -1947,22 +1976,29 @@ const messageText = config.banner_message_before
 
 
       {/* Offer progress banner (shows until the gift is unlocked). A label pill
-          and a progress bar render for every trigger type. For min_spend the bar
-          tracks real spend; subscription / buy_x_get_y are boolean gates, so the
-          bar reads 0% until the qualifying item is in the cart (at which point
-          the gift adds and this banner is replaced by the success banner). */}
+          and a progress bar render for every trigger type. For the spend-gated
+          triggers the bar tracks real spend; subscription / buy_x_get_y are
+          boolean gates, so the bar reads 0% until the qualifying item is in the
+          cart (at which point the gift adds and this banner is replaced by the
+          success banner). buy_x_and_min_spend is both: the bar tracks spend, and
+          a hint below it calls out the still-missing tagged product. */}
       {showProgressBanner ? (
         <Section title={bannerTitleBefore} subtitle={config.banner_subtitle}>
           {config.label ? <OfferBadge>{config.label}</OfferBadge> : null}
           <BlockStack spacing="tight">
             {config.trigger_type !== "buy_x_get_y" ? (
               <ProgressBar
-                percent={config.trigger_type === "min_spend" ? progressPercent : (qualification.qualifies ? 100 : 0)}
+                percent={usesMinSpend ? progressPercent : (qualification.qualifies ? 100 : 0)}
               />
             ) : null}
-            {config.trigger_type === "min_spend" && remaining > 0 ? (
+            {usesMinSpend && remaining > 0 ? (
               <Text size="small" appearance="subdued">
                 Spend {formatMoney(remaining, activeCurrency)} more
+              </Text>
+            ) : null}
+            {config.trigger_type === "buy_x_and_min_spend" && !hasTaggedLine ? (
+              <Text size="small" appearance="subdued">
+                {config.banner_buy_x_hint || "Add a qualifying product to unlock this offer"}
               </Text>
             ) : null}
           </BlockStack>
