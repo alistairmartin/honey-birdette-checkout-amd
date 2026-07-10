@@ -1433,6 +1433,19 @@ async function removeGiftIfPresent() {
 
   const remaining = Math.max(0, adjustedGoal - taggedSpend);
 
+  // Every per-currency threshold the extension actually received in the shop
+  // metafield. A `goal` of 0 is ambiguous on its own - it means either "the saved
+  // config has no threshold for this currency" or "the metafield is stale". This
+  // row disambiguates: if the thresholds are all missing here but present in the
+  // admin's Config JSON, the metafield hasn't been re-synced.
+  const thresholdsDebug = useMemo(() => {
+    const pairs = ["AUD", "NZD", "USD", "CAD", "GBP", "EUR", "AED"]
+      .map((code) => [code, Number((config as any)[`min_spend_${code}`] || 0)] as const)
+      .filter(([, v]) => v > 0)
+      .map(([code, v]) => `${code} ${v}`);
+    return pairs.length ? pairs.join(" | ") : "NONE RECEIVED";
+  }, [config]);
+
   // Trigger-type qualification: collapses the three modes down to a single
   // `qualifies` boolean so the rest of the component (intercept, sync effect,
   // eligibility flags) doesn't need to branch per mode.
@@ -2265,7 +2278,7 @@ const messageText = config.banner_message_before
         <Divider />
         <InlineStack spacing="tight" blockAlignment="center">
           <Text size="small" emphasis="bold">
-            GWP diagnostics{config.admin_title ? ` - ${config.admin_title}` : ""}
+            GWP diagnostics{config.admin_title ? ` - ${renderTemplate(config.admin_title, titleVars)}` : ""}
           </Text>
           <Button kind="plain" onPress={() => setDebugOpen((v) => !v)}>
             {debugOpen ? "Hide" : "Show"}
@@ -2306,6 +2319,7 @@ const messageText = config.banner_message_before
                 />
                 <DebugRow label="Counted spend" value={formatMoney(taggedSpend, activeCurrency)} />
                 <DebugRow label="Threshold" value={formatMoney(Number(goal || 0), activeCurrency)} />
+                <DebugRow label="Thresholds received" value={thresholdsDebug} />
                 <DebugRow label="+ counted discounts" value={formatMoney(taggedDiscounts, activeCurrency)} />
                 <DebugRow label="= adjusted goal" value={formatMoney(adjustedGoal, activeCurrency)} />
                 <DebugRow label="Remaining" value={formatMoney(remaining, activeCurrency)} />
