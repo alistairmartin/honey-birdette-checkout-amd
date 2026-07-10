@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { json } from "@remix-run/node";
-import { useFetcher, useLoaderData } from "@remix-run/react";
+import { useFetcher, useLoaderData, useSearchParams } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -625,40 +625,40 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
     (code) => code !== spendCur && Number(c[`min_spend_${code}`]) > 0,
   ).length;
   const perCurrencyNote =
-    otherThresholds > 0 ? " (each currency has its own threshold)" : "";
+    otherThresholds > 0 ? " *(each currency has its own threshold)*" : "";
 
   if (trigger === "min_spend") {
     if (spendText) {
       lines.push(
         tag
-          ? `Trigger: the customer must spend at least ${spendText}${perCurrencyNote} on products tagged "${tag}". Gift cards never count.`
-          : `Trigger: the customer must spend at least ${spendText}${perCurrencyNote} across their cart (any product on site except gift cards).`,
+          ? `**Trigger:** the customer must spend at least **${spendText}**${perCurrencyNote} on products tagged **"${tag}"**. Gift cards never count.`
+          : `**Trigger:** the customer must spend at least **${spendText}**${perCurrencyNote} across their cart (any product on site except gift cards).`,
       );
     } else {
       lines.push(
-        "Trigger: min spend, but no threshold is set yet, so the gift can never unlock.",
+        "**Trigger:** min spend, but *no threshold is set yet, so the gift can never unlock*.",
       );
     }
   } else if (trigger === "buy_x_get_y") {
     lines.push(
       tag
-        ? `Trigger: the customer must have at least 1 product tagged "${tag}" in their cart.`
-        : "Trigger: Buy X get Y, but no product tag is set yet, so the gift can never unlock.",
+        ? `**Trigger:** the customer must have at least **1 product tagged "${tag}"** in their cart.`
+        : "**Trigger:** Buy X get Y, but *no product tag is set yet, so the gift can never unlock*.",
     );
   } else if (trigger === "buy_x_and_min_spend") {
     const tagPart = tag
-      ? `at least 1 product tagged "${tag}" in their cart`
-      : "at least 1 product with the qualifying tag (not set yet, so the gift can never unlock)";
+      ? `at least **1 product tagged "${tag}"** in their cart`
+      : "at least 1 product with the qualifying tag (*not set yet, so the gift can never unlock*)";
     const spendPart = spendText
-      ? `a minimum spend of ${spendText}${perCurrencyNote} across the whole cart (any product on site except gift cards)`
-      : "a minimum spend threshold (not set yet)";
-    lines.push(`Trigger: the customer needs ${tagPart} AND ${spendPart}.`);
+      ? `a minimum spend of **${spendText}**${perCurrencyNote} across the whole cart (any product on site except gift cards)`
+      : "a minimum spend threshold (*not set yet*)";
+    lines.push(`**Trigger:** the customer needs ${tagPart} AND ${spendPart}.`);
   } else if (trigger === "subscription") {
     lines.push(
-      "Trigger: the customer must have a subscription (selling plan) item in their cart.",
+      "**Trigger:** the customer must have a **subscription** (selling plan) item in their cart.",
     );
   } else {
-    lines.push(`Trigger: ${trigger}.`);
+    lines.push(`**Trigger:** ${trigger}.`);
   }
 
   const giftIds = [];
@@ -673,12 +673,13 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
     }
   }
   const pct = Number(c.discount_percentage);
-  const pctText = !Number.isFinite(pct) || pct >= 100 ? "free" : `at ${pct}% off`;
+  const pctText =
+    !Number.isFinite(pct) || pct >= 100 ? "**free**" : `at **${pct}% off**`;
   if (giftIds.length === 0) {
-    lines.push("Gift: no gift product selected yet.");
+    lines.push("**Gift:** *no gift product selected yet*.");
   } else if (giftIds.length === 1) {
     lines.push(
-      `Gift: ${nameFor(giftIds[0])} ${pctText}, ${
+      `**Gift:** __${nameFor(giftIds[0])}__ ${pctText}, ${
         c.add_mode === "manual"
           ? "added when the customer taps the Add button"
           : "added to the cart automatically once they qualify"
@@ -686,8 +687,8 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
     );
   } else {
     lines.push(
-      `Gift: the customer picks 1 of ${giftIds.length} options (${giftIds
-        .map(nameFor)
+      `**Gift:** the customer picks **1 of ${giftIds.length} options** (${giftIds
+        .map((id) => `__${nameFor(id)}__`)
         .join(", ")}) ${pctText}, always added manually.`,
     );
   }
@@ -700,42 +701,42 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
   const capN = Number(c.max_total_uses);
   const capText =
     Number.isFinite(capN) && capN > 0
-      ? ` Limited to ${Math.floor(capN)} total redemptions, then it shows as sold out.`
+      ? ` Limited to **${Math.floor(capN)} total redemptions**, then it shows as sold out.`
       : "";
   lines.push(
     (onePerCustomer
-      ? `Redemption: one per customer${
+      ? `**Redemption:** one per **customer**${
           c.customer_redeemed_tag
-            ? ` (tracked via the "${c.customer_redeemed_tag}" customer tag)`
+            ? ` (tracked via the **"${c.customer_redeemed_tag}"** customer tag)`
             : ""
         }.`
-      : "Redemption: one per order (no cross-order limit).") + capText,
+      : "**Redemption:** one per **order** (no cross-order limit).") + capText,
   );
 
   if (c.eligibility === "customers") {
     const emails = Array.isArray(c.eligible_emails) ? c.eligible_emails : [];
     lines.push(
       emails.length
-        ? `Eligible customers: ${emails.slice(0, 6).join(", ")}${
-            emails.length > 6 ? ` and ${emails.length - 6} more` : ""
+        ? `**Eligible customers:** ${emails.slice(0, 6).join(", ")}${
+            emails.length > 6 ? ` and **${emails.length - 6} more**` : ""
           }.`
-        : "Eligible customers: specific customers selected, but no emails entered yet.",
+        : "**Eligible customers:** specific customers selected, but *no emails entered yet*.",
     );
   } else if (c.eligibility === "segments") {
     const ids = Array.isArray(c.eligible_segment_ids) ? c.eligible_segment_ids : [];
     const names = ids.map((id) => segments.find((s) => s.id === id)?.name || id);
     lines.push(
       names.length
-        ? `Eligible segments: ${names.join(", ")}.`
-        : "Eligible segments: none selected yet.",
+        ? `**Eligible segments:** ${names.map((n) => `**${n}**`).join(", ")}.`
+        : "**Eligible segments:** *none selected yet*.",
     );
   } else {
-    lines.push("Eligible customers: everyone.");
+    lines.push("**Eligible customers:** everyone.");
   }
 
   const ship = String(c.shipping_countries || "all").trim();
   if (ship && ship.toLowerCase() !== "all") {
-    lines.push(`Only available when shipping to: ${ship}.`);
+    lines.push(`**Only available when shipping to:** ${ship}.`);
   }
 
   const combos = [];
@@ -744,8 +745,8 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
   if (c.combines_with?.shippingDiscounts) combos.push("shipping");
   lines.push(
     combos.length
-      ? `Combines with ${combos.join(", ")} discounts.`
-      : "Does not combine with any other discounts.",
+      ? `**Combines** with **${combos.join(", ")}** discounts.`
+      : "Does **not combine** with any other discounts.",
   );
 
   const from = c.valid_date_from
@@ -754,20 +755,43 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
   const till = c.valid_date_till
     ? `${c.valid_date_till}${c.valid_time_till ? ` ${c.valid_time_till}` : ""}`
     : "";
-  if (from && till) lines.push(`Scheduled: runs from ${from} until ${till} (store time).`);
-  else if (from) lines.push(`Scheduled: starts ${from} (store time), no end date.`);
-  else if (till) lines.push(`Scheduled: ends ${till} (store time).`);
+  if (from && till) {
+    lines.push(`**Scheduled:** runs from **${from}** until **${till}** (store time).`);
+  } else if (from) {
+    lines.push(`**Scheduled:** starts **${from}** (store time), no end date.`);
+  } else if (till) {
+    lines.push(`**Scheduled:** ends **${till}** (store time).`);
+  }
 
   if (c.enabled === false) {
-    lines.push("Currently disabled: the gift is not shown in checkout.");
+    lines.push("*Currently disabled: the gift is not shown in checkout.*");
   }
   if (c.mode === "test") {
     lines.push(
-      "Test mode: only visible in the Checkout Editor preview, never on live checkout.",
+      "*Test mode: only visible in the Checkout Editor preview, never on live checkout.*",
     );
   }
 
   return lines;
+}
+
+// Renders the lightweight **bold** / __underline__ / *italic* markers that
+// summarizeConfig embeds in its sentences. Not a markdown parser - just these
+// three inline tokens, everything else passes through as plain text.
+function renderSummaryLine(line) {
+  const parts = String(line).split(/(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith("__") && part.endsWith("__") && part.length > 4) {
+      return <u key={i}>{part.slice(2, -2)}</u>;
+    }
+    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+      return <em key={i}>{part.slice(1, -1)}</em>;
+    }
+    return part;
+  });
 }
 
 function extractNumericId(gid) {
@@ -982,6 +1006,30 @@ export default function GiftWithPurchasePage() {
     [shopify],
   );
 
+  // Deep link: /app/gift-with-purchase?config=<rowId> opens that saved config in
+  // the editor. Also accepts a discount id (gid or numeric) so the per-discount
+  // details page can link "edit this offer" without knowing the row id. The
+  // param stays in the URL so the link is shareable; it's only applied on mount.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const target = String(searchParams.get("config") || "").trim();
+    if (!target) return;
+    const targetNumeric = target.match(/(\d+)$/)?.[1] ?? null;
+    const row = saved.find(
+      (r) =>
+        r.id === target ||
+        (r.discountId &&
+          (r.discountId === target ||
+            (targetNumeric && r.discountId.endsWith(`/${targetNumeric}`)))),
+    );
+    if (row) {
+      loadSaved(row);
+    } else {
+      shopify.toast.show("Saved config not found for that link", { isError: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const duplicateSaved = (row) => {
     try {
       const parsed = JSON.parse(row.configJson);
@@ -1061,7 +1109,29 @@ export default function GiftWithPurchasePage() {
 
   return (
     <Page>
-      <TitleBar title="Gift With Purchase" />
+      <TitleBar title="Gift With Purchase">
+        {/* App Bridge renders these in the admin top bar, so save actions stay
+            visible however far down the builder form the user has scrolled. */}
+        {selectedTab === 1 && (
+          <>
+            <button variant="breadcrumb" onClick={() => setSelectedTab(0)}>
+              Saved configs
+            </button>
+            {editingId && (
+              <button onClick={saveNew} disabled={isSaving}>
+                Save as new
+              </button>
+            )}
+            <button
+              variant="primary"
+              onClick={editingId ? updateExisting : saveNew}
+              disabled={isSaving}
+            >
+              {editingId ? "Update" : "Save"}
+            </button>
+          </>
+        )}
+      </TitleBar>
       <BlockStack gap="500">
         <Card padding="0">
           <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab} />
@@ -1113,7 +1183,7 @@ export default function GiftWithPurchasePage() {
                         </Text>
                         {builderSummary.map((line, i) => (
                           <Text key={i} as="p" variant="bodySm">
-                            {line}
+                            {renderSummaryLine(line)}
                           </Text>
                         ))}
                       </BlockStack>
@@ -1905,10 +1975,12 @@ export default function GiftWithPurchasePage() {
                               ) : null}
                               {parsedConfig ? (
                                 <Text as="p" variant="bodySm" tone="subdued">
-                                  {summarizeConfig(parsedConfig, {
-                                    productInfo,
-                                    segments,
-                                  }).join(" ")}
+                                  {renderSummaryLine(
+                                    summarizeConfig(parsedConfig, {
+                                      productInfo,
+                                      segments,
+                                    }).join(" "),
+                                  )}
                                 </Text>
                               ) : null}
                               <InlineStack gap="200">
@@ -1962,6 +2034,20 @@ export default function GiftWithPurchasePage() {
                                       </Badge>
                                       {disc.exists && disc.eligibility ? (
                                         <Badge>{disc.eligibility}</Badge>
+                                      ) : null}
+                                      {disc.exists && disc.used != null ? (
+                                        <Badge
+                                          tone={
+                                            disc.usageLimit &&
+                                            disc.used >= disc.usageLimit
+                                              ? "critical"
+                                              : "info"
+                                          }
+                                        >
+                                          {disc.usageLimit
+                                            ? `Used ${disc.used} / ${disc.usageLimit}`
+                                            : `Used ${disc.used} time${disc.used === 1 ? "" : "s"}`}
+                                        </Badge>
                                       ) : null}
                                       {disc.exists && disc.adminUrl ? (
                                         <Link url={disc.adminUrl} target="_blank">

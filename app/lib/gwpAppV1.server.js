@@ -121,6 +121,7 @@ const GET_DISCOUNT_STATUS = `#graphql
         ... on DiscountAutomaticApp {
           title
           status
+          asyncUsageCount
           context {
             __typename
             ... on DiscountCustomers { customers { id } }
@@ -790,8 +791,11 @@ export async function syncConfigs(admin, shop) {
   return { count: configs.length, discountCount, timeZone };
 }
 
-// Build a map of configId -> { exists, status, title, adminUrl, discountId } for
-// the saved-config cards. One discountNode lookup per config (handful of rows).
+// Build a map of configId -> { exists, status, title, adminUrl, discountId,
+// used, usageLimit } for the saved-config cards. One discountNode lookup per
+// config (handful of rows). `used` is Shopify's asyncUsageCount - the number of
+// orders the discount has been applied to (updated asynchronously, so it can
+// lag the true count by a little).
 export async function getConfigDiscountMap(admin, shop, rows) {
   const map = {};
   await Promise.all(
@@ -815,12 +819,20 @@ export async function getConfigDiscountMap(admin, shop, rows) {
           : ctx.type === "segments"
             ? `${ctx.segmentIds.length} segment${ctx.segmentIds.length === 1 ? "" : "s"}`
             : "All customers";
+      let config = null;
+      try {
+        config = JSON.parse(r.configJson);
+      } catch {
+        config = null;
+      }
       map[r.id] = {
         exists: true,
         discountId: r.discountId,
         status: discount.status ?? null, // ACTIVE | EXPIRED | SCHEDULED
         title: discount.title ?? null,
         eligibility,
+        used: Number(discount.asyncUsageCount || 0),
+        usageLimit: usageLimitFromConfig(config) || null,
         adminUrl:
           shop && numericId
             ? `https://${shop}/admin/discounts/${numericId}`
