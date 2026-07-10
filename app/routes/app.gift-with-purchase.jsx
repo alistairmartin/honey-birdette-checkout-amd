@@ -333,6 +333,7 @@ function emptyMinSpend() {
 const INITIAL_BUILDER = {
   enabled: true,
   mode: "live",
+  description: "",
   trigger_type: "min_spend",
   redemption_type: "one_per_order",
   max_total_uses: "",
@@ -392,6 +393,7 @@ function buildConfig(state) {
     add_mode: state.add_mode === "manual" ? "manual" : "auto",
     auto_remove_gift: !!state.auto_remove_gift,
   };
+  if (state.description.trim()) config.description = state.description.trim();
   if (state.label.trim()) config.label = state.label.trim();
   if (state.admin_title.trim()) config.admin_title = state.admin_title.trim();
   if (state.discount_title.trim()) config.discount_title = state.discount_title.trim();
@@ -507,6 +509,7 @@ function builderFromConfig(c) {
   return {
     enabled: c.enabled !== false,
     mode: c.mode === "test" ? "test" : "live",
+    description: c.description ?? "",
     trigger_type: c.trigger_type ?? "min_spend",
     redemption_type,
     max_total_uses: c.max_total_uses != null ? String(c.max_total_uses) : "",
@@ -577,6 +580,196 @@ function builderFromConfig(c) {
   };
 }
 
+// Plain-English recap of a config's rules, shown under the config name in the
+// builder and on each Saved card so the merchant can sanity-check the offer
+// without decoding the JSON. Returns one sentence per rule.
+function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] } = {}) {
+  if (!c || typeof c !== "object") return [];
+  const lines = [];
+
+  const nameFor = (id) => {
+    const numeric = String(id ?? "").match(/\/(\d+)$/)?.[1] ?? String(id ?? "");
+    return (
+      extraTitles[numeric] ||
+      productInfo[numeric]?.title ||
+      (numeric ? `product ${numeric}` : "")
+    );
+  };
+
+  const trigger = String(c.trigger_type || "min_spend");
+  const tag = String(c.product_tag || "").trim();
+
+  // Min spend: lead with the fallback currency's threshold (or the first one
+  // that's set) and note when other currencies carry their own.
+  const preferred = SUPPORTED_CURRENCIES.includes(c.min_spend_currency)
+    ? c.min_spend_currency
+    : "AUD";
+  let spendCur = preferred;
+  let spendAmount = Number(c[`min_spend_${preferred}`]);
+  if (!Number.isFinite(spendAmount) || spendAmount <= 0) {
+    for (const code of SUPPORTED_CURRENCIES) {
+      const n = Number(c[`min_spend_${code}`]);
+      if (Number.isFinite(n) && n > 0) {
+        spendCur = code;
+        spendAmount = n;
+        break;
+      }
+    }
+  }
+  let spendText = "";
+  if (Number.isFinite(spendAmount) && spendAmount > 0) {
+    const formatted = formatMoney(spendAmount, spendCur);
+    spendText = formatted.includes(spendCur) ? formatted : `${formatted} ${spendCur}`;
+  }
+  const otherThresholds = SUPPORTED_CURRENCIES.filter(
+    (code) => code !== spendCur && Number(c[`min_spend_${code}`]) > 0,
+  ).length;
+  const perCurrencyNote =
+    otherThresholds > 0 ? " (each currency has its own threshold)" : "";
+
+  if (trigger === "min_spend") {
+    if (spendText) {
+      lines.push(
+        tag
+          ? `Trigger: the customer must spend at least ${spendText}${perCurrencyNote} on products tagged "${tag}". Gift cards never count.`
+          : `Trigger: the customer must spend at least ${spendText}${perCurrencyNote} across their cart (any product on site except gift cards).`,
+      );
+    } else {
+      lines.push(
+        "Trigger: min spend, but no threshold is set yet, so the gift can never unlock.",
+      );
+    }
+  } else if (trigger === "buy_x_get_y") {
+    lines.push(
+      tag
+        ? `Trigger: the customer must have at least 1 product tagged "${tag}" in their cart.`
+        : "Trigger: Buy X get Y, but no product tag is set yet, so the gift can never unlock.",
+    );
+  } else if (trigger === "buy_x_and_min_spend") {
+    const tagPart = tag
+      ? `at least 1 product tagged "${tag}" in their cart`
+      : "at least 1 product with the qualifying tag (not set yet, so the gift can never unlock)";
+    const spendPart = spendText
+      ? `a minimum spend of ${spendText}${perCurrencyNote} across the whole cart (any product on site except gift cards)`
+      : "a minimum spend threshold (not set yet)";
+    lines.push(`Trigger: the customer needs ${tagPart} AND ${spendPart}.`);
+  } else if (trigger === "subscription") {
+    lines.push(
+      "Trigger: the customer must have a subscription (selling plan) item in their cart.",
+    );
+  } else {
+    lines.push(`Trigger: ${trigger}.`);
+  }
+
+  const giftIds = [];
+  const pushGiftId = (raw) => {
+    if (raw == null || raw === "") return;
+    if (!giftIds.some((x) => String(x) === String(raw))) giftIds.push(raw);
+  };
+  pushGiftId(c.product_id);
+  if (Array.isArray(c.gift_options)) {
+    for (const opt of c.gift_options) {
+      pushGiftId(opt && typeof opt === "object" ? opt.product_id : opt);
+    }
+  }
+  const pct = Number(c.discount_percentage);
+  const pctText = !Number.isFinite(pct) || pct >= 100 ? "free" : `at ${pct}% off`;
+  if (giftIds.length === 0) {
+    lines.push("Gift: no gift product selected yet.");
+  } else if (giftIds.length === 1) {
+    lines.push(
+      `Gift: ${nameFor(giftIds[0])} ${pctText}, ${
+        c.add_mode === "manual"
+          ? "added when the customer taps the Add button"
+          : "added to the cart automatically once they qualify"
+      }.`,
+    );
+  } else {
+    lines.push(
+      `Gift: the customer picks 1 of ${giftIds.length} options (${giftIds
+        .map(nameFor)
+        .join(", ")}) ${pctText}, always added manually.`,
+    );
+  }
+
+  const onePerCustomer =
+    String(
+      c.redemption_type ??
+        (c.customer_redeemed_tag ? "one_per_customer" : "one_per_order"),
+    ) === "one_per_customer";
+  const capN = Number(c.max_total_uses);
+  const capText =
+    Number.isFinite(capN) && capN > 0
+      ? ` Limited to ${Math.floor(capN)} total redemptions, then it shows as sold out.`
+      : "";
+  lines.push(
+    (onePerCustomer
+      ? `Redemption: one per customer${
+          c.customer_redeemed_tag
+            ? ` (tracked via the "${c.customer_redeemed_tag}" customer tag)`
+            : ""
+        }.`
+      : "Redemption: one per order (no cross-order limit).") + capText,
+  );
+
+  if (c.eligibility === "customers") {
+    const emails = Array.isArray(c.eligible_emails) ? c.eligible_emails : [];
+    lines.push(
+      emails.length
+        ? `Eligible customers: ${emails.slice(0, 6).join(", ")}${
+            emails.length > 6 ? ` and ${emails.length - 6} more` : ""
+          }.`
+        : "Eligible customers: specific customers selected, but no emails entered yet.",
+    );
+  } else if (c.eligibility === "segments") {
+    const ids = Array.isArray(c.eligible_segment_ids) ? c.eligible_segment_ids : [];
+    const names = ids.map((id) => segments.find((s) => s.id === id)?.name || id);
+    lines.push(
+      names.length
+        ? `Eligible segments: ${names.join(", ")}.`
+        : "Eligible segments: none selected yet.",
+    );
+  } else {
+    lines.push("Eligible customers: everyone.");
+  }
+
+  const ship = String(c.shipping_countries || "all").trim();
+  if (ship && ship.toLowerCase() !== "all") {
+    lines.push(`Only available when shipping to: ${ship}.`);
+  }
+
+  const combos = [];
+  if (c.combines_with?.productDiscounts) combos.push("product");
+  if (c.combines_with?.orderDiscounts) combos.push("order");
+  if (c.combines_with?.shippingDiscounts) combos.push("shipping");
+  lines.push(
+    combos.length
+      ? `Combines with ${combos.join(", ")} discounts.`
+      : "Does not combine with any other discounts.",
+  );
+
+  const from = c.valid_date_from
+    ? `${c.valid_date_from}${c.valid_time_from ? ` ${c.valid_time_from}` : ""}`
+    : "";
+  const till = c.valid_date_till
+    ? `${c.valid_date_till}${c.valid_time_till ? ` ${c.valid_time_till}` : ""}`
+    : "";
+  if (from && till) lines.push(`Scheduled: runs from ${from} until ${till} (store time).`);
+  else if (from) lines.push(`Scheduled: starts ${from} (store time), no end date.`);
+  else if (till) lines.push(`Scheduled: ends ${till} (store time).`);
+
+  if (c.enabled === false) {
+    lines.push("Currently disabled: the gift is not shown in checkout.");
+  }
+  if (c.mode === "test") {
+    lines.push(
+      "Test mode: only visible in the Checkout Editor preview, never on live checkout.",
+    );
+  }
+
+  return lines;
+}
+
 function extractNumericId(gid) {
   const match = gid.match(/\/(\d+)$/);
   return match ? match[1] : "";
@@ -611,6 +804,29 @@ export default function GiftWithPurchasePage() {
     }));
 
   const generatedConfig = useMemo(() => buildConfig(builder), [builder]);
+  // Titles for products picked in this session but not yet saved - the loader's
+  // productInfo only covers products referenced by already-saved configs.
+  const pickedTitles = useMemo(() => {
+    const map = {};
+    const put = (id, title) => {
+      const numeric = String(id ?? "").match(/\/(\d+)$/)?.[1] ?? String(id ?? "");
+      if (numeric && title) map[numeric] = title;
+    };
+    put(builder.product_id, builder.product_title);
+    for (const opt of builder.extra_gift_options || []) {
+      put(opt.product_id, opt.product_title);
+    }
+    return map;
+  }, [builder.product_id, builder.product_title, builder.extra_gift_options]);
+  const builderSummary = useMemo(
+    () =>
+      summarizeConfig(generatedConfig, {
+        productInfo,
+        extraTitles: pickedTitles,
+        segments,
+      }),
+    [generatedConfig, productInfo, pickedTitles, segments],
+  );
   // Exactly what gets saved and pushed to the metafields - handy to paste into a
   // bug report. Reflects unsaved builder edits, not the last saved state.
   const generatedConfigJson = useMemo(
@@ -879,6 +1095,29 @@ export default function GiftWithPurchasePage() {
                       placeholder="e.g. Morning Essentials (GWP)"
                       helpText="A label so you can find this config later in Saved."
                     />
+
+                    <TextField
+                      label="Description"
+                      value={builder.description}
+                      onChange={(v) => update("description", v)}
+                      autoComplete="off"
+                      multiline={2}
+                      placeholder="e.g. Victoriana launch - free robe with any Victoriana piece over $300"
+                      helpText="Optional internal note about what this promotion is for. Shown with the config in Saved, never to customers."
+                    />
+
+                    <Box background="bg-surface-secondary" borderRadius="200" padding="300">
+                      <BlockStack gap="150">
+                        <Text as="h3" variant="headingSm">
+                          Summary of this offer
+                        </Text>
+                        {builderSummary.map((line, i) => (
+                          <Text key={i} as="p" variant="bodySm">
+                            {line}
+                          </Text>
+                        ))}
+                      </BlockStack>
+                    </Box>
 
                     <Checkbox
                       label="Enabled"
@@ -1595,14 +1834,18 @@ export default function GiftWithPurchasePage() {
                         let mode = "live";
                         let productId = "";
                         let adminTitle = "";
+                        let description = "";
+                        let parsedConfig = null;
                         try {
                           const parsed = JSON.parse(row.configJson);
+                          parsedConfig = parsed;
                           if (parsed.trigger_type) trigger = parsed.trigger_type;
                           enabled = parsed.enabled !== false;
                           mode = parsed.mode === "test" ? "test" : "live";
                           productId =
                             parsed.product_id != null ? String(parsed.product_id) : "";
                           adminTitle = parsed.admin_title ?? "";
+                          description = parsed.description ?? "";
                         } catch {
                           trigger = "unknown";
                         }
@@ -1655,6 +1898,19 @@ export default function GiftWithPurchasePage() {
                                   Updated {formatTimestamp(row.updatedAt)}
                                 </Text>
                               </InlineStack>
+                              {description ? (
+                                <Text as="p" variant="bodyMd">
+                                  {description}
+                                </Text>
+                              ) : null}
+                              {parsedConfig ? (
+                                <Text as="p" variant="bodySm" tone="subdued">
+                                  {summarizeConfig(parsedConfig, {
+                                    productInfo,
+                                    segments,
+                                  }).join(" ")}
+                                </Text>
+                              ) : null}
                               <InlineStack gap="200">
                                 <Button onClick={() => loadSaved(row)}>Edit</Button>
                                 <Button onClick={() => duplicateSaved(row)}>Duplicate</Button>
