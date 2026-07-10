@@ -4,6 +4,7 @@ import {
   Banner,
   Badge,
   BlockStack,
+  Divider,
   Heading,
   Text,
   Button,
@@ -153,8 +154,13 @@ function Extension() {
   // Per-block override: when the merchant enables this in the checkout editor
   // block settings, test-mode configs render even on a published checkout
   // (handy for QA on the live profile).
-  const { show_test_mode_configs } = useSettings();
+  const { show_test_mode_configs, hide_live_configs, show_testing_information } = useSettings();
   const showTestConfigs = inEditor || isUnpublished || Boolean(show_test_mode_configs);
+  // Testing counterpart: suppress live-mode configs so only the test-mode offer
+  // under test renders. Unlike showTestConfigs this is never inferred from the
+  // environment - it only applies when the merchant explicitly sets it, and it
+  // must be turned back off or a published checkout shows no offers at all.
+  const hideLiveConfigs = Boolean(hide_live_configs);
   const [configs, setConfigs] = useState<any[]>([]);
   const [storeTimeZone, setStoreTimeZone] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
@@ -187,14 +193,42 @@ function Extension() {
     // Test-mode configs render only on an unpublished checkout (editor preview
     // or undeployed extension version), OR when the block's
     // `show_test_mode_configs` setting is enabled. They never show on a
-    // published checkout otherwise.
+    // published checkout otherwise. Live-mode configs render unless the block's
+    // `hide_live_configs` testing setting suppresses them.
     const isTest = String(c?.mode || "live").toLowerCase() === "test";
-    return !isTest || showTestConfigs;
+    return isTest ? showTestConfigs : !hideLiveConfigs;
   });
-  if (activeConfigs.length === 0) return null;
+
+  // `hide_live_configs` left on with nothing to replace the hidden offers means
+  // checkout renders no gift offer at all. Silent on the live storefront (the
+  // customer just sees no offer), so surface it wherever testing info is on.
+  const liveConfigsHidden =
+    hideLiveConfigs && configs.some((c) => c?.enabled !== false && String(c?.mode || "live").toLowerCase() !== "test");
+
+  if (activeConfigs.length === 0) {
+    if (liveConfigsHidden && Boolean(show_testing_information)) {
+      return (
+        <Banner status="warning" title="Gift With Purchase: live offers hidden">
+          <Text size="small">
+            The block setting "Hide Live Configs?" is on, so every live-mode offer is
+            suppressed. Turn it off in the checkout editor before publishing.
+          </Text>
+        </Banner>
+      );
+    }
+    return null;
+  }
 
   return (
     <BlockStack>
+      {liveConfigsHidden && Boolean(show_testing_information) ? (
+        <Banner status="warning" title="Gift With Purchase: live offers hidden">
+          <Text size="small">
+            The block setting "Hide Live Configs?" is on. Only test-mode offers are
+            rendering. Turn it off in the checkout editor before publishing.
+          </Text>
+        </Banner>
+      ) : null}
       {activeConfigs.map((cfg, i) => (
         <GiftOffer
           key={String(cfg?.admin_title || cfg?.product_id || cfg?.customer_redeemed_tag || i)}
@@ -205,6 +239,36 @@ function Extension() {
     </BlockStack>
   );
 }
+
+// --- Diagnostics panel primitives (only rendered when "Show Testing
+// Information?" is on, so never seen by a customer). -------------------------
+
+// One "Label   value" line. Labels share a fixed column so the values line up
+// into a readable second column instead of wrapping mid-sentence.
+function DebugRow({label, value}: {label: string; value: React.ReactNode}) {
+  return (
+    <InlineLayout columns={["45%", "fill"]} spacing="tight">
+      <Text size="small" appearance="subdued">
+        {label}
+      </Text>
+      <Text size="small">{value}</Text>
+    </InlineLayout>
+  );
+}
+
+// A titled group of DebugRows.
+function DebugGroup({title, children}: {title: string; children: React.ReactNode}) {
+  return (
+    <BlockStack spacing="none">
+      <Text size="small" emphasis="bold">
+        {title}
+      </Text>
+      {children}
+    </BlockStack>
+  );
+}
+
+const yn = (v: boolean) => (v ? "yes" : "no");
 
 // Small helper to coerce either raw number ID or gid into a variant gid
 function toVariantGid(idLike: string | number): string {
@@ -1064,6 +1128,11 @@ async function removeGiftIfPresent() {
   const GWP_USAGE_URL =
     "https://honey-birdette-checkout-amd.onrender.com/api/checkout/gwp-usage-check";
   const [usageSoldOut, setUsageSoldOut] = useState(false);
+  // Diagnostics panel starts expanded so it's visible the moment testing info is
+  // switched on, but can be collapsed to get it out of the way while testing the
+  // actual checkout flow. Declared here (not beside the panel) because the render
+  // path below has early returns and hook order must stay stable.
+  const [debugOpen, setDebugOpen] = useState(true);
   // Whether the usage check has resolved. Uncapped offers are "checked" from the
   // start; capped offers gate the auto-add until we know the sold-out state, so
   // we never add a gift line while its discount is (or is about to be) off - that
@@ -1315,6 +1384,19 @@ async function removeGiftIfPresent() {
     }
     return total;
   }, [lines, variantPriceMap, giftVariantGid, giftCardVariantIds]);
+
+  // Gift-card value excluded from the spend threshold. Diagnostics only - the
+  // exclusion itself happens inline in taggedSpend.
+  const giftCardSpendExcluded = useMemo(() => {
+    let total = 0;
+    for (const line of lines) {
+      if (!giftCardVariantIds.has(line.merchandise.id)) continue;
+      const unit = variantPriceMap[line.merchandise.id] ?? 0;
+      const qty = Number(line.quantity || 1);
+      total += unit * (isFinite(qty) ? qty : 1);
+    }
+    return total;
+  }, [lines, giftCardVariantIds, variantPriceMap]);
 
   // Order-level discounts apply across the whole cart; only the share that
   // proportionally falls on tagged lines should inflate the qualifying goal.
@@ -1851,6 +1933,28 @@ const messageText = config.banner_message_before
     offerActive && banner && (banner.status === 'success' ? config.show_success_banner : config.show_banners)
   );
 
+  // Diagnostics: which trigger types show a "buy X" row, and every reason the
+  // gift is currently being withheld. Listing all of them (rather than the first)
+  // matters for buy_x_and_min_spend, where both halves can fail at once.
+  const triggerNeedsTaggedLine =
+    config.trigger_type === "buy_x_get_y" || config.trigger_type === "buy_x_and_min_spend";
+  const blockers: string[] = [];
+  if (!offerActive) blockers.push("outside offer window");
+  if (tagsLoading) blockers.push("loading product tags");
+  if (tagsError) blockers.push("product tag fetch failed");
+  if (usageSoldOut) blockers.push("usage cap reached");
+  if (!shippingOk) blockers.push("shipping country not eligible");
+  if (effectiveHasRedeemed) blockers.push("already redeemed");
+  if (giftUnresolvable) blockers.push("gift product unresolvable");
+  if (giftAvailable === false) blockers.push("gift sold out");
+  if (triggerNeedsTaggedLine && !hasTaggedLine) blockers.push("no qualifying tagged product");
+  if (usesMinSpend && !hitsSpendGoal) {
+    blockers.push(adjustedGoal > 0 ? "min spend not met" : "no min spend threshold configured");
+  }
+  if (config.trigger_type === "subscription" && !hasSubscriptionLine) {
+    blockers.push("no subscription line");
+  }
+
   // Manual / multi offers prompt the customer to add or pick their gift once
   // they qualify. `definitelyEligible` already folds in qualification, region,
   // redemption and validity checks, so this only shows when it should.
@@ -2157,44 +2261,134 @@ const messageText = config.banner_message_before
       ) : null}
 
     {config.show_testing_information ? (
-      <>
-        {/* Optional: tiny diagnostics */}
-        <Text size="small">Trigger type: {config.trigger_type} | Qualifies: {qualification.qualifies ? "yes" : "no"}</Text>
-        <Text size="small">
-          Gift option IDs (config): {optionIds.length ? optionIds.join(", ") : "-"}
-        </Text>
-        <Text size="small">
-          Gift resolve: {resolvedOptions.length === 0
-            ? "(resolving…)"
-            : resolvedOptions
-                .map((o) => `${o.productId} -> ${o.variantGid ? `${o.variantGid}${o.available === false ? " (sold out)" : ""}` : "UNRESOLVED"}`)
-                .join(" | ")}
-        </Text>
-        {config.trigger_type === "subscription" ? (
-          <Text size="small">Subscription line scan: {subscriptionDebug || "(no non-gift lines)"}</Text>
+      <BlockStack spacing="tight">
+        <Divider />
+        <InlineStack spacing="tight" blockAlignment="center">
+          <Text size="small" emphasis="bold">
+            GWP diagnostics{config.admin_title ? ` - ${config.admin_title}` : ""}
+          </Text>
+          <Button kind="plain" onPress={() => setDebugOpen((v) => !v)}>
+            {debugOpen ? "Hide" : "Show"}
+          </Button>
+        </InlineStack>
+
+        {debugOpen ? (
+          <BlockStack spacing="base">
+            {/* Verdict first: the single question every debugging session starts
+                with, then each half of the trigger that produced it. */}
+            <DebugGroup title="Verdict">
+              <DebugRow label="Trigger" value={config.trigger_type} />
+              <DebugRow label="Qualifies" value={yn(qualification.qualifies)} />
+              {triggerNeedsTaggedLine ? (
+                <DebugRow
+                  label={`Buy X (tag "${config.product_tag || "-"}")`}
+                  value={hasTaggedLine ? "found in cart" : "NOT in cart"}
+                />
+              ) : null}
+              {usesMinSpend ? (
+                <DebugRow
+                  label="Min spend"
+                  value={`${formatMoney(taggedSpend, activeCurrency)} of ${formatMoney(adjustedGoal, activeCurrency)} - ${hitsSpendGoal ? "met" : "NOT met"}`}
+                />
+              ) : null}
+              {config.trigger_type === "subscription" ? (
+                <DebugRow label="Subscription lines" value={subscriptionDebug || "(no non-gift lines)"} />
+              ) : null}
+              <DebugRow label="Blocked by" value={blockers.length ? blockers.join(", ") : "nothing"} />
+            </DebugGroup>
+
+            {/* Spend math. Only meaningful for the spend-gated triggers. */}
+            {usesMinSpend ? (
+              <DebugGroup title="Spend">
+                <DebugRow
+                  label="Counting"
+                  value={spendTag ? `lines tagged "${spendTag}"` : "whole cart (untagged)"}
+                />
+                <DebugRow label="Counted spend" value={formatMoney(taggedSpend, activeCurrency)} />
+                <DebugRow label="Threshold" value={formatMoney(Number(goal || 0), activeCurrency)} />
+                <DebugRow label="+ counted discounts" value={formatMoney(taggedDiscounts, activeCurrency)} />
+                <DebugRow label="= adjusted goal" value={formatMoney(adjustedGoal, activeCurrency)} />
+                <DebugRow label="Remaining" value={formatMoney(remaining, activeCurrency)} />
+                <DebugRow label="Gift cards excluded" value={formatMoney(giftCardSpendExcluded, activeCurrency)} />
+              </DebugGroup>
+            ) : null}
+
+            {/* Discount breakdown, which is what inflates the goal above. */}
+            {usesMinSpend ? (
+              <DebugGroup title="Discounts">
+                <DebugRow label="Order (excl. shipping)" value={formatMoney(totalCartDiscounts, activeCurrency)} />
+                <DebugRow label="Line item (product)" value={formatMoney(totalLineItemDiscounts, activeCurrency)} />
+                <DebugRow label="Total" value={formatMoney(totalAllDiscounts, activeCurrency)} />
+                <DebugRow label="On counted lines" value={formatMoney(taggedLineItemDiscounts, activeCurrency)} />
+                <DebugRow label="Counted share of order" value={formatMoney(taggedOrderDiscountShare, activeCurrency)} />
+              </DebugGroup>
+            ) : null}
+
+            <DebugGroup title="Gift">
+              <DebugRow label="Option IDs" value={optionIds.length ? optionIds.join(", ") : "-"} />
+              <DebugRow
+                label="Resolves to"
+                value={
+                  resolvedOptions.length === 0
+                    ? "(resolving…)"
+                    : resolvedOptions
+                        .map((o) => `${o.productId} -> ${o.variantGid ? `${o.variantGid}${o.available === false ? " (sold out)" : ""}` : "UNRESOLVED"}`)
+                        .join(" | ")
+                }
+              />
+              <DebugRow label="In cart" value={yn(isGiftInCart || anyGiftOptionInCart)} />
+              <DebugRow label="Add mode" value={`${config.add_mode}${autoAdd ? "" : " (manual pick)"}`} />
+              <DebugRow label="Discount" value={`${config.discount_percentage ?? 100}% off`} />
+              {usageCapConfigured ? (
+                <DebugRow
+                  label="Usage cap"
+                  value={`max ${config.max_total_uses} - ${usageChecked ? (usageSoldOut ? "SOLD OUT" : "available") : "checking…"}`}
+                />
+              ) : null}
+            </DebugGroup>
+
+            <DebugGroup title="Redemption">
+              <DebugRow label="Limit" value={config.redemption_type} />
+              <DebugRow label={`Tag "${redeemedTagDebug}"`} value={yn(hasRedeemed)} />
+              <DebugRow label="Customer tags" value={customerTagsDebug || "-"} />
+              <DebugRow
+                label="Customer"
+                value={`present: ${yn(customerPresent)} | metafields: ${yn(customerMetafieldsObserved)} | guard settled: ${yn(redemptionGuardSettled)}`}
+              />
+              <DebugRow
+                label="Remote check"
+                value={`${typedEmail || "(no email)"} - ${remoteCheckInFlight ? "in-flight" : remoteCheckedEmail || "not run"} | redeemed: ${remoteHasRedeemed === null ? "-" : yn(remoteHasRedeemed)}`}
+              />
+              <DebugRow label="Effective redeemed" value={yn(effectiveHasRedeemed)} />
+              {customerErrorMessage ? (
+                <DebugRow label="useCustomer error" value={customerErrorMessage} />
+              ) : null}
+            </DebugGroup>
+
+            <DebugGroup title="Window">
+              <DebugRow label="From / to" value={`${validFromStr || "-"} → ${validTillStr || "-"}`} />
+              <DebugRow label="Store time now" value={nowDbg} />
+              <DebugRow label="Offer active" value={yn(offerActive)} />
+            </DebugGroup>
+
+            <DebugGroup title="Environment">
+              <DebugRow label="Mode" value={config.mode} />
+              <DebugRow label="Config ID" value={config.config_id || "-"} />
+              <DebugRow label="Market" value={`${market?.handle || "-"} (${String(market?.id || "-")})`} />
+              <DebugRow
+                label="Currency"
+                value={`active ${activeCurrency} | checkout ${apiLocalization?.currency?.isoCode || "-"} | detected ${detectedCurrencyIso || "-"}`}
+              />
+              <DebugRow label="Ships to allowed country" value={yn(shippingOk)} />
+              <DebugRow label="Cart lines" value={String(lines.length)} />
+              <DebugRow
+                label="Product tags fetch"
+                value={tagsLoading ? "loading…" : tagsError ? `FAILED: ${String(tagsError?.message || tagsError)}` : "ok"}
+              />
+            </DebugGroup>
+          </BlockStack>
         ) : null}
-        <Text size="small">Config tag: {config.product_tag || "-"} | Min spend: {formatMoney(Number(goal || 0), activeCurrency)} ({activeCurrency})</Text>
-        <Text size="small">Cart-level discounts (order, excl. shipping): {formatMoney(totalCartDiscounts, activeCurrency)}</Text>
-        <Text size="small">Line-item discounts (product): {formatMoney(totalLineItemDiscounts, activeCurrency)}</Text>
-        <Text size="small">Total ALL discounts: {formatMoney(totalAllDiscounts, activeCurrency)}</Text>
-        <Text size="small">Tagged-line item discounts: {formatMoney(taggedLineItemDiscounts, activeCurrency)}</Text>
-        <Text size="small">Tagged share of order discounts: {formatMoney(taggedOrderDiscountShare, activeCurrency)}</Text>
-        <Text size="small">Tagged discounts (used for goal): {formatMoney(taggedDiscounts, activeCurrency)}</Text>
-        <Text size="small">Adjusted goal (min spend + tagged discounts): {formatMoney(adjustedGoal, activeCurrency)}</Text>
-        <Text size="small">Market handle: {market?.handle || "-"} | Checkout currency: {apiLocalization?.currency?.isoCode || "-"}</Text>
-        <Text size="small">Market ID: {String(market?.id || "-")} | Active currency: {activeCurrency} (detected: {detectedCurrencyIso || "-"})</Text>
-        <Text size="small">Tagged spend detected: {taggedSpend.toFixed(2)}</Text>
-        <Text size="small">Customer tags detected: {customerTagsDebug || "-"}</Text>
-        <Text size="small">Redeemed tag ("{redeemedTagDebug}") present: {hasRedeemed ? "yes" : "no"}</Text>
-        <Text size="small">Customer present: {customerPresent ? "yes" : "no"} | Metafields observed: {customerMetafieldsObserved ? "yes" : "no"} | Guard settled: {redemptionGuardSettled ? "yes" : "no"}</Text>
-        <Text size="small">Typed email: {typedEmail || "-"} | Remote check: {remoteCheckInFlight ? "in-flight" : (remoteCheckedEmail || "not run")} | Remote redeemed: {remoteHasRedeemed === null ? "-" : (remoteHasRedeemed ? "yes" : "no")} | Effective redeemed: {effectiveHasRedeemed ? "yes" : "no"}</Text>
-        {customerErrorMessage ? (
-          <Text size="small">useCustomer error: {customerErrorMessage}</Text>
-        ) : null}
-        <Text size="small">Offer window: from {validFromStr || '-'} to {validTillStr || '-'}</Text>
-        <Text size="small">Store time now: {nowDbg}</Text>
-        <Text size="small">Offer active: {offerActive ? 'yes' : 'no'}</Text>
-      </>
+      </BlockStack>
     ) : null}
     </BlockStack>
   );

@@ -21,6 +21,7 @@ import {
   Thumbnail,
   Link,
   Banner,
+  Box,
   ChoiceList,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
@@ -399,7 +400,7 @@ function buildConfig(state) {
   if (state.trigger_type !== "subscription" && state.product_tag.trim()) {
     config.product_tag = state.product_tag.trim();
   }
-  if (state.trigger_type === "min_spend") {
+  if (triggerUsesMinSpend(state.trigger_type)) {
     for (const code of SUPPORTED_CURRENCIES) {
       const n = Number(state.min_spend[code]);
       if (state.min_spend[code] !== "" && !Number.isNaN(n)) {
@@ -610,6 +611,24 @@ export default function GiftWithPurchasePage() {
     }));
 
   const generatedConfig = useMemo(() => buildConfig(builder), [builder]);
+  // Exactly what gets saved and pushed to the metafields - handy to paste into a
+  // bug report. Reflects unsaved builder edits, not the last saved state.
+  const generatedConfigJson = useMemo(
+    () => JSON.stringify(generatedConfig, null, 2),
+    [generatedConfig],
+  );
+  const [jsonCopied, setJsonCopied] = useState(false);
+  const copyConfigJson = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(generatedConfigJson);
+      setJsonCopied(true);
+      setTimeout(() => setJsonCopied(false), 2000);
+    } catch {
+      // Clipboard blocked (permissions, or an insecure context). The JSON is
+      // already on screen and selectable, so there's nothing to recover from.
+    }
+  }, [generatedConfigJson]);
+
   const isSaving = fetcher.state === "submitting" || fetcher.state === "loading";
   const lastResult = fetcher.data;
 
@@ -1449,35 +1468,74 @@ export default function GiftWithPurchasePage() {
             </Layout.Section>
 
             <Layout.Section variant="oneThird">
-              <BlockStack gap="400">
-                <Card>
-                  <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">
-                      Save
-                    </Text>
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      Stored per shop and pushed live to checkout on save. Pull
-                      saved configs back in from the Saved tab.
-                    </Text>
-                    <InlineStack gap="200">
-                      {editingId ? (
-                        <>
-                          <Button variant="primary" onClick={updateExisting} loading={isSaving}>
-                            Update
+              {/* Sticks to the top of the viewport as the long builder form
+                  scrolls past, so Save is always reachable. */}
+              <div style={{ position: "sticky", top: "var(--p-space-400)" }}>
+                <BlockStack gap="400">
+                  <Card>
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingMd">
+                        Save
+                      </Text>
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        Stored per shop and pushed live to checkout on save. Pull
+                        saved configs back in from the Saved tab.
+                      </Text>
+                      <InlineStack gap="200">
+                        {editingId ? (
+                          <>
+                            <Button variant="primary" onClick={updateExisting} loading={isSaving}>
+                              Update
+                            </Button>
+                            <Button onClick={saveNew} loading={isSaving}>
+                              Save as new
+                            </Button>
+                          </>
+                        ) : (
+                          <Button variant="primary" onClick={saveNew} loading={isSaving}>
+                            Save
                           </Button>
-                          <Button onClick={saveNew} loading={isSaving}>
-                            Save as new
-                          </Button>
-                        </>
-                      ) : (
-                        <Button variant="primary" onClick={saveNew} loading={isSaving}>
-                          Save
+                        )}
+                      </InlineStack>
+                    </BlockStack>
+                  </Card>
+
+                  <Card>
+                    <BlockStack gap="300">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="h2" variant="headingMd">
+                          Config JSON
+                        </Text>
+                        <Button onClick={copyConfigJson} variant="plain">
+                          {jsonCopied ? "Copied" : "Copy"}
                         </Button>
-                      )}
-                    </InlineStack>
-                  </BlockStack>
-                </Card>
-              </BlockStack>
+                      </InlineStack>
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        Live preview of what this builder will save, including any
+                        unsaved edits. Paste it into a bug report.
+                      </Text>
+                      <Box background="bg-surface-secondary" borderRadius="200" padding="300">
+                        {/* Box has no maxHeight prop, so the scroll container is
+                            this div: a tall config would otherwise push the whole
+                            sticky column past the viewport. */}
+                        <div style={{ maxHeight: "24rem", overflow: "auto" }}>
+                          <pre
+                            style={{
+                              margin: 0,
+                              fontFamily: "var(--p-font-family-mono)",
+                              fontSize: "var(--p-font-size-275)",
+                              lineHeight: "var(--p-font-line-height-400)",
+                              whiteSpace: "pre",
+                            }}
+                          >
+                            {generatedConfigJson}
+                          </pre>
+                        </div>
+                      </Box>
+                    </BlockStack>
+                  </Card>
+                </BlockStack>
+              </div>
             </Layout.Section>
           </Layout>
         )}

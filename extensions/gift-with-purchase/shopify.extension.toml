@@ -41,6 +41,14 @@ type = "boolean"
 name = "Show Test Mode Configs?"
 description = "IMPORTANT: must be turned off (set to False) if this is the live published checkout."
 
+# When enabled, live-mode configs are suppressed so only test-mode configs render.
+# Pairs with "Show Test Mode Configs?" to isolate the one offer under test.
+[[extensions.settings.fields]]
+key = "hide_live_configs"
+type = "boolean"
+name = "Hide Live Configs?"
+description = "Testing only: hides every live-mode offer so only test-mode offers render. IMPORTANT: must be turned off (set to False) on the live published checkout, or customers will see no gift offers."
+
 # Customer tags metafield, used for one-per-customer redemption checks.
 [[extensions.metafields]]
 namespace = "custom"
