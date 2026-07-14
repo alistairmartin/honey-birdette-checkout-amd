@@ -23,12 +23,10 @@ export default function App() {
         <Link to="/app" rel="home">
           Home
         </Link>
+        <Link to="/app/template-copier">Template copier</Link>
         <Link to="/app/gift-with-purchase">Gift with purchase</Link>
         <Link to="/app/checkout-recommendations">Checkout recommendations</Link>
         <Link to="/app/lingerie-set-sync">Lingerie set sync</Link>
-        <Link to="/app/template-copier">Template copier</Link>
-
-        <Link to="/app/additional">Additional page</Link>
         <Link to="/app/client-info-cleanup">Client info cleanup</Link>
         <Link to="/app/cart-transform">Cart transform</Link>
         <Link to="/app/po-box-delivery">PO/AFO/FPO delivery</Link>

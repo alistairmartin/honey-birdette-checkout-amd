@@ -60,11 +60,14 @@ model KiboFailedOrder {
 // One row per template-copy run started from the Template copier page
 // (app/routes/app.template-copier.jsx). A run copies N template files from one
 // source shop/theme into one destination shop/theme, so a copy to three stores
-// writes three rows. `filesJson` is the stringified array of per-file results
+// writes three rows sharing a `batchId` - that's what the history groups on.
+// `filesJson` is the stringified array of per-file results
 // ([{ filename, status, error }]), kept so the page can show exactly what landed.
 // status: SUCCESS | PARTIAL | FAILED
 model ThemeCopyLog {
   id              String   @id @default(cuid())
+  // Shared by every row written by one press of the Copy button.
+  batchId         String   @default("")
   sourceShop      String
   sourceThemeId   String
   sourceThemeName String
@@ -76,12 +79,22 @@ model ThemeCopyLog {
   successCount    Int
   status          String
   filesJson       String
+  // Per-image/video results ([{ filename, kind, status, error }]) when the run
+  // also copied the media the templates reference into the destination's Files.
+  imagesJson      String   @default("[]")
+  // What the destination theme held for each of these filenames BEFORE the copy
+  // ([{ filename, content }], content null when the copy created the file).
+  // This is what Revert restores - without it, undoing means hunting through the
+  // theme editor's version timeline by hand.
+  previousJson    String   @default("[]")
+  revertedAt      DateTime?
   error           String?
   copiedBy        String?
   createdAt       DateTime @default(now())
 
   @@index([sourceShop, createdAt])
   @@index([targetShop, createdAt])
+  @@index([batchId])
 }
 
 // One row per saved Gift With Purchase config. The admin builder page writes
