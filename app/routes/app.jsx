@@ -26,6 +26,7 @@ export default function App() {
         <Link to="/app/gift-with-purchase">Gift with purchase</Link>
         <Link to="/app/checkout-recommendations">Checkout recommendations</Link>
         <Link to="/app/lingerie-set-sync">Lingerie set sync</Link>
+        <Link to="/app/template-copier">Template copier</Link>
 
         <Link to="/app/additional">Additional page</Link>
         <Link to="/app/client-info-cleanup">Client info cleanup</Link>

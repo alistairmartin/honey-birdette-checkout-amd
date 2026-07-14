@@ -57,6 +57,33 @@ model KiboFailedOrder {
   @@index([shop, status])
 }
 
+// One row per template-copy run started from the Template copier page
+// (app/routes/app.template-copier.jsx). A run copies N template files from one
+// source shop/theme into one destination shop/theme, so a copy to three stores
+// writes three rows. `filesJson` is the stringified array of per-file results
+// ([{ filename, status, error }]), kept so the page can show exactly what landed.
+// status: SUCCESS | PARTIAL | FAILED
+model ThemeCopyLog {
+  id              String   @id @default(cuid())
+  sourceShop      String
+  sourceThemeId   String
+  sourceThemeName String
+  targetShop      String
+  targetThemeId   String
+  targetThemeName String
+  targetThemeRole String
+  fileCount       Int
+  successCount    Int
+  status          String
+  filesJson       String
+  error           String?
+  copiedBy        String?
+  createdAt       DateTime @default(now())
+
+  @@index([sourceShop, createdAt])
+  @@index([targetShop, createdAt])
+}
+
 // One row per saved Gift With Purchase config. The admin builder page writes
 // these and, on every change, syncs the full set up to a shop metafield (read by
 // the gift-with-purchase checkout extension) and the discount node metafield
