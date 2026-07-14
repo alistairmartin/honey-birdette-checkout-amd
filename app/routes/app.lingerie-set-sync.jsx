@@ -37,6 +37,17 @@ const ELIGIBLE_CHILD_TYPES = new Set([
   "Top",
 ]);
 
+// Parent sets are stored on the child in this order. Ranked by handle suffix,
+// most specific first ("lian-complete-lingerie-set" also ends with
+// "lingerie-set", so "complete-lingerie-set" has to be tested first). Anything
+// that matches nothing here sorts last, keeping its existing relative order.
+const PARENT_HANDLE_ORDER = [
+  "complete-lingerie-set",
+  "3-piece-lingerie-set",
+  "2-piece-lingerie-set",
+  "lingerie-set",
+];
+
 // Hand back a cursor after this long so the browser can resume. Keeps each
 // request well under dev-tunnel / hosting timeouts.
 const BUDGET_MS = 25_000;
@@ -51,6 +62,7 @@ const PARENTS_QUERY = `#graphql
       nodes {
         id
         title
+        handle
         productType
         setItems: metafield(namespace: "${SET_ITEMS_NAMESPACE}", key: "${SET_ITEMS_KEY}") {
           references(first: 50) {
@@ -66,6 +78,18 @@ const PARENTS_QUERY = `#graphql
             }
           }
         }
+      }
+    }
+  }`;
+
+// Existing entries on a child can point at parents we have not paged past yet,
+// so their handles have to be looked up before the list can be sorted.
+const PARENT_HANDLES_QUERY = `#graphql
+  query ParentHandles($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      ... on Product {
+        id
+        handle
       }
     }
   }`;
@@ -140,6 +164,32 @@ function parseRefList(value) {
   }
 }
 
+function parentRank(handle) {
+  if (!handle) return PARENT_HANDLE_ORDER.length;
+  const i = PARENT_HANDLE_ORDER.findIndex((suffix) => handle.endsWith(suffix));
+  return i === -1 ? PARENT_HANDLE_ORDER.length : i;
+}
+
+// Array#sort is stable, so unranked parents keep the order they came in with.
+function sortParentRefs(ids, handles) {
+  return [...ids].sort(
+    (a, b) => parentRank(handles.get(a)) - parentRank(handles.get(b)),
+  );
+}
+
+// Fills `handles` for any GID we have not already seen. 250 is the nodes() cap.
+async function cacheHandles(admin, ids, handles) {
+  const missing = [...new Set(ids)].filter((id) => !handles.has(id));
+  for (let i = 0; i < missing.length; i += 250) {
+    const body = await adminGraphql(admin, PARENT_HANDLES_QUERY, {
+      ids: missing.slice(i, i + 250),
+    });
+    for (const node of body.data.nodes || []) {
+      if (node?.id && node.handle) handles.set(node.id, node.handle);
+    }
+  }
+}
+
 export async function action({ request }) {
   const { admin } = await authenticate.admin(request);
   const form = await request.formData();
@@ -153,8 +203,15 @@ export async function action({ request }) {
   let childrenEligible = 0;
   let writesPlanned = 0;
   let writesApplied = 0;
+  let reordersPlanned = 0;
   let done = false;
   const errors = [];
+  const handles = new Map();
+  // A child can sit in more than one parent set on the same page, and its
+  // metafield value in the query response is a snapshot from before this run's
+  // writes. Track what we last wrote so the second parent merges instead of
+  // clobbering the first.
+  const childLists = new Map();
 
   try {
     while (true) {
@@ -163,26 +220,46 @@ export async function action({ request }) {
 
       for (const parent of products.nodes) {
         parentsScanned++;
+        if (parent.handle) handles.set(parent.id, parent.handle);
+
         const childRefs = parent.setItems?.references?.nodes || [];
         if (!childRefs.length) continue;
 
-        const toWrite = [];
+        const eligible = [];
         for (const child of childRefs) {
           if (child.__typename !== "Product") continue;
           childrenSeen++;
           if (!ELIGIBLE_CHILD_TYPES.has(child.productType)) continue;
           childrenEligible++;
+          eligible.push(child);
+        }
+        if (!eligible.length) continue;
 
-          const existing = parseRefList(child.parentRef?.value);
-          if (existing.includes(parent.id)) continue;
+        // Sorting needs the handle of every parent already on these children.
+        await cacheHandles(
+          admin,
+          eligible.flatMap((c) => parseRefList(c.parentRef?.value)),
+          handles,
+        );
 
-          const merged = [...existing, parent.id];
+        const toWrite = [];
+        for (const child of eligible) {
+          const existing =
+            childLists.get(child.id) ?? parseRefList(child.parentRef?.value);
+          const merged = existing.includes(parent.id)
+            ? existing
+            : [...existing, parent.id];
+          const sorted = sortParentRefs(merged, handles);
+          if (JSON.stringify(sorted) === JSON.stringify(existing)) continue;
+          if (existing.includes(parent.id)) reordersPlanned++;
+          childLists.set(child.id, sorted);
+
           toWrite.push({
             ownerId: child.id,
             namespace: PARENT_REF_NAMESPACE,
             key: PARENT_REF_KEY,
             type: "list.product_reference",
-            value: JSON.stringify(merged),
+            value: JSON.stringify(sorted),
           });
         }
 
@@ -227,6 +304,7 @@ export async function action({ request }) {
       pageEligible: childrenEligible,
       pagePlanned: writesPlanned,
       pageApplied: writesApplied,
+      pageReordered: reordersPlanned,
       errors,
       fatalError: err?.message || String(err),
     });
@@ -241,6 +319,7 @@ export async function action({ request }) {
     pageEligible: childrenEligible,
     pagePlanned: writesPlanned,
     pageApplied: writesApplied,
+    pageReordered: reordersPlanned,
     errors,
     fatalError: null,
   });
@@ -259,6 +338,7 @@ export default function LingerieSetSync() {
     eligible: 0,
     planned: 0,
     applied: 0,
+    reordered: 0,
   });
   const [errors, setErrors] = useState([]);
   const [fatal, setFatal] = useState(null);
@@ -275,6 +355,7 @@ export default function LingerieSetSync() {
       eligible: t.eligible + data.pageEligible,
       planned: t.planned + data.pagePlanned,
       applied: t.applied + data.pageApplied,
+      reordered: t.reordered + (data.pageReordered || 0),
     }));
     setBatches((b) => b + 1);
     if (data.errors?.length) setErrors((e) => [...e, ...data.errors]);
@@ -297,7 +378,14 @@ export default function LingerieSetSync() {
     setFinished(false);
     setApply(applyMode);
     setBatches(0);
-    setTotals({ parents: 0, children: 0, eligible: 0, planned: 0, applied: 0 });
+    setTotals({
+      parents: 0,
+      children: 0,
+      eligible: 0,
+      planned: 0,
+      applied: 0,
+      reordered: 0,
+    });
     setErrors([]);
     setFatal(null);
     fetcher.submit(
@@ -325,6 +413,12 @@ export default function LingerieSetSync() {
               list. Only children whose product type is one of:{" "}
               {[...ELIGIBLE_CHILD_TYPES].join(", ")} are updated. Existing
               entries are preserved.
+            </Text>
+            <Text as="p" variant="bodyMd">
+              The list is sorted by parent handle so the first entry is the most
+              complete set: {PARENT_HANDLE_ORDER.map((h) => `*-${h}`).join(", ")},
+              then anything else. Children whose parents are already correct but
+              in the wrong order get rewritten.
             </Text>
             <InlineStack gap="300">
               <Button
@@ -367,7 +461,8 @@ export default function LingerieSetSync() {
                 {totals.eligible} of an eligible product type.
               </Text>
               <Text as="p" variant="bodyMd">
-                {totals.planned} parent reference(s) to add
+                {totals.planned} child metafield(s) to update, of which{" "}
+                {totals.reordered} are re-ordering only
                 {apply ? ` - ${totals.applied} written.` : " (dry run - nothing changed)."}
               </Text>
             </BlockStack>
