@@ -14,6 +14,7 @@ import { json } from "@remix-run/node";
 import { useEffect, useMemo, useState } from "react";
 import { useLoaderData, useFetcher } from "@remix-run/react";
 import {
+  Autocomplete,
   Badge,
   Banner,
   BlockStack,
@@ -22,13 +23,13 @@ import {
   Card,
   Checkbox,
   Divider,
+  InlineGrid,
   InlineStack,
   Layout,
   List,
   Modal,
   Page,
   Scrollable,
-  Select,
   Text,
   TextField,
 } from "@shopify/polaris";
@@ -36,6 +37,7 @@ import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate, unauthenticated } from "../shopify.server";
 import {
   copyToTarget,
+  getShopInfo,
   listDestinationShops,
   listTemplateFiles,
   listThemes,
@@ -50,9 +52,17 @@ export const loader = async ({ request }) => {
   const sourceShop = session.shop;
 
   const themes = await listThemes(admin);
+  // Themes come back most-recently-edited first, so the default source theme is
+  // the one that was touched last - nearly always the one you just finished
+  // editing and now want to push to the other regions.
   const initialTheme = themes[0] ?? null;
 
-  const [templates, shops, history] = await Promise.all([
+  const [source, templates, shops, history] = await Promise.all([
+    getShopInfo(admin, sourceShop).catch(() => ({
+      shop: sourceShop,
+      name: sourceShop,
+      flag: "",
+    })),
     initialTheme ? listTemplateFiles(admin, initialTheme.id) : [],
     listDestinationShops(sourceShop),
     recentCopies(sourceShop),
@@ -77,7 +87,7 @@ export const loader = async ({ request }) => {
   );
 
   return json({
-    sourceShop,
+    source,
     themes,
     initialThemeId: initialTheme?.id ?? null,
     templates,
@@ -179,11 +189,78 @@ const roleBadge = (role) => {
   return <Badge>Unpublished</Badge>;
 };
 
+const shopLabel = (info) =>
+  `${info.name}${info.flag ? ` ${info.flag}` : ""}`;
+
+const editedOn = (iso) => {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+// Themes are listed newest-edited first, so the edit date is part of the label:
+// it's what tells you which "v1.6.5 | Heather" you're actually looking at.
 const themeLabel = (theme) =>
-  `${theme.name}${theme.role === "MAIN" ? " (live)" : ""}`;
+  `${theme.name}${theme.role === "MAIN" ? " (live)" : ""} - edited ${editedOn(theme.updatedAt)}`;
+
+// A type-to-search theme picker. These stores carry 100+ themes, so a plain
+// <Select> is unusable - you scroll a wall of near-identical campaign names.
+function ThemePicker({ label, labelHidden, themes, value, onChange, disabled }) {
+  const options = useMemo(
+    () => themes.map((t) => ({ value: t.id, label: themeLabel(t) })),
+    [themes],
+  );
+
+  const [input, setInput] = useState("");
+  const [filtered, setFiltered] = useState(options);
+
+  // Reflect the selected theme back into the field, and reset the filter, when
+  // the selection or the theme list changes from outside.
+  useEffect(() => {
+    setInput(options.find((o) => o.value === value)?.label ?? "");
+    setFiltered(options);
+  }, [value, options]);
+
+  const updateInput = (next) => {
+    setInput(next);
+    const q = next.trim().toLowerCase();
+    setFiltered(
+      q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options,
+    );
+  };
+
+  const select = ([selectedId]) => {
+    onChange(selectedId);
+    setInput(options.find((o) => o.value === selectedId)?.label ?? "");
+  };
+
+  return (
+    <Autocomplete
+      options={filtered}
+      selected={value ? [value] : []}
+      onSelect={select}
+      textField={
+        <Autocomplete.TextField
+          label={label}
+          labelHidden={labelHidden}
+          value={input}
+          onChange={updateInput}
+          placeholder="Search themes by name"
+          autoComplete="off"
+          disabled={disabled}
+          clearButton
+          onClearButtonClick={() => updateInput("")}
+        />
+      }
+    />
+  );
+}
 
 export default function TemplateCopierPage() {
-  const { sourceShop, themes, initialThemeId, templates, destinations, history } =
+  const { source, themes, initialThemeId, templates, destinations, history } =
     useLoaderData();
 
   const templatesFetcher = useFetcher();
@@ -196,6 +273,7 @@ export default function TemplateCopierPage() {
   const [targetThemes, setTargetThemes] = useState({});
   const [enabledShops, setEnabledShops] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [liveAcknowledged, setLiveAcknowledged] = useState(false);
 
   const sourceTemplates =
@@ -240,12 +318,11 @@ export default function TemplateCopierPage() {
     );
 
   const toggleShop = (shop) => {
-    setEnabledShops((prev) => {
-      if (prev.includes(shop)) return prev.filter((s) => s !== shop);
-      return [...prev, shop];
-    });
-    // Default a newly-enabled store to its live theme - the common case - but
-    // the copy still can't run until you've looked at the confirm modal.
+    setEnabledShops((prev) =>
+      prev.includes(shop) ? prev.filter((s) => s !== shop) : [...prev, shop],
+    );
+    // Default a newly-enabled store to its live theme - the common case - but the
+    // copy still can't run until you've been through the confirm modal.
     setTargetThemes((prev) => {
       if (prev[shop]) return prev;
       const dest = destinations.find((d) => d.shop === shop);
@@ -263,7 +340,7 @@ export default function TemplateCopierPage() {
           const theme = dest?.themes.find((t) => t.id === targetThemes[shop]);
           return {
             shop,
-            name: dest?.name ?? shop,
+            name: dest ? shopLabel(dest) : shop,
             themeId: targetThemes[shop],
             themeName: theme?.name ?? "",
             role: theme?.role ?? "",
@@ -271,6 +348,13 @@ export default function TemplateCopierPage() {
         }),
     [enabledShops, targetThemes, destinations],
   );
+
+  // "🇦🇺 or 🇺🇸 or 🇪🇺" - the flags of the stores you can actually copy into,
+  // so the heading names the choice rather than describing it.
+  const destinationFlags = destinations
+    .map((d) => d.flag)
+    .filter(Boolean)
+    .join(" or ");
 
   const liveTargets = targets.filter((t) => t.role === "MAIN");
   const canCopy = selected.length > 0 && targets.length > 0 && sourceThemeId;
@@ -315,10 +399,10 @@ export default function TemplateCopierPage() {
       <Layout>
         <Layout.Section>
           <Text as="p" variant="bodyMd" tone="subdued">
-            Copy theme templates from {sourceShop} into a theme on another store.
-            Files are overwritten in place; the destination theme's version history
-            keeps the previous version, so a copy can be reverted from the theme
-            editor timeline.
+            Copy theme templates from {shopLabel(source)} into a theme on another
+            store. Files are overwritten in place; the destination theme's version
+            history keeps the previous version, so a copy can be reverted from the
+            theme editor timeline.
           </Text>
         </Layout.Section>
 
@@ -336,22 +420,25 @@ export default function TemplateCopierPage() {
           </Layout.Section>
         )}
 
+        {/* Step 1: which theme on this store, and which of its templates. */}
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
               <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">
-                  Source: {sourceShop}
-                </Text>
+                <BlockStack gap="050">
+                  <Text as="h2" variant="headingMd">
+                    Step 1: Select template files from {shopLabel(source)}
+                  </Text>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {source.shop}
+                  </Text>
+                </BlockStack>
                 {sourceTheme && roleBadge(sourceTheme.role)}
               </InlineStack>
 
-              <Select
-                label="Theme"
-                options={themes.map((t) => ({
-                  label: themeLabel(t),
-                  value: t.id,
-                }))}
+              <ThemePicker
+                label="Theme (most recently edited first)"
+                themes={themes}
                 value={sourceThemeId}
                 onChange={changeSourceTheme}
                 disabled={busy || loadingTemplates}
@@ -359,125 +446,92 @@ export default function TemplateCopierPage() {
 
               <Divider />
 
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h3" variant="headingSm">
-                  Templates ({selected.length} of {sourceTemplates.length} selected)
-                </Text>
+              <InlineStack align="space-between" blockAlign="center" gap="300">
+                <BlockStack gap="050">
+                  <Text as="h3" variant="headingSm">
+                    {selected.length === 0
+                      ? "No templates selected"
+                      : `${selected.length} of ${sourceTemplates.length} templates selected`}
+                  </Text>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {selected.length === 0
+                      ? "Choose the template files to copy."
+                      : selected
+                          .map((f) => f.replace(/^templates\//, ""))
+                          .join(", ")}
+                  </Text>
+                </BlockStack>
                 <InlineStack gap="200">
+                  {selected.length > 0 && (
+                    <Button variant="plain" onClick={() => setSelected([])}>
+                      Clear
+                    </Button>
+                  )}
                   <Button
-                    variant="plain"
-                    onClick={() =>
-                      setSelected(visibleTemplates.map((f) => f.filename))
-                    }
-                    disabled={loadingTemplates || visibleTemplates.length === 0}
+                    onClick={() => setPickerOpen(true)}
+                    disabled={loadingTemplates || busy || !sourceThemeId}
+                    loading={loadingTemplates}
                   >
-                    Select all
-                  </Button>
-                  <Button
-                    variant="plain"
-                    onClick={() => setSelected([])}
-                    disabled={selected.length === 0}
-                  >
-                    Clear
+                    {selected.length === 0 ? "Select templates" : "Edit selection"}
                   </Button>
                 </InlineStack>
               </InlineStack>
-
-              <TextField
-                label="Filter"
-                labelHidden
-                placeholder="Filter templates, e.g. product"
-                value={search}
-                onChange={setSearch}
-                autoComplete="off"
-                clearButton
-                onClearButtonClick={() => setSearch("")}
-              />
-
-              {loadingTemplates ? (
-                <Text as="p" tone="subdued">
-                  Loading templates...
-                </Text>
-              ) : visibleTemplates.length === 0 ? (
-                <Text as="p" tone="subdued">
-                  No templates match.
-                </Text>
-              ) : (
-                <Scrollable style={{ maxHeight: "420px" }}>
-                  <BlockStack gap="100">
-                    {visibleTemplates.map((file) => (
-                      <Box
-                        key={file.filename}
-                        padding="200"
-                        background={
-                          selected.includes(file.filename)
-                            ? "bg-surface-selected"
-                            : undefined
-                        }
-                        borderRadius="200"
-                      >
-                        <InlineStack align="space-between" blockAlign="center">
-                          <Checkbox
-                            label={file.filename.replace(/^templates\//, "")}
-                            checked={selected.includes(file.filename)}
-                            onChange={() => toggleFile(file.filename)}
-                          />
-                          <Text as="span" tone="subdued" variant="bodySm">
-                            {(file.size / 1024).toFixed(1)} KB
-                          </Text>
-                        </InlineStack>
-                      </Box>
-                    ))}
-                  </BlockStack>
-                </Scrollable>
-              )}
             </BlockStack>
           </Card>
         </Layout.Section>
 
-        <Layout.Section variant="oneThird">
-          <BlockStack gap="400">
-            <Card>
-              <BlockStack gap="400">
+        {/* Step 2: destinations, full width so each theme picker has room. */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <BlockStack gap="050">
                 <Text as="h2" variant="headingMd">
-                  Destinations
+                  {`Step 2: Choose the destination${destinationFlags ? ` (${destinationFlags})` : ""}`}
                 </Text>
+                <Text as="span" variant="bodySm" tone="subdued">
+                  Pick the stores to copy into, and the theme on each. Themes are
+                  listed most recently edited first.
+                </Text>
+              </BlockStack>
 
-                {destinations.length === 0 && (
-                  <Text as="p" tone="subdued">
-                    The app isn't installed on any other store yet. Install it on
-                    the other regional stores and they'll appear here.
-                  </Text>
-                )}
+              {destinations.length === 0 && (
+                <Text as="p" tone="subdued">
+                  The app isn't installed on any other store yet. Install it on the
+                  other regional stores and they'll appear here.
+                </Text>
+              )}
 
-                {destinations.map((dest) => {
-                  const enabled = enabledShops.includes(dest.shop);
-                  return (
-                    <BlockStack gap="200" key={dest.shop}>
-                      <Checkbox
-                        label={dest.name}
-                        helpText={dest.shop}
-                        checked={enabled}
-                        disabled={!dest.reachable || busy}
-                        onChange={() => toggleShop(dest.shop)}
-                      />
-                      {!dest.reachable && (
-                        <Banner tone="warning">
-                          <Text as="p" variant="bodySm">
-                            Can't reach this store: {dest.error}. Reinstall the app
-                            there to restore access.
-                          </Text>
-                        </Banner>
-                      )}
-                      {enabled && dest.reachable && (
-                        <Box paddingInlineStart="600">
-                          <Select
-                            label="Theme"
+              {destinations.map((dest) => {
+                const enabled = enabledShops.includes(dest.shop);
+                const chosen = dest.themes.find(
+                  (t) => t.id === targetThemes[dest.shop],
+                );
+
+                return (
+                  <Box
+                    key={dest.shop}
+                    padding="300"
+                    borderRadius="200"
+                    borderWidth="025"
+                    borderColor={enabled ? "border-emphasis" : "border"}
+                  >
+                    <InlineGrid columns={{ xs: 1, md: ["oneThird", "twoThirds"] }} gap="300">
+                      <BlockStack gap="100">
+                        <Checkbox
+                          label={shopLabel(dest)}
+                          helpText={dest.shop}
+                          checked={enabled}
+                          disabled={!dest.reachable || busy}
+                          onChange={() => toggleShop(dest.shop)}
+                        />
+                      </BlockStack>
+
+                      {enabled && dest.reachable ? (
+                        <BlockStack gap="100">
+                          <ThemePicker
+                            label={`Destination theme on ${dest.name}`}
                             labelHidden
-                            options={dest.themes.map((t) => ({
-                              label: themeLabel(t),
-                              value: t.id,
-                            }))}
+                            themes={dest.themes}
                             value={targetThemes[dest.shop] ?? ""}
                             onChange={(value) =>
                               setTargetThemes((prev) => ({
@@ -487,14 +541,37 @@ export default function TemplateCopierPage() {
                             }
                             disabled={busy}
                           />
-                        </Box>
+                          {chosen?.role === "MAIN" && (
+                            <InlineStack gap="150" blockAlign="center">
+                              <Badge tone="critical">Live theme</Badge>
+                              <Text as="span" variant="bodySm" tone="subdued">
+                                Changes go straight to customers.
+                              </Text>
+                            </InlineStack>
+                          )}
+                        </BlockStack>
+                      ) : (
+                        <Box />
                       )}
-                    </BlockStack>
-                  );
-                })}
+                    </InlineGrid>
 
-                <Divider />
+                    {!dest.reachable && (
+                      <Box paddingBlockStart="200">
+                        <Banner tone="warning">
+                          <Text as="p" variant="bodySm">
+                            Can't reach this store: {dest.error}. Reinstall the app
+                            there to restore access.
+                          </Text>
+                        </Banner>
+                      </Box>
+                    )}
+                  </Box>
+                );
+              })}
 
+              <Divider />
+
+              <InlineStack align="end">
                 <Button
                   variant="primary"
                   tone={liveTargets.length > 0 ? "critical" : undefined}
@@ -503,13 +580,97 @@ export default function TemplateCopierPage() {
                 >
                   {`Copy ${selected.length} template${selected.length === 1 ? "" : "s"} to ${targets.length} store${targets.length === 1 ? "" : "s"}`}
                 </Button>
-              </BlockStack>
-            </Card>
-
-            {currentHistory.length > 0 && <HistoryCard history={currentHistory} />}
-          </BlockStack>
+              </InlineStack>
+            </BlockStack>
+          </Card>
         </Layout.Section>
+
+        {currentHistory.length > 0 && (
+          <Layout.Section>
+            <HistoryCard history={currentHistory} />
+          </Layout.Section>
+        )}
       </Layout>
+
+      {/* Step 1's picker. Selection is applied live, so "Done" just closes it. */}
+      <Modal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        title={`Select templates from ${sourceTheme?.name ?? "theme"}`}
+        primaryAction={{
+          content: `Done${selected.length ? ` (${selected.length})` : ""}`,
+          onAction: () => setPickerOpen(false),
+        }}
+        secondaryActions={[
+          {
+            content: "Select all",
+            onAction: () =>
+              setSelected(visibleTemplates.map((f) => f.filename)),
+            disabled: visibleTemplates.length === 0,
+          },
+          {
+            content: "Clear",
+            onAction: () => setSelected([]),
+            disabled: selected.length === 0,
+          },
+        ]}
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            <TextField
+              label="Filter templates"
+              labelHidden
+              placeholder="Filter templates, e.g. product"
+              value={search}
+              onChange={setSearch}
+              autoComplete="off"
+              clearButton
+              onClearButtonClick={() => setSearch("")}
+            />
+
+            <Text as="p" variant="bodySm" tone="subdued">
+              {`${selected.length} of ${sourceTemplates.length} selected`}
+              {search.trim()
+                ? ` - showing ${visibleTemplates.length} match${visibleTemplates.length === 1 ? "" : "es"}`
+                : ""}
+            </Text>
+
+            {visibleTemplates.length === 0 ? (
+              <Text as="p" tone="subdued">
+                No templates match.
+              </Text>
+            ) : (
+              <Scrollable style={{ maxHeight: "420px" }}>
+                <BlockStack gap="100">
+                  {visibleTemplates.map((file) => (
+                    <Box
+                      key={file.filename}
+                      padding="200"
+                      background={
+                        selected.includes(file.filename)
+                          ? "bg-surface-selected"
+                          : undefined
+                      }
+                      borderRadius="200"
+                    >
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Checkbox
+                          label={file.filename.replace(/^templates\//, "")}
+                          checked={selected.includes(file.filename)}
+                          onChange={() => toggleFile(file.filename)}
+                        />
+                        <Text as="span" tone="subdued" variant="bodySm">
+                          {(file.size / 1024).toFixed(1)} KB
+                        </Text>
+                      </InlineStack>
+                    </Box>
+                  ))}
+                </BlockStack>
+              </Scrollable>
+            )}
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
 
       <Modal
         open={modalOpen}
@@ -608,7 +769,12 @@ export default function TemplateCopierPage() {
 
 function ResultsBanner({ results }) {
   const failed = results.filter((r) => r.status !== "SUCCESS");
-  const tone = failed.length === 0 ? "success" : failed.length === results.length ? "critical" : "warning";
+  const tone =
+    failed.length === 0
+      ? "success"
+      : failed.length === results.length
+        ? "critical"
+        : "warning";
 
   return (
     <Banner
@@ -668,7 +834,7 @@ function HistoryCard({ history }) {
               </Text>
             </InlineStack>
             <Text as="p" variant="bodySm" tone="subdued">
-              {`${row.successCount}/${row.fileCount} from ${row.sourceThemeName} → ${row.targetShop} (${row.targetThemeName})`}
+              {`${row.successCount}/${row.fileCount} from ${row.sourceThemeName} to ${row.targetShop} (${row.targetThemeName})`}
               {row.copiedBy ? ` by ${row.copiedBy}` : ""}
             </Text>
           </BlockStack>

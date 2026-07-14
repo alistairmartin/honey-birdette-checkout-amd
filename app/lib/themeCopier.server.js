@@ -27,15 +27,21 @@ const UPSERT_BATCH_SIZE = 25;
 // The `files` connection caps out at 2500 nodes; no theme has that many templates.
 const FILE_PAGE_SIZE = 250;
 
+// These stores keep a long tail of dated campaign themes (100+), so this pages
+// rather than taking the first N.
 const THEMES_QUERY = `#graphql
-  query CopierThemes {
-    themes(first: 50) {
+  query CopierThemes($after: String) {
+    themes(first: 50, after: $after) {
       nodes {
         id
         name
         role
         processing
         updatedAt
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }
@@ -105,6 +111,46 @@ const UPSERT_MUTATION = `#graphql
 // Stores
 // ---------------------------------------------------------------------------
 
+const SHOP_INFO_QUERY = `#graphql
+  query CopierShopInfo {
+    shop {
+      name
+      billingAddress {
+        countryCodeV2
+      }
+    }
+  }
+`;
+
+// An ISO country code to its flag emoji: "AU" -> two regional-indicator symbols.
+// Derived from the store's own billing country rather than a hardcoded
+// domain-to-region map, so a new regional store gets the right flag with no code
+// change. Returns "" for anything that isn't a 2-letter code.
+export function countryFlag(countryCode) {
+  if (typeof countryCode !== "string" || !/^[A-Za-z]{2}$/.test(countryCode)) {
+    return "";
+  }
+  return String.fromCodePoint(
+    ...countryCode
+      .toUpperCase()
+      .split("")
+      .map((c) => 0x1f1e6 + c.charCodeAt(0) - 65),
+  );
+}
+
+// The merchant-facing name, country and flag for one shop.
+export async function getShopInfo(admin, shop) {
+  const body = await adminGraphql(admin, SHOP_INFO_QUERY);
+  const countryCode = body.data?.shop?.billingAddress?.countryCodeV2 ?? null;
+  return {
+    shop,
+    name: body.data?.shop?.name || shop,
+    countryCode,
+    flag: countryFlag(countryCode),
+    reachable: true,
+  };
+}
+
 // Every shop with an offline session - i.e. every store the app is installed on.
 // Excludes `currentShop` (that's the source, it's never a destination).
 export async function listDestinationShops(currentShop) {
@@ -117,7 +163,7 @@ export async function listDestinationShops(currentShop) {
 
   const shops = sessions.map((s) => s.shop);
 
-  // Fetch the merchant-facing store name so the picker reads "Honey Birdette US"
+  // Fetch the store name and country so the picker reads "Honey Birdette US 🇺🇸"
   // rather than "hb-us-prod.myshopify.com". A store whose token has gone stale
   // still shows up - with its domain as the label and `reachable: false` - so
   // the page can tell you it needs a reinstall instead of silently hiding it.
@@ -125,21 +171,13 @@ export async function listDestinationShops(currentShop) {
     shops.map(async (shop) => {
       try {
         const { admin } = await unauthenticated.admin(shop);
-        const body = await adminGraphql(
-          admin,
-          `#graphql
-            query CopierShopName {
-              shop {
-                name
-              }
-            }
-          `,
-        );
-        return { shop, name: body.data?.shop?.name || shop, reachable: true };
+        return await getShopInfo(admin, shop);
       } catch (err) {
         return {
           shop,
           name: shop,
+          countryCode: null,
+          flag: "",
           reachable: false,
           error: err?.message ?? String(err),
         };
@@ -159,16 +197,24 @@ async function adminFor(shop) {
 // Themes and files
 // ---------------------------------------------------------------------------
 
+// Most-recently-edited theme first. These stores carry ~100 themes, most of them
+// dated campaign snapshots, so the one you want is nearly always the one that was
+// touched last; the live theme is labelled rather than pinned to the top.
 export async function listThemes(admin) {
-  const body = await adminGraphql(admin, THEMES_QUERY);
-  const nodes = body.data?.themes?.nodes ?? [];
-  // MAIN (the live theme) first, then the rest newest-first - the two themes you
-  // actually reach for are usually the live one and whatever you edited last.
-  return [...nodes].sort((a, b) => {
-    if (a.role === "MAIN" && b.role !== "MAIN") return -1;
-    if (b.role === "MAIN" && a.role !== "MAIN") return 1;
-    return (b.updatedAt || "").localeCompare(a.updatedAt || "");
-  });
+  const nodes = [];
+  let after = null;
+
+  do {
+    const body = await adminGraphql(admin, THEMES_QUERY, { after });
+    const connection = body.data?.themes;
+    if (!connection) break;
+    nodes.push(...(connection.nodes ?? []));
+    after = connection.pageInfo?.hasNextPage ? connection.pageInfo.endCursor : null;
+  } while (after);
+
+  return nodes.sort((a, b) =>
+    (b.updatedAt || "").localeCompare(a.updatedAt || ""),
+  );
 }
 
 export async function listThemesForShop(shop) {
