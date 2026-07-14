@@ -27,6 +27,7 @@ import {
   InlineGrid,
   InlineStack,
   Layout,
+  Link,
   List,
   Modal,
   Page,
@@ -250,6 +251,25 @@ const editedOn = (iso) => {
 
 // Themes are listed newest-edited first, so the edit date is part of the label:
 // it's what tells you which "v1.6.5 | Heather" you're actually looking at.
+// A deep link into the destination store's theme editor, opened on the template
+// that was just copied. The editor takes the template *name*, not the filename:
+// "templates/page.bridal-edit.json" is "?template=page.bridal-edit", and
+// "templates/customers/login.liquid" is "?template=customers/login" (the slash
+// has to survive encoding).
+function themeEditorUrl(shopDomain, themeGid, filename) {
+  const handle = shopDomain.replace(/\.myshopify\.com$/, "");
+  const themeId = String(themeGid).split("/").pop();
+  const base = `https://admin.shopify.com/store/${handle}/themes/${themeId}/editor`;
+
+  if (!filename) return base;
+
+  const template = filename
+    .replace(/^templates\//, "")
+    .replace(/\.(json|liquid)$/, "");
+
+  return `${base}?template=${encodeURIComponent(template).replace(/%2F/g, "/")}`;
+}
+
 // The same file can be missing on two destinations; the wizard talks about the
 // set of files, not the per-store rows.
 const dedupeMedia = (refs) => {
@@ -1317,19 +1337,39 @@ function CopyProgress({ targets, progress, percentComplete, doneCount }) {
               </BlockStack>
             </InlineStack>
 
-            <Text as="span" variant="bodySm" tone={result?.error ? "critical" : "subdued"}>
-              {entry?.state === "COPYING"
-                ? "Copying templates and media..."
-                : result?.error
-                  ? result.error
-                  : result
-                    ? `${result.successCount}/${result.fileCount} templates${
-                        result.media?.length
-                          ? `, ${result.media.filter((m) => m.status === "COPIED" || m.status === "OVERWRITTEN").length} media`
-                          : ""
-                      }`
-                    : ""}
-            </Text>
+            <InlineStack gap="300" blockAlign="center">
+              <Text
+                as="span"
+                variant="bodySm"
+                tone={result?.error ? "critical" : "subdued"}
+              >
+                {entry?.state === "COPYING"
+                  ? "Copying templates and media..."
+                  : result?.error
+                    ? result.error
+                    : result
+                      ? `${result.successCount}/${result.fileCount} templates${
+                          result.media?.length
+                            ? `, ${result.media.filter((m) => m.status === "COPIED" || m.status === "OVERWRITTEN").length} media`
+                            : ""
+                        }`
+                      : ""}
+              </Text>
+              {/* Open this region as soon as it lands, without waiting for the
+                  other regions to finish. */}
+              {entry?.state === "DONE" && (
+                <Link
+                  url={themeEditorUrl(
+                    target.shop,
+                    target.themeId,
+                    result?.files?.find((f) => f.status === "SUCCESS")?.filename,
+                  )}
+                  target="_blank"
+                >
+                  Preview
+                </Link>
+              )}
+            </InlineStack>
           </InlineStack>
         );
       })}
@@ -1378,6 +1418,19 @@ function TargetDiff({ check, targets }) {
             {target?.themeName}
           </Text>
           {target?.role === "MAIN" && <Badge tone="critical">Live theme</Badge>}
+          {/* Look at what you're about to overwrite, before you overwrite it. */}
+          {target && (
+            <Link
+              url={themeEditorUrl(
+                check.shop,
+                target.themeId,
+                check.files[0]?.filename,
+              )}
+              target="_blank"
+            >
+              View current
+            </Link>
+          )}
         </InlineStack>
 
         {check.files.map((file) => (
@@ -1486,6 +1539,30 @@ function ResultsBanner({ results }) {
                   <Text as="p" variant="bodySm" tone="critical">
                     {r.error}
                   </Text>
+                </Box>
+              )}
+
+              {/* Straight into that store's theme editor, on the template that
+                  just landed - one link per template, for every region. */}
+              {r.files.filter((f) => f.status === "SUCCESS").length > 0 && (
+                <Box paddingInlineStart="300">
+                  <InlineStack gap="300" wrap>
+                    {r.files
+                      .filter((f) => f.status === "SUCCESS")
+                      .map((f) => (
+                        <Link
+                          key={f.filename}
+                          url={themeEditorUrl(
+                            r.targetShop,
+                            r.targetThemeId,
+                            f.filename,
+                          )}
+                          target="_blank"
+                        >
+                          {`Preview ${f.filename.replace(/^templates\//, "")}`}
+                        </Link>
+                      ))}
+                  </InlineStack>
                 </Box>
               )}
 
@@ -1667,6 +1744,28 @@ function HistoryCard({ history, onRevert, reverting, reverts }) {
                           : ""}
                         {t.error ? ` - ${t.error}` : ""}
                       </Text>
+
+                      {/* Preview links for this region, one per template that
+                          landed - the theme editor opens on that template. */}
+                      {t.files.filter((f) => f.status === "SUCCESS").length > 0 && (
+                        <InlineStack gap="300" wrap>
+                          {t.files
+                            .filter((f) => f.status === "SUCCESS")
+                            .map((f) => (
+                              <Link
+                                key={f.filename}
+                                url={themeEditorUrl(
+                                  t.targetShop,
+                                  t.targetThemeId,
+                                  f.filename,
+                                )}
+                                target="_blank"
+                              >
+                                {`Preview ${f.filename.replace(/^templates\//, "")}`}
+                              </Link>
+                            ))}
+                        </InlineStack>
+                      )}
                     </BlockStack>
 
                     {t.revertable && (
