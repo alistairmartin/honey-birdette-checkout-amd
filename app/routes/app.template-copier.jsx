@@ -40,7 +40,6 @@ import {
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
-  copyToTarget,
   getShopInfo,
   listDestinationShops,
   listTemplateFiles,
@@ -51,6 +50,10 @@ import {
   revertCopy,
   reviewTarget,
 } from "../lib/themeCopier.server";
+
+// The copy and history endpoint. A resource route, so it always answers JSON -
+// see the comment in app/routes/api.template-copy.jsx.
+const COPY_ENDPOINT = "/api/template-copy";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -118,7 +121,15 @@ export const action = async ({ request }) => {
       });
     }
 
-    if (intent === "review" || intent === "copy") {
+    // Review: diff each destination against the source and report what the copy
+    // would change. Run per target because two stores can be on different theme
+    // versions and hold different media.
+    //
+    // The copy itself is NOT here - it lives in /api/template-copy (a resource
+    // route), because the browser fires one request per destination so each
+    // region can report its own progress, and a plain fetch() POST to a page
+    // route is a document request that comes back as HTML, not JSON.
+    if (intent === "review") {
       const sourceThemeId = String(formData.get("sourceThemeId"));
       const filenames = JSON.parse(String(formData.get("filenames") || "[]"));
       const targets = JSON.parse(String(formData.get("targets") || "[]"));
@@ -138,68 +149,29 @@ export const action = async ({ request }) => {
 
       const sourceFiles = await readFiles(admin, sourceThemeId, filenames);
 
-      // Review: diff each destination against the source, and report what the
-      // copy would change. Run per target because two stores can be on different
-      // theme versions and hold different images.
-      if (intent === "review") {
-        const checks = await Promise.all(
-          targets.map(async (target) => {
-            try {
-              const review = await reviewTarget({
-                targetShop: target.shop,
-                targetThemeId: target.themeId,
-                sourceFiles,
-              });
-              return { ...target, ...review };
-            } catch (err) {
-              return {
-                ...target,
-                missingSections: [],
-                files: [],
-                imagesReferenced: [],
-                imagesMissing: [],
-                imagesPresent: [],
-                error: err?.message ?? String(err),
-              };
-            }
-          }),
-        );
-        return json({ intent, checks });
-      }
-
-      const copyMediaEnabled = formData.get("copyMedia") === "true";
-      const overwriteExistingMedia = formData.get("overwriteMedia") === "true";
-      // The batch id is minted by the browser and passed in, because the browser
-      // fires one request per destination (so each region can report its own
-      // progress) and all of them belong to the one press of the button.
-      const batchId = String(formData.get("batchId") || crypto.randomUUID());
-
-      // One request copies to one store. Each resolves rather than throws, so a
-      // dead store reports its own failure instead of taking the others with it.
-      const results = [];
-      for (const target of targets) {
-        results.push(
-          await copyToTarget({
-            batchId,
-            sourceShop,
-            sourceAdmin: admin,
-            sourceTheme,
-            sourceFiles,
-            targetShop: target.shop,
-            targetThemeId: target.themeId,
-            copyMediaEnabled,
-            overwriteExistingMedia,
-            copiedBy: session.onlineAccessInfo?.associated_user?.email ?? null,
-          }),
-        );
-      }
-      return json({ intent, results });
-    }
-
-    // History only - cheap enough to re-fetch once the fan-out has finished,
-    // rather than having every in-flight copy request compute a stale copy of it.
-    if (intent === "history") {
-      return json({ intent, history: await recentCopies(sourceShop) });
+      const checks = await Promise.all(
+        targets.map(async (target) => {
+          try {
+            const review = await reviewTarget({
+              targetShop: target.shop,
+              targetThemeId: target.themeId,
+              sourceFiles,
+            });
+            return { ...target, ...review };
+          } catch (err) {
+            return {
+              ...target,
+              missingSections: [],
+              files: [],
+              mediaReferenced: [],
+              mediaMissing: [],
+              mediaPresent: [],
+              error: err?.message ?? String(err),
+            };
+          }
+        }),
+      );
+      return json({ intent, checks });
     }
 
     // Undo a copy: restore what the destination theme held before it.
@@ -240,13 +212,35 @@ const roleBadge = (role) => {
 const shopLabel = (info) =>
   `${info.name}${info.flag ? ` ${info.flag}` : ""}`;
 
+// Dates are formatted with an explicit locale AND timezone, never the system
+// default. The server renders in UTC and the browser renders in the viewer's
+// zone, so `toLocaleDateString(undefined, ...)` produces two different strings
+// for the same instant - React sees the mismatch on hydration and throws (#418,
+// #423, #425). Pinning both makes server and client agree, and the team is in
+// Sydney, so that's the zone worth showing.
+const DATE_LOCALE = "en-AU";
+const DATE_ZONE = "Australia/Sydney";
+
 const editedOn = (iso) => {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString(undefined, {
+  return new Intl.DateTimeFormat(DATE_LOCALE, {
     day: "numeric",
     month: "short",
     year: "numeric",
-  });
+    timeZone: DATE_ZONE,
+  }).format(new Date(iso));
+};
+
+const copiedAt = (iso) => {
+  if (!iso) return "";
+  return new Intl.DateTimeFormat(DATE_LOCALE, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: DATE_ZONE,
+  }).format(new Date(iso));
 };
 
 // Themes are listed newest-edited first, so the edit date is part of the label:
@@ -539,6 +533,19 @@ export default function TemplateCopierPage() {
       ),
     );
 
+    // A failed region still has to render as a region, not vanish.
+    const failure = (target, message) => ({
+      targetShop: target.shop,
+      targetThemeId: target.themeId,
+      targetThemeName: target.themeName,
+      fileCount: selected.length,
+      successCount: 0,
+      status: "FAILED",
+      files: [],
+      media: [],
+      error: message,
+    });
+
     const post = async (target) => {
       const body = new FormData();
       body.set("intent", "copy");
@@ -546,22 +553,33 @@ export default function TemplateCopierPage() {
       body.set("sourceThemeId", sourceThemeId);
       body.set("filenames", JSON.stringify(selected));
       body.set(
-        "targets",
-        JSON.stringify([{ shop: target.shop, themeId: target.themeId }]),
+        "target",
+        JSON.stringify({ shop: target.shop, themeId: target.themeId }),
       );
       body.set("copyMedia", String(copyMedia));
       body.set("overwriteMedia", String(overwriteMedia));
 
       try {
-        // App Bridge patches fetch to carry the session token, so this is
-        // authenticated the same way a Remix fetcher submit would be. The search
-        // string is kept because the embedded app's URL carries shop/host.
-        const res = await fetch(
-          `${window.location.pathname}${window.location.search}`,
-          { method: "POST", body },
-        );
-        const data = await res.json();
-        const result = data.results?.[0] ?? null;
+        // /api/template-copy is a resource route, so it answers with JSON. App
+        // Bridge patches fetch to attach the session token, which is what
+        // authenticate.admin uses to resolve the shop.
+        const res = await fetch(COPY_ENDPOINT, { method: "POST", body });
+
+        // Never assume JSON: an auth redirect or a crash answers with HTML, and
+        // res.json() would throw the useless "Unexpected token '<'".
+        const raw = await res.text();
+        let data;
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          throw new Error(
+            res.ok
+              ? "The server didn't return JSON. Reload the page and try again."
+              : `Request failed (HTTP ${res.status})`,
+          );
+        }
+
+        const result = data.result ?? null;
 
         setCopyProgress((prev) => ({
           ...prev,
@@ -569,19 +587,10 @@ export default function TemplateCopierPage() {
             state: result?.status === "SUCCESS" ? "DONE" : "FAILED",
             result:
               result ??
-              // The request itself failed (500, auth, network): synthesise a
-              // result so the region reports the reason rather than hanging.
-              {
-                targetShop: target.shop,
-                targetThemeId: target.themeId,
-                targetThemeName: target.themeName,
-                fileCount: selected.length,
-                successCount: 0,
-                status: "FAILED",
-                files: [],
-                media: [],
-                error: data.error ?? `Request failed (HTTP ${res.status})`,
-              },
+              failure(
+                target,
+                data.error ?? `Request failed (HTTP ${res.status})`,
+              ),
           },
         }));
       } catch (err) {
@@ -589,17 +598,7 @@ export default function TemplateCopierPage() {
           ...prev,
           [target.shop]: {
             state: "FAILED",
-            result: {
-              targetShop: target.shop,
-              targetThemeId: target.themeId,
-              targetThemeName: target.themeName,
-              fileCount: selected.length,
-              successCount: 0,
-              status: "FAILED",
-              files: [],
-              media: [],
-              error: err?.message ?? String(err),
-            },
+            result: failure(target, err?.message ?? String(err)),
           },
         }));
       }
@@ -608,7 +607,10 @@ export default function TemplateCopierPage() {
     await Promise.all(targets.map(post));
 
     // Every region has reported; pull the history back in one go.
-    historyFetcher.submit({ intent: "history" }, { method: "post" });
+    historyFetcher.submit(
+      { intent: "history" },
+      { method: "post", action: COPY_ENDPOINT },
+    );
   };
 
   const runRevert = (logIds) => {
@@ -1674,7 +1676,7 @@ function HistoryCard({ history, onRevert, reverting, reverts }) {
                         {batch.status}
                       </Badge>
                       <Text as="span" variant="bodySm" fontWeight="semibold">
-                        {new Date(batch.createdAt).toLocaleString()}
+                        {copiedAt(batch.createdAt)}
                       </Text>
                       <Text as="span" variant="bodySm" tone="subdued">
                         {`${batch.targets.length} store${batch.targets.length === 1 ? "" : "s"}`}
