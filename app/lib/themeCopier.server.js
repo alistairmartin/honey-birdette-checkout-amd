@@ -165,6 +165,45 @@ export async function getShopInfo(admin, shop) {
   };
 }
 
+// Who ran this copy. The acting staff member's user ID comes from the session
+// token's `sub` claim (see the api.template-copy route) - that's the one piece
+// of "who" Shopify always gives an embedded app, even on an offline session.
+// The ID alone isn't much use for "go ask them", so we turn it into a name and
+// email via the staffMember query. That query needs no extra scope for most
+// stores, but if it's ever refused we fall back to a labelled ID rather than
+// losing the attribution - the whole point is to know who to ask after a bad
+// copy, and an ID still identifies them in the admin.
+export async function resolveActor(admin, userId) {
+  if (!userId) return null;
+
+  try {
+    const body = await adminGraphql(
+      admin,
+      `#graphql
+        query CopierActor($id: ID!) {
+          staffMember(id: $id) {
+            name
+            email
+            isShopOwner
+          }
+        }
+      `,
+      { id: `gid://shopify/StaffMember/${userId}` },
+    );
+
+    const staff = body.data?.staffMember;
+    if (staff?.name || staff?.email) {
+      const owner = staff.isShopOwner ? " (store owner)" : "";
+      if (staff.name && staff.email) return `${staff.name} <${staff.email}>${owner}`;
+      return `${staff.name || staff.email}${owner}`;
+    }
+  } catch {
+    // Fall through to the ID.
+  }
+
+  return `Staff user ${userId}`;
+}
+
 // Every shop with an offline session - i.e. every store the app is installed on.
 // Excludes `currentShop` (that's the source, it's never a destination).
 export async function listDestinationShops(currentShop) {

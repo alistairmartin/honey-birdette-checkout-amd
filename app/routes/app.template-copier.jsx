@@ -23,7 +23,9 @@ import {
   Card,
   Checkbox,
   ChoiceList,
+  Collapsible,
   Divider,
+  Icon,
   InlineGrid,
   InlineStack,
   Layout,
@@ -34,9 +36,11 @@ import {
   ProgressBar,
   Scrollable,
   Spinner,
+  Tag,
   Text,
   TextField,
 } from "@shopify/polaris";
+import { ChevronDownIcon, ChevronRightIcon } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
@@ -77,8 +81,12 @@ export const loader = async ({ request }) => {
   ]);
 
   // Destination themes are loaded up front (one call per store) so switching
-  // between stores in the picker is instant.
-  const destinations = await Promise.all(
+  // between stores in the picker is instant. The source store is a destination
+  // too - copying into another theme on the same store is a real case (stage a
+  // template on a draft theme before going live) - so it leads the list, reusing
+  // the themes we already fetched, and is flagged `isSource` so the UI can stop
+  // you copying a theme onto itself.
+  const otherDestinations = await Promise.all(
     shops.map(async (shop) => {
       if (!shop.reachable) return { ...shop, themes: [] };
       try {
@@ -93,6 +101,11 @@ export const loader = async ({ request }) => {
       }
     }),
   );
+
+  const destinations = [
+    { ...source, reachable: true, isSource: true, themes },
+    ...otherDestinations,
+  ];
 
   return json({
     source,
@@ -381,6 +394,105 @@ function ThemePicker({ label, labelHidden, themes, value, onChange, disabled }) 
   );
 }
 
+// Choose several themes within one store. The autocomplete adds a theme and
+// clears itself so you can add another; chosen themes show below as removable
+// tags. A checkbox list would be unusable against 100+ near-identical campaign
+// names, which is the whole reason the source picker is a search too.
+function MultiThemePicker({ label, themes, selectedIds, onToggle, disabled, hint }) {
+  const options = useMemo(
+    () =>
+      themes.map((t) => {
+        const text = themeLabel(t);
+        return {
+          value: t.id,
+          text,
+          label:
+            t.role === "MAIN" ? <span className="tc-live-theme">{text}</span> : text,
+        };
+      }),
+    [themes],
+  );
+
+  const [input, setInput] = useState("");
+  const [filtered, setFiltered] = useState(options);
+
+  useEffect(() => setFiltered(options), [options]);
+
+  const updateInput = (next) => {
+    setInput(next);
+    const q = next.trim().toLowerCase();
+    setFiltered(
+      q ? options.filter((o) => o.text.toLowerCase().includes(q)) : options,
+    );
+  };
+
+  const select = (chosen) => {
+    // Autocomplete hands back the full selection; the newly-clicked id is the
+    // one not already in our set. Toggle it, then reset the field.
+    const added = chosen.find((id) => !selectedIds.includes(id)) ?? chosen[0];
+    if (added) onToggle(added);
+    setInput("");
+    setFiltered(options);
+  };
+
+  const chosenThemes = selectedIds
+    .map((id) => themes.find((t) => t.id === id))
+    .filter(Boolean);
+
+  return (
+    <BlockStack gap="200">
+      <div className="tc-theme-picker">
+        <Autocomplete
+          allowMultiple
+          options={filtered}
+          selected={selectedIds}
+          onSelect={select}
+          textField={
+            <Autocomplete.TextField
+              label={label}
+              labelHidden
+              value={input}
+              onChange={updateInput}
+              placeholder={
+                selectedIds.length ? "Add another theme" : "Search themes to add"
+              }
+              autoComplete="off"
+              disabled={disabled}
+              clearButton
+              onClearButtonClick={() => updateInput("")}
+            />
+          }
+        />
+      </div>
+
+      {chosenThemes.length > 0 ? (
+        <InlineStack gap="200" wrap>
+          {chosenThemes.map((theme) => (
+            <Tag key={theme.id} onRemove={disabled ? undefined : () => onToggle(theme.id)}>
+              <InlineStack gap="100" blockAlign="center">
+                {theme.role === "MAIN" && <Badge tone="critical">Live</Badge>}
+                <Text as="span" variant="bodySm">
+                  {theme.name}
+                </Text>
+              </InlineStack>
+            </Tag>
+          ))}
+        </InlineStack>
+      ) : (
+        <Text as="span" variant="bodySm" tone="subdued">
+          No themes chosen yet.
+        </Text>
+      )}
+
+      {hint && (
+        <Text as="span" variant="bodySm" tone="subdued">
+          {hint}
+        </Text>
+      )}
+    </BlockStack>
+  );
+}
+
 export default function TemplateCopierPage() {
   const { source, themes, initialThemeId, templates, destinations, history } =
     useLoaderData();
@@ -393,7 +505,8 @@ export default function TemplateCopierPage() {
   const [sourceThemeId, setSourceThemeId] = useState(initialThemeId ?? "");
   const [selected, setSelected] = useState([]);
   const [search, setSearch] = useState("");
-  // { [shop]: themeId } - a shop is a destination once it has a theme chosen.
+  // { [shop]: themeId[] } - a shop can copy into several of its own themes at
+  // once. A shop is a destination once it has at least one theme chosen.
   const [targetThemes, setTargetThemes] = useState({});
   const [enabledShops, setEnabledShops] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -441,11 +554,20 @@ export default function TemplateCopierPage() {
     return sourceTemplates.filter((f) => f.filename.toLowerCase().includes(q));
   }, [sourceTemplates, search]);
 
-  // Selecting a different source theme invalidates the current selection -
-  // the same filename in another theme is a different file.
+  // Selecting a different source theme invalidates the current selection - the
+  // same filename in another theme is a different file. It can also make a
+  // same-store destination point at the source theme (copying onto itself), so
+  // that theme is dropped from the source store's destination set.
   const changeSourceTheme = (id) => {
     setSourceThemeId(id);
     setSelected([]);
+    setTargetThemes((prev) => {
+      if (!prev[source.shop]?.includes(id)) return prev;
+      return {
+        ...prev,
+        [source.shop]: prev[source.shop].filter((t) => t !== id),
+      };
+    });
     templatesFetcher.submit(
       { intent: "templates", themeId: id },
       { method: "post" },
@@ -460,43 +582,67 @@ export default function TemplateCopierPage() {
     );
 
   const toggleShop = (shop) => {
+    const enabling = !enabledShops.includes(shop);
     setEnabledShops((prev) =>
-      prev.includes(shop) ? prev.filter((s) => s !== shop) : [...prev, shop],
+      enabling ? [...prev, shop] : prev.filter((s) => s !== shop),
     );
-    // Default a newly-enabled store to its live theme - the common case - but the
-    // copy still can't run until you've been through the confirm modal.
+    // Default a newly-enabled OTHER store to its live theme - the common case.
+    // The source store gets no default: copying onto the very theme you're
+    // copying from is never what's meant, so you pick the target theme yourself.
+    if (!enabling) return;
     setTargetThemes((prev) => {
-      if (prev[shop]) return prev;
+      if (prev[shop]?.length) return prev;
       const dest = destinations.find((d) => d.shop === shop);
+      if (dest?.isSource) return prev;
       const main = dest?.themes.find((t) => t.role === "MAIN") ?? dest?.themes[0];
-      return main ? { ...prev, [shop]: main.id } : prev;
+      return main ? { ...prev, [shop]: [main.id] } : prev;
     });
   };
 
+  // Add or remove one theme within a store's destination set.
+  const toggleTargetTheme = (shop, themeId) => {
+    setTargetThemes((prev) => {
+      const current = prev[shop] ?? [];
+      return {
+        ...prev,
+        [shop]: current.includes(themeId)
+          ? current.filter((t) => t !== themeId)
+          : [...current, themeId],
+      };
+    });
+  };
+
+  // One entry per (store, theme) the copy will write to. A same-store copy into
+  // the source theme is filtered out defensively - the UI already prevents it.
   const targets = useMemo(
     () =>
-      enabledShops
-        .filter((shop) => targetThemes[shop])
-        .map((shop) => {
-          const dest = destinations.find((d) => d.shop === shop);
-          const theme = dest?.themes.find((t) => t.id === targetThemes[shop]);
-          return {
-            shop,
-            name: dest ? shopLabel(dest) : shop,
-            themeId: targetThemes[shop],
-            themeName: theme?.name ?? "",
-            role: theme?.role ?? "",
-          };
-        }),
-    [enabledShops, targetThemes, destinations],
+      enabledShops.flatMap((shop) => {
+        const dest = destinations.find((d) => d.shop === shop);
+        const themeIds = targetThemes[shop] ?? [];
+        return themeIds
+          .filter((themeId) => !(dest?.isSource && themeId === sourceThemeId))
+          .map((themeId) => {
+            const theme = dest?.themes.find((t) => t.id === themeId);
+            return {
+              key: `${shop}::${themeId}`,
+              shop,
+              name: dest ? shopLabel(dest) : shop,
+              isSource: Boolean(dest?.isSource),
+              themeId,
+              themeName: theme?.name ?? "",
+              role: theme?.role ?? "",
+            };
+          });
+      }),
+    [enabledShops, targetThemes, destinations, sourceThemeId],
   );
 
-  // "🇦🇺 or 🇺🇸 or 🇪🇺" - the flags of the stores you can actually copy into,
-  // so the heading names the choice rather than describing it.
-  const destinationFlags = destinations
-    .map((d) => d.flag)
-    .filter(Boolean)
-    .join(" or ");
+  // "🇦🇺 or 🇺🇸 or 🇪🇺" - the flags of the stores you can copy into, so the
+  // heading names the choice rather than describing it. Deduped, since the source
+  // store now appears in the list too.
+  const destinationFlags = [
+    ...new Set(destinations.map((d) => d.flag).filter(Boolean)),
+  ].join(" or ");
 
   const liveTargets = targets.filter((t) => t.role === "MAIN");
   const canCopy = selected.length > 0 && targets.length > 0 && sourceThemeId;
@@ -511,7 +657,17 @@ export default function TemplateCopierPage() {
         intent: "review",
         sourceThemeId,
         filenames: JSON.stringify(selected),
-        targets: JSON.stringify(targets.map(({ shop, themeId }) => ({ shop, themeId }))),
+        targets: JSON.stringify(
+          targets.map(({ key, shop, themeId, name, themeName, role, isSource }) => ({
+            key,
+            shop,
+            themeId,
+            name,
+            themeName,
+            role,
+            isSource,
+          })),
+        ),
       },
       { method: "post" },
     );
@@ -529,12 +685,13 @@ export default function TemplateCopierPage() {
 
     setCopyProgress(
       Object.fromEntries(
-        targets.map((t) => [t.shop, { state: "COPYING", result: null }]),
+        targets.map((t) => [t.key, { state: "COPYING", result: null }]),
       ),
     );
 
-    // A failed region still has to render as a region, not vanish.
+    // A failed target still has to render as one, not vanish.
     const failure = (target, message) => ({
+      key: target.key,
       targetShop: target.shop,
       targetThemeId: target.themeId,
       targetThemeName: target.themeName,
@@ -579,11 +736,11 @@ export default function TemplateCopierPage() {
           );
         }
 
-        const result = data.result ?? null;
+        const result = data.result ? { ...data.result, key: target.key } : null;
 
         setCopyProgress((prev) => ({
           ...prev,
-          [target.shop]: {
+          [target.key]: {
             state: result?.status === "SUCCESS" ? "DONE" : "FAILED",
             result:
               result ??
@@ -596,7 +753,7 @@ export default function TemplateCopierPage() {
       } catch (err) {
         setCopyProgress((prev) => ({
           ...prev,
-          [target.shop]: {
+          [target.key]: {
             state: "FAILED",
             result: failure(target, err?.message ?? String(err)),
           },
@@ -773,8 +930,9 @@ export default function TemplateCopierPage() {
                   {`Step 2: Choose the destination${destinationFlags ? ` (${destinationFlags})` : ""}`}
                 </Text>
                 <Text as="span" variant="bodySm" tone="subdued">
-                  Pick the stores to copy into, and the theme on each. Themes are
-                  listed most recently edited first.
+                  Pick the stores to copy into, and one or more themes on each. You
+                  can copy back into this same store on a different theme. Themes
+                  are listed most recently edited first.
                 </Text>
               </BlockStack>
 
@@ -787,9 +945,11 @@ export default function TemplateCopierPage() {
 
               {destinations.map((dest) => {
                 const enabled = enabledShops.includes(dest.shop);
-                const chosen = dest.themes.find(
-                  (t) => t.id === targetThemes[dest.shop],
-                );
+                const chosenIds = targetThemes[dest.shop] ?? [];
+                // Same store: the theme you're copying FROM can't be a target.
+                const availableThemes = dest.isSource
+                  ? dest.themes.filter((t) => t.id !== sourceThemeId)
+                  : dest.themes;
 
                 return (
                   <Box
@@ -802,7 +962,12 @@ export default function TemplateCopierPage() {
                     <InlineGrid columns={{ xs: 1, md: ["oneThird", "twoThirds"] }} gap="300">
                       <BlockStack gap="100">
                         <Checkbox
-                          label={shopLabel(dest)}
+                          label={
+                            <InlineStack gap="150" blockAlign="center">
+                              <Text as="span">{shopLabel(dest)}</Text>
+                              {dest.isSource && <Badge>This store</Badge>}
+                            </InlineStack>
+                          }
                           helpText={dest.shop}
                           checked={enabled}
                           disabled={!dest.reachable || busy}
@@ -811,29 +976,20 @@ export default function TemplateCopierPage() {
                       </BlockStack>
 
                       {enabled && dest.reachable ? (
-                        <BlockStack gap="100">
-                          <ThemePicker
-                            label={`Destination theme on ${dest.name}`}
-                            labelHidden
-                            themes={dest.themes}
-                            value={targetThemes[dest.shop] ?? ""}
-                            onChange={(value) =>
-                              setTargetThemes((prev) => ({
-                                ...prev,
-                                [dest.shop]: value,
-                              }))
-                            }
-                            disabled={busy}
-                          />
-                          {chosen?.role === "MAIN" && (
-                            <InlineStack gap="150" blockAlign="center">
-                              <Badge tone="critical">Live theme</Badge>
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                Changes go straight to customers.
-                              </Text>
-                            </InlineStack>
-                          )}
-                        </BlockStack>
+                        <MultiThemePicker
+                          label={`Destination themes on ${dest.name}`}
+                          themes={availableThemes}
+                          selectedIds={chosenIds}
+                          onToggle={(themeId) =>
+                            toggleTargetTheme(dest.shop, themeId)
+                          }
+                          disabled={busy}
+                          hint={
+                            dest.isSource
+                              ? "The source theme is hidden - you can't copy a theme onto itself."
+                              : undefined
+                          }
+                        />
                       ) : (
                         <Box />
                       )}
@@ -862,7 +1018,7 @@ export default function TemplateCopierPage() {
                   disabled={!canCopy || busy}
                   onClick={openConfirm}
                 >
-                  {`Copy ${selected.length} template${selected.length === 1 ? "" : "s"} to ${targets.length} store${targets.length === 1 ? "" : "s"}`}
+                  {`Copy ${selected.length} template${selected.length === 1 ? "" : "s"} to ${targets.length} theme${targets.length === 1 ? "" : "s"}`}
                 </Button>
               </InlineStack>
             </BlockStack>
@@ -968,7 +1124,7 @@ export default function TemplateCopierPage() {
         size="large"
         title={
           copying
-            ? `Copying to ${targets.length} store${targets.length === 1 ? "" : "s"}...`
+            ? `Copying to ${targets.length} theme${targets.length === 1 ? "" : "s"}...`
             : `${currentStep.title} (step ${step + 1} of ${steps.length})`
         }
         primaryAction={
@@ -981,7 +1137,7 @@ export default function TemplateCopierPage() {
               }
             : isLastStep
               ? {
-                  content: `Yes, copy to ${targets.length} store${targets.length === 1 ? "" : "s"}`,
+                  content: `Yes, copy to ${targets.length} theme${targets.length === 1 ? "" : "s"}`,
                   destructive: true,
                   disabled: !acceptedEverything || busy,
                   onAction: runCopy,
@@ -1051,7 +1207,7 @@ export default function TemplateCopierPage() {
                 <Banner tone="critical" title="Couldn't check a destination store">
                   <BlockStack gap="200">
                     {reviewErrors.map((c) => (
-                      <Text as="p" variant="bodySm" key={c.shop}>
+                      <Text as="p" variant="bodySm" key={c.key ?? c.shop}>
                         <Text as="span" fontWeight="semibold">
                           {c.shop}
                         </Text>
@@ -1069,7 +1225,7 @@ export default function TemplateCopierPage() {
               {(review ?? [])
                 .filter((c) => !c.error)
                 .map((c) => (
-                  <TargetDiff key={c.shop} check={c} targets={targets} />
+                  <TargetDiff key={c.key ?? c.shop} check={c} targets={targets} />
                 ))}
 
               {missingSectionsFound && (
@@ -1084,9 +1240,9 @@ export default function TemplateCopierPage() {
                     {(review ?? [])
                       .filter((c) => c.missingSections?.length > 0)
                       .map((c) => (
-                        <Text as="p" variant="bodySm" key={c.shop}>
+                        <Text as="p" variant="bodySm" key={c.key ?? c.shop}>
                           <Text as="span" fontWeight="semibold">
-                            {c.shop}
+                            {`${c.shop}${c.themeName ? ` (${c.themeName})` : ""}`}
                           </Text>
                           {`: ${c.missingSections.join(", ")}`}
                         </Text>
@@ -1189,9 +1345,9 @@ export default function TemplateCopierPage() {
 
               <List>
                 {targets.map((t) => {
-                  const check = (review ?? []).find((c) => c.shop === t.shop);
+                  const check = (review ?? []).find((c) => c.key === t.key);
                   return (
-                    <List.Item key={t.shop}>
+                    <List.Item key={t.key}>
                       <InlineStack gap="200" blockAlign="center" wrap={false}>
                         <Text as="span">
                           {`${t.name} - ${t.themeName}: `}
@@ -1268,7 +1424,7 @@ function plainSummary({
   mediaToCreate,
 }) {
   const parts = [];
-  const store = `${targets} store${targets === 1 ? "" : "s"}`;
+  const store = `${targets} destination theme${targets === 1 ? "" : "s"}`;
 
   if (totalChanged) {
     parts.push(
@@ -1301,7 +1457,7 @@ function CopyProgress({ targets, progress, percentComplete, doneCount }) {
       <BlockStack gap="200">
         <InlineStack align="space-between" blockAlign="center">
           <Text as="p" variant="bodySm" fontWeight="semibold">
-            {`${doneCount} of ${targets.length} store${targets.length === 1 ? "" : "s"} done`}
+            {`${doneCount} of ${targets.length} theme${targets.length === 1 ? "" : "s"} done`}
           </Text>
           <Text as="span" variant="bodySm" tone="subdued">
             {`${percentComplete}%`}
@@ -1311,12 +1467,12 @@ function CopyProgress({ targets, progress, percentComplete, doneCount }) {
       </BlockStack>
 
       {targets.map((target) => {
-        const entry = progress?.[target.shop];
+        const entry = progress?.[target.key];
         const result = entry?.result;
 
         return (
           <InlineStack
-            key={target.shop}
+            key={target.key}
             align="space-between"
             blockAlign="center"
             gap="300"
@@ -1407,7 +1563,8 @@ function MediaList({ refs, maxHeight }) {
 // it. "4 sections edited, 12 setting values changed" is the answer to "what am I
 // actually about to do to the US store".
 function TargetDiff({ check, targets }) {
-  const target = targets.find((t) => t.shop === check.shop);
+  const target = targets.find((t) => t.key === check.key) ??
+    targets.find((t) => t.shop === check.shop);
 
   return (
     <Box padding="300" borderRadius="200" borderWidth="025" borderColor="border">
@@ -1619,6 +1776,13 @@ function ResultsBanner({ results }) {
 // once: the pre-copy contents of every template were snapshotted, so putting them
 // back is exact rather than a trip through the theme editor's timeline.
 function HistoryCard({ history, onRevert, reverting, reverts }) {
+  // Batches are collapsed by default - the history is a scannable timeline, and
+  // the per-theme detail is there when you want it, not in your way when you
+  // don't. Keyed by batchId so expanding one leaves the rest alone.
+  const [openBatches, setOpenBatches] = useState({});
+  const toggleBatch = (batchId) =>
+    setOpenBatches((prev) => ({ ...prev, [batchId]: !prev[batchId] }));
+
   return (
     <Card>
       <BlockStack gap="400">
@@ -1651,6 +1815,7 @@ function HistoryCard({ history, onRevert, reverting, reverts }) {
           const revertableIds = batch.targets
             .filter((t) => t.revertable)
             .map((t) => t.id);
+          const open = Boolean(openBatches[batch.batchId]);
 
           return (
             <Box
@@ -1662,38 +1827,62 @@ function HistoryCard({ history, onRevert, reverting, reverts }) {
             >
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="start" gap="300">
-                  <BlockStack gap="100">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Badge
-                        tone={
-                          batch.status === "SUCCESS"
-                            ? "success"
-                            : batch.status === "PARTIAL"
-                              ? "warning"
-                              : "critical"
-                        }
-                      >
-                        {batch.status}
-                      </Badge>
-                      <Text as="span" variant="bodySm" fontWeight="semibold">
-                        {copiedAt(batch.createdAt)}
-                      </Text>
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        {`${batch.targets.length} store${batch.targets.length === 1 ? "" : "s"}`}
-                        {batch.copiedBy ? ` - ${batch.copiedBy}` : ""}
-                      </Text>
-                    </InlineStack>
+                  {/* The whole summary is the disclosure toggle. */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleBatch(batch.batchId)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleBatch(batch.batchId);
+                      }
+                    }}
+                    style={{ cursor: "pointer", flex: 1 }}
+                  >
+                    <BlockStack gap="100">
+                      <InlineStack gap="200" blockAlign="center">
+                        <Icon
+                          source={open ? ChevronDownIcon : ChevronRightIcon}
+                          tone="subdued"
+                        />
+                        <Badge
+                          tone={
+                            batch.status === "SUCCESS"
+                              ? "success"
+                              : batch.status === "PARTIAL"
+                                ? "warning"
+                                : "critical"
+                          }
+                        >
+                          {batch.status}
+                        </Badge>
+                        <Text as="span" variant="bodySm" fontWeight="semibold">
+                          {copiedAt(batch.createdAt)}
+                        </Text>
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          {`${batch.targets.length} theme${batch.targets.length === 1 ? "" : "s"}`}
+                        </Text>
+                        {batch.copiedBy && (
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {`by ${batch.copiedBy}`}
+                          </Text>
+                        )}
+                      </InlineStack>
 
-                    {/* Which templates this batch actually copied. */}
-                    <Text as="p" variant="bodySm">
-                      <Text as="span" tone="subdued">
-                        {`From ${batch.sourceThemeName}: `}
-                      </Text>
-                      {batch.templates
-                        .map((f) => f.replace(/^templates\//, ""))
-                        .join(", ")}
-                    </Text>
-                  </BlockStack>
+                      {/* Which templates this batch actually copied. */}
+                      <Box paddingInlineStart="600">
+                        <Text as="p" variant="bodySm">
+                          <Text as="span" tone="subdued">
+                            {`From ${batch.sourceThemeName}: `}
+                          </Text>
+                          {batch.templates
+                            .map((f) => f.replace(/^templates\//, ""))
+                            .join(", ")}
+                        </Text>
+                      </Box>
+                    </BlockStack>
+                  </div>
 
                   {revertableIds.length > 0 && (
                     <Button
@@ -1709,9 +1898,14 @@ function HistoryCard({ history, onRevert, reverting, reverts }) {
                   )}
                 </InlineStack>
 
-                <Divider />
-
-                {batch.targets.map((t) => (
+                <Collapsible
+                  id={`batch-${batch.batchId}`}
+                  open={open}
+                  transition={{ duration: "150ms", timingFunction: "ease-in-out" }}
+                >
+                  <BlockStack gap="300">
+                    <Divider />
+                    {batch.targets.map((t) => (
                   <InlineStack
                     key={t.id}
                     align="space-between"
@@ -1781,7 +1975,9 @@ function HistoryCard({ history, onRevert, reverting, reverts }) {
                       </Button>
                     )}
                   </InlineStack>
-                ))}
+                    ))}
+                  </BlockStack>
+                </Collapsible>
               </BlockStack>
             </Box>
           );

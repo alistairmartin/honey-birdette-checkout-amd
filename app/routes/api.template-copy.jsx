@@ -17,10 +17,11 @@ import {
   listThemes,
   readFiles,
   recentCopies,
+  resolveActor,
 } from "../lib/themeCopier.server";
 
 export const action = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, sessionToken } = await authenticate.admin(request);
   const sourceShop = session.shop;
 
   const formData = await request.formData();
@@ -52,6 +53,14 @@ export const action = async ({ request }) => {
     if (!target?.shop || !target?.themeId) {
       return json({ intent, error: "No destination store or theme." }, { status: 400 });
     }
+    // Copying a theme onto itself is a no-op that would still snapshot and
+    // "overwrite" its own files. The UI hides this option; guard it anyway.
+    if (target.shop === sourceShop && target.themeId === sourceThemeId) {
+      return json(
+        { intent, error: "Source and destination theme are the same." },
+        { status: 400 },
+      );
+    }
 
     const themes = await listThemes(admin);
     const sourceTheme = themes.find((t) => t.id === sourceThemeId);
@@ -60,6 +69,10 @@ export const action = async ({ request }) => {
     }
 
     const sourceFiles = await readFiles(admin, sourceThemeId, filenames);
+
+    // The acting staff member, resolved from the session token's `sub`. Recorded
+    // on the copy so the history says who to ask if a template ends up wrong.
+    const copiedBy = await resolveActor(admin, sessionToken?.sub);
 
     // copyToTarget resolves rather than throws, so a dead store reports its own
     // failure in the result instead of 500ing this request.
@@ -73,7 +86,7 @@ export const action = async ({ request }) => {
       targetThemeId: target.themeId,
       copyMediaEnabled,
       overwriteExistingMedia,
-      copiedBy: session.onlineAccessInfo?.associated_user?.email ?? null,
+      copiedBy,
     });
 
     return json({ intent, result });
