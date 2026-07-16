@@ -948,6 +948,7 @@ export async function reviewTarget({ targetShop, targetThemeId, sourceFiles }) {
 // so one dead store can't abort a copy to the other three.
 export async function copyToTarget({
   batchId,
+  embeddedShop,
   sourceShop,
   sourceAdmin,
   sourceTheme,
@@ -960,6 +961,9 @@ export async function copyToTarget({
 }) {
   const base = {
     batchId,
+    // Who owns this copy for history/revert - the store driving the app. Falls
+    // back to sourceShop when not supplied (keeps older callers working).
+    embeddedShop: embeddedShop ?? sourceShop,
     sourceShop,
     sourceThemeId: sourceTheme.id,
     sourceThemeName: sourceTheme.name,
@@ -1107,6 +1111,7 @@ async function logCopy(record, copiedBy) {
     await prisma.themeCopyLog.create({
       data: {
         batchId: record.batchId ?? "",
+        embeddedShop: record.embeddedShop ?? record.sourceShop,
         sourceShop: record.sourceShop,
         sourceThemeId: record.sourceThemeId,
         sourceThemeName: record.sourceThemeName,
@@ -1158,10 +1163,17 @@ const hydrate = (row) => ({
 
 // History, grouped into batches - one batch per press of the Copy button, so
 // "copied page.bridal to US, UK and EU at 15:29" reads as one event rather than
-// three unrelated lines.
-export async function recentCopies(sourceShop, limit = 60) {
+// three unrelated lines. Scoped to the store viewing the app (embeddedShop),
+// whatever the copy's source was. Old rows predate embeddedShop and stored the
+// viewing store in sourceShop, so match either.
+export async function recentCopies(embeddedShop, limit = 60) {
   const rows = await prisma.themeCopyLog.findMany({
-    where: { sourceShop },
+    where: {
+      OR: [
+        { embeddedShop },
+        { embeddedShop: "", sourceShop: embeddedShop },
+      ],
+    },
     orderBy: { createdAt: "desc" },
     take: limit,
   });
@@ -1217,12 +1229,14 @@ const FILES_DELETE_MUTATION = `#graphql
 // Undo one copy: put back exactly what the destination theme held before it, and
 // delete the templates the copy created. Media is NOT reverted - an overwritten
 // image can't be un-overwritten, and a newly uploaded one is harmless to leave.
-export async function revertCopy(logId, sourceShop) {
+export async function revertCopy(logId, embeddedShop) {
   const row = await prisma.themeCopyLog.findUnique({ where: { id: logId } });
 
   if (!row) throw new Error("That copy isn't in the history any more");
-  // Scoped to the store that made the copy, so one store can't revert another's.
-  if (row.sourceShop !== sourceShop) {
+  // Scoped to the store viewing the app, so one store can't revert another's.
+  // Old rows carried the viewing store in sourceShop, so accept that too.
+  const owner = row.embeddedShop || row.sourceShop;
+  if (owner !== embeddedShop) {
     throw new Error("That copy was made from a different store");
   }
   if (row.revertedAt) throw new Error("That copy has already been reverted");

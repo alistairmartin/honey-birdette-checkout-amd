@@ -42,11 +42,12 @@ import {
 } from "@shopify/polaris";
 import { ChevronDownIcon, ChevronRightIcon } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
-import { authenticate } from "../shopify.server";
+import { authenticate, unauthenticated } from "../shopify.server";
 import {
   getShopInfo,
   listDestinationShops,
   listTemplateFiles,
+  listTemplateFilesForShop,
   listThemes,
   listThemesForShop,
   readFiles,
@@ -61,33 +62,27 @@ const COPY_ENDPOINT = "/api/template-copy";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
-  const sourceShop = session.shop;
+  const embeddedShop = session.shop;
 
-  const themes = await listThemes(admin);
-  // Themes come back most-recently-edited first, so the default source theme is
-  // the one that was touched last - nearly always the one you just finished
-  // editing and now want to push to the other regions.
-  const initialTheme = themes[0] ?? null;
-
-  const [source, templates, shops, history] = await Promise.all([
-    getShopInfo(admin, sourceShop).catch(() => ({
-      shop: sourceShop,
-      name: sourceShop,
+  // Every store the app is installed on, embedded one first, each with its
+  // themes loaded up front so switching source or destination in the pickers is
+  // instant. Any of these can be the source you copy FROM or a destination you
+  // copy INTO - the UI just stops you copying a theme onto itself.
+  const [embeddedInfo, otherShops, history] = await Promise.all([
+    getShopInfo(admin, embeddedShop).catch(() => ({
+      shop: embeddedShop,
+      name: embeddedShop,
       flag: "",
+      reachable: true,
     })),
-    initialTheme ? listTemplateFiles(admin, initialTheme.id) : [],
-    listDestinationShops(sourceShop),
-    recentCopies(sourceShop),
+    listDestinationShops(embeddedShop),
+    recentCopies(embeddedShop),
   ]);
 
-  // Destination themes are loaded up front (one call per store) so switching
-  // between stores in the picker is instant. The source store is a destination
-  // too - copying into another theme on the same store is a real case (stage a
-  // template on a draft theme before going live) - so it leads the list, reusing
-  // the themes we already fetched, and is flagged `isSource` so the UI can stop
-  // you copying a theme onto itself.
-  const otherDestinations = await Promise.all(
-    shops.map(async (shop) => {
+  const embeddedThemes = await listThemes(admin);
+
+  const otherStores = await Promise.all(
+    otherShops.map(async (shop) => {
       if (!shop.reachable) return { ...shop, themes: [] };
       try {
         return { ...shop, themes: await listThemesForShop(shop.shop) };
@@ -102,36 +97,53 @@ export const loader = async ({ request }) => {
     }),
   );
 
-  const destinations = [
-    { ...source, reachable: true, isSource: true, themes },
-    ...otherDestinations,
+  const stores = [
+    { ...embeddedInfo, isEmbedded: true, reachable: true, themes: embeddedThemes },
+    ...otherStores,
   ];
 
+  // Default source: the store you're in, on its most-recently-edited theme -
+  // nearly always the one you just finished and now want to push out.
+  const initialTheme = embeddedThemes[0] ?? null;
+  const templates = initialTheme
+    ? await listTemplateFiles(admin, initialTheme.id)
+    : [];
+
   return json({
-    source,
-    themes,
+    embeddedShop,
+    stores,
+    initialSourceShop: embeddedShop,
     initialThemeId: initialTheme?.id ?? null,
     templates,
-    destinations,
     history,
   });
 };
 
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
-  const sourceShop = session.shop;
+  const embeddedShop = session.shop;
 
   const formData = await request.formData();
   const intent = formData.get("intent");
 
+  // The source can be any installed store, not just the one we're embedded in.
+  // Reuse the embedded admin when they're the same, otherwise load the chosen
+  // store's offline session.
+  const adminForSource = async (shop) =>
+    shop && shop !== embeddedShop
+      ? (await unauthenticated.admin(shop)).admin
+      : admin;
+
   try {
-    // Source theme changed - re-list its templates.
+    // Source store or theme changed - re-list the chosen theme's templates.
     if (intent === "templates") {
       const themeId = String(formData.get("themeId"));
-      return json({
-        intent,
-        templates: await listTemplateFiles(admin, themeId),
-      });
+      const sourceShop = String(formData.get("sourceShop") || embeddedShop);
+      const templates =
+        sourceShop === embeddedShop
+          ? await listTemplateFiles(admin, themeId)
+          : await listTemplateFilesForShop(sourceShop, themeId);
+      return json({ intent, templates });
     }
 
     // Review: diff each destination against the source and report what the copy
@@ -143,6 +155,7 @@ export const action = async ({ request }) => {
     // region can report its own progress, and a plain fetch() POST to a page
     // route is a document request that comes back as HTML, not JSON.
     if (intent === "review") {
+      const sourceShop = String(formData.get("sourceShop") || embeddedShop);
       const sourceThemeId = String(formData.get("sourceThemeId"));
       const filenames = JSON.parse(String(formData.get("filenames") || "[]"));
       const targets = JSON.parse(String(formData.get("targets") || "[]"));
@@ -154,13 +167,14 @@ export const action = async ({ request }) => {
         return json({ intent, error: "Select at least one destination store and theme." }, { status: 400 });
       }
 
-      const themes = await listThemes(admin);
+      const sourceAdmin = await adminForSource(sourceShop);
+      const themes = await listThemes(sourceAdmin);
       const sourceTheme = themes.find((t) => t.id === sourceThemeId);
       if (!sourceTheme) {
         return json({ intent, error: "That source theme no longer exists." }, { status: 400 });
       }
 
-      const sourceFiles = await readFiles(admin, sourceThemeId, filenames);
+      const sourceFiles = await readFiles(sourceAdmin, sourceThemeId, filenames);
 
       const checks = await Promise.all(
         targets.map(async (target) => {
@@ -193,7 +207,7 @@ export const action = async ({ request }) => {
       const reverts = [];
       for (const logId of logIds) {
         try {
-          reverts.push(await revertCopy(logId, sourceShop));
+          reverts.push(await revertCopy(logId, embeddedShop));
         } catch (err) {
           reverts.push({
             logId,
@@ -206,7 +220,7 @@ export const action = async ({ request }) => {
       return json({
         intent,
         reverts,
-        history: await recentCopies(sourceShop),
+        history: await recentCopies(embeddedShop),
       });
     }
 
@@ -320,6 +334,18 @@ const THEME_PICKER_STYLES = `
     background: var(--p-color-bg-surface-critical);
     color: var(--p-color-text-critical);
     font-weight: 600;
+  }
+  /* The history disclosure toggle is a bare, left-aligned button - no native
+     chrome, so it reads as the summary row it wraps. */
+  .tc-batch-toggle {
+    appearance: none;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
   }
 `;
 
@@ -494,13 +520,27 @@ function MultiThemePicker({ label, themes, selectedIds, onToggle, disabled, hint
 }
 
 export default function TemplateCopierPage() {
-  const { source, themes, initialThemeId, templates, destinations, history } =
+  const { stores, initialSourceShop, initialThemeId, templates, history } =
     useLoaderData();
 
   const templatesFetcher = useFetcher();
   const copyFetcher = useFetcher();
   const revertFetcher = useFetcher();
   const historyFetcher = useFetcher();
+
+  // The store you copy FROM - any installed store, defaulting to the one you're
+  // embedded in. `source` and `themes` derive from it.
+  const [sourceShop, setSourceShop] = useState(initialSourceShop);
+  const source = stores.find((s) => s.shop === sourceShop) ?? stores[0];
+  const themes = source?.themes ?? [];
+
+  // Every store is a possible destination, including the source itself (copy into
+  // another of its own themes). `isSource` is computed, not baked, because the
+  // source store changes.
+  const destinations = stores.map((s) => ({
+    ...s,
+    isSource: s.shop === sourceShop,
+  }));
 
   const [sourceThemeId, setSourceThemeId] = useState(initialThemeId ?? "");
   const [selected, setSelected] = useState([]);
@@ -558,20 +598,34 @@ export default function TemplateCopierPage() {
   // same filename in another theme is a different file. It can also make a
   // same-store destination point at the source theme (copying onto itself), so
   // that theme is dropped from the source store's destination set.
-  const changeSourceTheme = (id) => {
+  const changeSourceTheme = (id, shop = sourceShop) => {
     setSourceThemeId(id);
     setSelected([]);
     setTargetThemes((prev) => {
-      if (!prev[source.shop]?.includes(id)) return prev;
-      return {
-        ...prev,
-        [source.shop]: prev[source.shop].filter((t) => t !== id),
-      };
+      if (!prev[shop]?.includes(id)) return prev;
+      return { ...prev, [shop]: prev[shop].filter((t) => t !== id) };
     });
     templatesFetcher.submit(
-      { intent: "templates", themeId: id },
+      { intent: "templates", sourceShop: shop, themeId: id },
       { method: "post" },
     );
+  };
+
+  // Switch the store you copy FROM. Its most-recently-edited theme becomes the
+  // source theme (and its templates load), and anything already picked from the
+  // old source is cleared - templates and selections don't carry across stores.
+  const changeSourceStore = (shop) => {
+    if (shop === sourceShop) return;
+    setSourceShop(shop);
+    const store = stores.find((s) => s.shop === shop);
+    const firstTheme = store?.themes[0];
+    setSelected([]);
+    if (firstTheme) {
+      setSourceThemeId(firstTheme.id);
+      changeSourceTheme(firstTheme.id, shop);
+    } else {
+      setSourceThemeId("");
+    }
   };
 
   const toggleFile = (filename) =>
@@ -655,6 +709,7 @@ export default function TemplateCopierPage() {
     copyFetcher.submit(
       {
         intent: "review",
+        sourceShop,
         sourceThemeId,
         filenames: JSON.stringify(selected),
         targets: JSON.stringify(
@@ -707,6 +762,7 @@ export default function TemplateCopierPage() {
       const body = new FormData();
       body.set("intent", "copy");
       body.set("batchId", batchId);
+      body.set("sourceShop", sourceShop);
       body.set("sourceThemeId", sourceThemeId);
       body.set("filenames", JSON.stringify(selected));
       body.set(
@@ -876,6 +932,28 @@ export default function TemplateCopierPage() {
                 </BlockStack>
                 {sourceTheme && roleBadge(sourceTheme.role)}
               </InlineStack>
+
+              {/* Which store to copy FROM. Any installed store, not just the one
+                  the app is open in. */}
+              {stores.length > 1 && (
+                <BlockStack gap="150">
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    Source store
+                  </Text>
+                  <InlineStack gap="200" wrap>
+                    {stores.map((s) => (
+                      <Button
+                        key={s.shop}
+                        pressed={s.shop === sourceShop}
+                        disabled={busy || loadingTemplates || !s.reachable}
+                        onClick={() => changeSourceStore(s.shop)}
+                      >
+                        {shopLabel(s)}
+                      </Button>
+                    ))}
+                  </InlineStack>
+                </BlockStack>
+              )}
 
               <ThemePicker
                 label="Theme (most recently edited first)"
@@ -1825,64 +1903,44 @@ function HistoryCard({ history, onRevert, reverting, reverts }) {
               borderWidth="025"
               borderColor="border"
             >
-              <BlockStack gap="300">
-                <InlineStack align="space-between" blockAlign="start" gap="300">
-                  {/* The whole summary is the disclosure toggle. */}
-                  <div
-                    role="button"
-                    tabIndex={0}
+              <BlockStack gap="200">
+                <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
+                  {/* The summary row is the disclosure toggle: chevron at the far
+                      left, meta to its right, revert pushed to the far end. */}
+                  <button
+                    type="button"
                     onClick={() => toggleBatch(batch.batchId)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        toggleBatch(batch.batchId);
-                      }
-                    }}
-                    style={{ cursor: "pointer", flex: 1 }}
+                    className="tc-batch-toggle"
                   >
-                    <BlockStack gap="100">
-                      <InlineStack gap="200" blockAlign="center">
-                        <Icon
-                          source={open ? ChevronDownIcon : ChevronRightIcon}
-                          tone="subdued"
-                        />
-                        <Badge
-                          tone={
-                            batch.status === "SUCCESS"
-                              ? "success"
-                              : batch.status === "PARTIAL"
-                                ? "warning"
-                                : "critical"
-                          }
-                        >
-                          {batch.status}
-                        </Badge>
-                        <Text as="span" variant="bodySm" fontWeight="semibold">
-                          {copiedAt(batch.createdAt)}
-                        </Text>
+                    <InlineStack gap="200" blockAlign="center" wrap={false}>
+                      <Icon
+                        source={open ? ChevronDownIcon : ChevronRightIcon}
+                        tone="subdued"
+                      />
+                      <Badge
+                        tone={
+                          batch.status === "SUCCESS"
+                            ? "success"
+                            : batch.status === "PARTIAL"
+                              ? "warning"
+                              : "critical"
+                        }
+                      >
+                        {batch.status}
+                      </Badge>
+                      <Text as="span" variant="bodySm" fontWeight="semibold">
+                        {copiedAt(batch.createdAt)}
+                      </Text>
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {`${batch.targets.length} theme${batch.targets.length === 1 ? "" : "s"}`}
+                      </Text>
+                      {batch.copiedBy && (
                         <Text as="span" variant="bodySm" tone="subdued">
-                          {`${batch.targets.length} theme${batch.targets.length === 1 ? "" : "s"}`}
+                          {`by ${batch.copiedBy}`}
                         </Text>
-                        {batch.copiedBy && (
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {`by ${batch.copiedBy}`}
-                          </Text>
-                        )}
-                      </InlineStack>
-
-                      {/* Which templates this batch actually copied. */}
-                      <Box paddingInlineStart="600">
-                        <Text as="p" variant="bodySm">
-                          <Text as="span" tone="subdued">
-                            {`From ${batch.sourceThemeName}: `}
-                          </Text>
-                          {batch.templates
-                            .map((f) => f.replace(/^templates\//, ""))
-                            .join(", ")}
-                        </Text>
-                      </Box>
-                    </BlockStack>
-                  </div>
+                      )}
+                    </InlineStack>
+                  </button>
 
                   {revertableIds.length > 0 && (
                     <Button
@@ -1897,6 +1955,18 @@ function HistoryCard({ history, onRevert, reverting, reverts }) {
                     </Button>
                   )}
                 </InlineStack>
+
+                {/* Which templates this batch copied - aligned under the meta. */}
+                <Box paddingInlineStart="600">
+                  <Text as="p" variant="bodySm">
+                    <Text as="span" tone="subdued">
+                      {`From ${batch.sourceThemeName}: `}
+                    </Text>
+                    {batch.templates
+                      .map((f) => f.replace(/^templates\//, ""))
+                      .join(", ")}
+                  </Text>
+                </Box>
 
                 <Collapsible
                   id={`batch-${batch.batchId}`}

@@ -68,6 +68,11 @@ model ThemeCopyLog {
   id              String   @id @default(cuid())
   // Shared by every row written by one press of the Copy button.
   batchId         String   @default("")
+  // The store the app was open in when the copy ran. History and revert are
+  // scoped to this, NOT to sourceShop - the source can be any store now, but the
+  // copy still belongs to whoever was driving the app. Backfilled to sourceShop
+  // for old rows via the default so pre-existing history still shows.
+  embeddedShop    String   @default("")
   sourceShop      String
   sourceThemeId   String
   sourceThemeName String
@@ -94,6 +99,7 @@ model ThemeCopyLog {
 
   @@index([sourceShop, createdAt])
   @@index([targetShop, createdAt])
+  @@index([embeddedShop, createdAt])
   @@index([batchId])
 }
 

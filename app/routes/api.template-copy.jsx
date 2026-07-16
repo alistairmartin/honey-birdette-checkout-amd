@@ -11,7 +11,7 @@
 // authenticate.admin resolves the shop the same way it would for a fetcher.
 
 import { json } from "@remix-run/node";
-import { authenticate } from "../shopify.server";
+import { authenticate, unauthenticated } from "../shopify.server";
 import {
   copyToTarget,
   listThemes,
@@ -22,22 +22,26 @@ import {
 
 export const action = async ({ request }) => {
   const { admin, session, sessionToken } = await authenticate.admin(request);
-  const sourceShop = session.shop;
+  const embeddedShop = session.shop;
 
   const formData = await request.formData();
   const intent = formData.get("intent");
 
   try {
     // Cheap enough to re-fetch once the fan-out finishes, rather than having
-    // every in-flight copy request compute its own stale copy of it.
+    // every in-flight copy request compute its own stale copy of it. History is
+    // keyed on the store the app is embedded in, whatever the copy's source was.
     if (intent === "history") {
-      return json({ intent, history: await recentCopies(sourceShop) });
+      return json({ intent, history: await recentCopies(embeddedShop) });
     }
 
     if (intent !== "copy") {
       return json({ intent, error: `Unknown intent: ${intent}` }, { status: 400 });
     }
 
+    // The source can be any installed store, chosen in the UI - default to the
+    // embedded one.
+    const sourceShop = String(formData.get("sourceShop") || embeddedShop);
     const sourceThemeId = String(formData.get("sourceThemeId"));
     const filenames = JSON.parse(String(formData.get("filenames") || "[]"));
     const target = JSON.parse(String(formData.get("target") || "null"));
@@ -62,24 +66,32 @@ export const action = async ({ request }) => {
       );
     }
 
-    const themes = await listThemes(admin);
+    // Read the source from the chosen store, which may not be the embedded one.
+    const sourceAdmin =
+      sourceShop === embeddedShop
+        ? admin
+        : (await unauthenticated.admin(sourceShop)).admin;
+
+    const themes = await listThemes(sourceAdmin);
     const sourceTheme = themes.find((t) => t.id === sourceThemeId);
     if (!sourceTheme) {
       return json({ intent, error: "That source theme no longer exists." }, { status: 400 });
     }
 
-    const sourceFiles = await readFiles(admin, sourceThemeId, filenames);
+    const sourceFiles = await readFiles(sourceAdmin, sourceThemeId, filenames);
 
     // The acting staff member, resolved from the session token's `sub`. Recorded
     // on the copy so the history says who to ask if a template ends up wrong.
+    // Always resolved on the embedded admin - that's where the user is logged in.
     const copiedBy = await resolveActor(admin, sessionToken?.sub);
 
     // copyToTarget resolves rather than throws, so a dead store reports its own
     // failure in the result instead of 500ing this request.
     const result = await copyToTarget({
       batchId,
+      embeddedShop,
       sourceShop,
-      sourceAdmin: admin,
+      sourceAdmin,
       sourceTheme,
       sourceFiles,
       targetShop: target.shop,

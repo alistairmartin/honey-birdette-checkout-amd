@@ -24,6 +24,7 @@ import {
   Box,
   ChoiceList,
 } from "@shopify/polaris";
+import { ArrowLeftIcon } from "@shopify/polaris-icons";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -66,6 +67,7 @@ function discountStatusLabel(status) {
 function discountStatusTone(status) {
   if (status === "ACTIVE") return "success";
   if (status === "SCHEDULED") return "attention";
+  if (status === "EXPIRED") return "critical";
   return undefined;
 }
 
@@ -1137,6 +1139,20 @@ export default function GiftWithPurchasePage() {
           <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab} />
         </Card>
 
+        {/* A dedicated back control on its own row, so returning to the Saved
+            list doesn't depend on spotting the breadcrumb up in the admin bar. */}
+        {selectedTab === 1 && (
+          <InlineStack>
+            <Button
+              variant="tertiary"
+              icon={ArrowLeftIcon}
+              onClick={() => setSelectedTab(0)}
+            >
+              Back to saved
+            </Button>
+          </InlineStack>
+        )}
+
         {selectedTab === 1 && (
           <Layout>
             <Layout.Section>
@@ -2010,8 +2026,12 @@ export default function GiftWithPurchasePage() {
                               </InlineStack>
 
                               {trigger !== "unknown" ? (
-                                <>
-                                  <Divider />
+                                <Box
+                                  background="bg-surface-secondary"
+                                  padding="300"
+                                  borderRadius="200"
+                                >
+                                  <BlockStack gap="200">
                                   <InlineStack
                                     align="space-between"
                                     blockAlign="center"
@@ -2091,7 +2111,27 @@ export default function GiftWithPurchasePage() {
                                       )}
                                     </InlineStack>
                                   </InlineStack>
-                                </>
+                                  {!disc.exists ? (
+                                    <Text as="p" variant="bodySm" tone="subdued">
+                                      No discount exists for this config yet.
+                                      Create one to get started - it starts off
+                                      deactivated.
+                                    </Text>
+                                  ) : disc.status !== "ACTIVE" ? (
+                                    <Text as="p" variant="bodySm" tone="subdued">
+                                      Discounts are turned off by default and
+                                      won't apply at checkout until you make
+                                      them active.
+                                    </Text>
+                                  ) : (
+                                    <Text as="p" variant="bodySm" tone="subdued">
+                                      This discount is live and applying at
+                                      checkout. Deactivate it to stop the offer
+                                      without deleting the config.
+                                    </Text>
+                                  )}
+                                  </BlockStack>
+                                </Box>
                               ) : null}
                             </BlockStack>
                           </Card>
