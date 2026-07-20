@@ -165,8 +165,7 @@ function CopyButton({ label, value, icon, disabled }) {
 
   return (
     <Button
-      variant="tertiary"
-      size="slim"
+      size="micro"
       icon={done ? CheckCircleIcon : icon}
       tone={done ? "success" : undefined}
       disabled={disabled}
@@ -649,18 +648,11 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
             )}
           </InlineStack>
 
-          {/* Row 2 is secondary: borderless (tertiary) so it reads as a quieter
-              set of shortcuts rather than competing with the actions above. */}
+          {/* Row 2 is secondary: bordered like row 1, but a size smaller so it
+              still reads as the quieter set. Copy ID leads - it's the one you
+              press most while filling in a deploy file - with the other copy
+              shortcut beside it and the code editor last. */}
           <InlineStack gap="150" blockAlign="center" wrap>
-            <Button
-              variant="tertiary"
-              size="slim"
-              icon={CodeIcon}
-              url={codeEditorUrl(shop, theme.id)}
-              target="_blank"
-            >
-              Edit code
-            </Button>
             <CopyButton
               label="Copy ID"
               icon={ClipboardIcon}
@@ -671,6 +663,14 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
               icon={LinkIcon}
               value={previewUrl(shop, theme.id)}
             />
+            <Button
+              size="micro"
+              icon={CodeIcon}
+              url={codeEditorUrl(shop, theme.id)}
+              target="_blank"
+            >
+              Edit code
+            </Button>
           </InlineStack>
         </BlockStack>
       </InlineStack>
