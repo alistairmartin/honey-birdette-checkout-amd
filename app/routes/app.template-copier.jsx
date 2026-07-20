@@ -596,7 +596,9 @@ export default function TemplateCopierPage() {
   const [overwriteAccepted, setOverwriteAccepted] = useState(false);
   const [step, setStep] = useState(0);
   const [copyMedia, setCopyMedia] = useState(true);
-  const [overwriteMedia, setOverwriteMedia] = useState(false);
+  // "keep" | "duplicate" | "replace" - what to do when the destination already
+  // has a file with the same name. Defaults to the option that changes nothing.
+  const [mediaConflictMode, setMediaConflictMode] = useState("keep");
   // { [shop]: { state: "COPYING" | "DONE" | "FAILED", result } } - one entry per
   // destination, updated as that region's request comes back.
   const [copyProgress, setCopyProgress] = useState(null);
@@ -813,7 +815,7 @@ export default function TemplateCopierPage() {
         JSON.stringify({ shop: target.shop, themeId: target.themeId }),
       );
       body.set("copyMedia", String(copyMedia));
-      body.set("overwriteMedia", String(overwriteMedia));
+      body.set("mediaConflictMode", mediaConflictMode);
 
       try {
         // /api/template-copy is a resource route, so it answers with JSON. App
@@ -1439,16 +1441,20 @@ export default function TemplateCopierPage() {
                             "Nothing is uploaded. The copied page uses the image already on that store, and nothing else on that store changes.",
                         },
                         {
+                          label: `Upload ${source.flag || shopLabel(source)}'s file as a new, separate file`,
+                          value: "duplicate",
+                          helpText:
+                            "Adds the source image alongside the existing one under a new name, and points the copied page at it. Nothing on the destination store is overwritten, and the page looks exactly like the source.",
+                        },
+                        {
                           label: `Replace it with the file from ${source.flag || shopLabel(source)}`,
-                          value: "overwrite",
+                          value: "replace",
                           helpText:
                             "Uploads over the top of the existing image. Every other page on that store using this image changes too, and this can't be undone.",
                         },
                       ]}
-                      selected={[overwriteMedia ? "overwrite" : "keep"]}
-                      onChange={([value]) =>
-                        setOverwriteMedia(value === "overwrite")
-                      }
+                      selected={[mediaConflictMode]}
+                      onChange={([value]) => setMediaConflictMode(value)}
                     />
                     <MediaList refs={mediaConflicts} maxHeight="120px" />
                   </BlockStack>
@@ -1516,10 +1522,17 @@ export default function TemplateCopierPage() {
                     </Text>
                   </List.Item>
                 )}
-                {copyMedia && overwriteMedia && mediaConflicts.length > 0 && (
+                {copyMedia && mediaConflicts.length > 0 && mediaConflictMode === "replace" && (
                   <List.Item>
                     <Text as="span" tone="critical">
                       {`${mediaNoun(mediaConflicts)} on the destination store overwritten`}
+                    </Text>
+                  </List.Item>
+                )}
+                {copyMedia && mediaConflicts.length > 0 && mediaConflictMode === "duplicate" && (
+                  <List.Item>
+                    <Text as="span">
+                      {`${mediaNoun(mediaConflicts)} added as new files (nothing overwritten), with the templates pointed at them`}
                     </Text>
                   </List.Item>
                 )}

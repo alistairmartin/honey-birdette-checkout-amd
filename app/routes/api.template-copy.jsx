@@ -46,7 +46,9 @@ export const action = async ({ request }) => {
     const filenames = JSON.parse(String(formData.get("filenames") || "[]"));
     const target = JSON.parse(String(formData.get("target") || "null"));
     const copyMediaEnabled = formData.get("copyMedia") === "true";
-    const overwriteExistingMedia = formData.get("overwriteMedia") === "true";
+    // "keep" | "duplicate" | "replace" - what to do when the destination
+    // already has a file with the same name.
+    const mediaConflictMode = String(formData.get("mediaConflictMode") || "keep");
     // Minted by the browser, shared by every region in this press of the button,
     // so the history can group the per-store rows back into one event.
     const batchId = String(formData.get("batchId") || "");
@@ -97,7 +99,7 @@ export const action = async ({ request }) => {
       targetShop: target.shop,
       targetThemeId: target.themeId,
       copyMediaEnabled,
-      overwriteExistingMedia,
+      mediaConflictMode,
       copiedBy,
     });
 

@@ -989,15 +989,19 @@ async function stageVideo(targetAdmin, { filename, source }) {
 // Copy referenced media into the destination store's Files. Returns one record
 // per file: COPIED | OVERWRITTEN | SKIPPED | FAILED.
 //
-// `overwriteExisting` decides the collision case. A file already on the
-// destination under the same filename is usually the same asset, and replacing it
-// would change every other page that uses it - so the default is to keep the
-// destination's copy, and overwriting is something you opt into.
+// `conflictMode` decides what happens when the destination already has a file
+// with that name:
+//   "keep"      - leave the destination's file alone; the template uses it.
+//   "duplicate" - upload the source's file under a NEW unique name and point the
+//                 template at it. Nothing on the destination is overwritten, and
+//                 the copied page still shows the source's images.
+//   "replace"   - overwrite the destination's file. Affects every other page
+//                 there that uses it, and can't be undone.
 export async function copyMedia({
   sourceAdmin,
   targetAdmin,
   refs,
-  overwriteExisting = false,
+  conflictMode = "keep",
   onProgress = () => {},
 }) {
   const results = [];
@@ -1012,7 +1016,7 @@ export async function copyMedia({
     );
     try {
       const existing = await findMedia(targetAdmin, ref);
-      if (existing && !overwriteExisting) {
+      if (existing && conflictMode === "keep") {
         results.push({
           filename,
           kind,
@@ -1045,6 +1049,11 @@ export async function copyMedia({
       }
 
       // A video's bytes have to be staged one at a time; an image is just a URL.
+      // Only a real collision needs resolving. With no existing file, REPLACE
+      // just creates it under the exact name the templates already point at.
+      const resolution =
+        existing && conflictMode === "duplicate" ? "APPEND_UUID" : "REPLACE";
+
       if (kind === "VIDEO") {
         const resourceUrl = await stageVideo(targetAdmin, { filename, source });
         toCreate.push({
@@ -1053,6 +1062,7 @@ export async function copyMedia({
           source,
           originalSource: resourceUrl,
           replacing: Boolean(existing),
+          resolution,
         });
       } else {
         toCreate.push({
@@ -1061,6 +1071,7 @@ export async function copyMedia({
           source,
           originalSource: source.url,
           replacing: Boolean(existing),
+          resolution,
         });
       }
     } catch (err) {
@@ -1079,12 +1090,12 @@ export async function copyMedia({
     const batch = toCreate.slice(i, i + 20);
     try {
       const body = await adminGraphql(targetAdmin, FILE_CREATE_MUTATION, {
-        files: batch.map(({ filename, kind, source, originalSource }) => ({
+        files: batch.map(({ filename, kind, source, originalSource, resolution }) => ({
           filename,
           originalSource,
           contentType: kind,
           alt: source.alt ?? "",
-          duplicateResolutionMode: "REPLACE",
+          duplicateResolutionMode: resolution,
         })),
       });
 
@@ -1105,7 +1116,7 @@ export async function copyMedia({
       const ids = created.map((f) => f.id).filter(Boolean);
       const actual = await resolveActualFilenames(targetAdmin, ids);
 
-      batch.forEach(({ filename, kind, replacing }, index) => {
+      batch.forEach(({ filename, kind, replacing, resolution }, index) => {
         const id = created[index]?.id ?? null;
         const resolved = id ? actual.get(id) : null;
         const actualFilename = resolved?.filename ?? null;
@@ -1114,7 +1125,12 @@ export async function copyMedia({
         results.push({
           filename,
           kind,
-          status: replacing ? "OVERWRITTEN" : "COPIED",
+          status:
+            resolution === "APPEND_UUID"
+              ? "COPIED_AS_NEW"
+              : replacing
+                ? "OVERWRITTEN"
+                : "COPIED",
           error: null,
           // Set only when the destination store gave the file a different name.
           actualFilename: renamed ? actualFilename : null,
@@ -1217,7 +1233,8 @@ export async function copyToTarget({
   targetShop,
   targetThemeId,
   copyMediaEnabled = true,
-  overwriteExistingMedia = false,
+  // "keep" | "duplicate" | "replace" - see copyMedia.
+  mediaConflictMode = "keep",
   // Section/theme-block files the templates need. On by default: without them
   // Shopify rejects the template outright, so a copy without them mostly fails.
   copyDependencies = true,
@@ -1278,7 +1295,7 @@ export async function copyToTarget({
           sourceAdmin,
           targetAdmin,
           refs: mediaRefsIn(sourceFiles),
-          overwriteExisting: overwriteExistingMedia,
+          conflictMode: mediaConflictMode,
         })
       : [];
 
