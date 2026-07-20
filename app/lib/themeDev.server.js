@@ -13,7 +13,12 @@
 
 import { unauthenticated } from "../shopify.server";
 import { adminGraphql } from "./adminGraphql.server";
-import { countryFlag, listDestinationShops, getShopInfo } from "./themeCopier.server";
+import {
+  countryFlag,
+  listDestinationShops,
+  getShopInfo,
+  sortStoresByRegion,
+} from "./themeCopier.server";
 
 const THEME_FIELDS = `
   id
@@ -184,7 +189,9 @@ export async function listAllStoreThemes(admin, embeddedShop) {
     }),
   );
 
-  return [embedded, ...others];
+  // Always AU, UK, EU, US - the store you're in doesn't jump to the top, so the
+  // list reads the same whichever store you open the app from.
+  return sortStoresByRegion([embedded, ...others]);
 }
 
 // Re-read one store's themes after a mutation, so the page updates just that

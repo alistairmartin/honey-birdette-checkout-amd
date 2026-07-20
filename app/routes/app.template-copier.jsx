@@ -54,6 +54,7 @@ import {
   recentCopies,
   revertCopy,
   reviewTarget,
+  sortStoresByRegion,
 } from "../lib/themeCopier.server";
 
 // The copy and history endpoint. A resource route, so it always answers JSON -
@@ -97,10 +98,12 @@ export const loader = async ({ request }) => {
     }),
   );
 
-  const stores = [
+  // Always AU, UK, EU, US, so the stores sit in the same order here as on Theme
+  // Dev regardless of which store the app is open in.
+  const stores = sortStoresByRegion([
     { ...embeddedInfo, isEmbedded: true, reachable: true, themes: embeddedThemes },
     ...otherStores,
-  ];
+  ]);
 
   // Default source: the store you're in, on its most-recently-edited theme -
   // nearly always the one you just finished and now want to push out.

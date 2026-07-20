@@ -154,7 +154,6 @@ function CopyButton({ label, value, disabled }) {
 
   return (
     <Button
-      variant="tertiary"
       size="slim"
       tone={done ? "success" : undefined}
       disabled={disabled}
@@ -281,6 +280,25 @@ export default function ThemeDevPage() {
     );
   };
 
+  // Every search starts each store back at the first 6 matches. Without this, a
+  // store you'd expanded to 100 would dump 100 matches on you.
+  useEffect(() => {
+    setVisibleCount({});
+  }, [search]);
+
+  // Totals for the search summary line.
+  const { totalMatches, storesWithMatches } = useMemo(() => {
+    let total = 0;
+    let stores = 0;
+    for (const store of initialStores) {
+      const n = (storeThemes[store.shop] ?? []).filter(matches).length;
+      total += n;
+      if (n > 0) stores += 1;
+    }
+    return { totalMatches: total, storesWithMatches: stores };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialStores, storeThemes, search]);
+
   return (
     <Page fullWidth>
       <TitleBar title="Theme Dev" />
@@ -308,6 +326,29 @@ export default function ThemeDevPage() {
             </Banner>
           </Layout.Section>
         )}
+
+        {/* Search sits above everything: it narrows every store at once, and
+            each store falls back to showing the first 6 matches. */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="200">
+              <TextField
+                label="Search themes across all stores"
+                placeholder="Theme name or ID, e.g. Victoriana or 129901035592"
+                value={search}
+                onChange={setSearch}
+                autoComplete="off"
+                clearButton
+                onClearButtonClick={() => setSearch("")}
+              />
+              {search.trim() && (
+                <Text as="span" variant="bodySm" tone="subdued">
+                  {`${totalMatches} matching theme${totalMatches === 1 ? "" : "s"} across ${storesWithMatches} store${storesWithMatches === 1 ? "" : "s"}`}
+                </Text>
+              )}
+            </BlockStack>
+          </Card>
+        </Layout.Section>
 
         {/* The deploy-file basket: IDs collect here as you tick themes. */}
         <Layout.Section>
@@ -355,19 +396,6 @@ export default function ThemeDevPage() {
           </Card>
         </Layout.Section>
 
-        <Layout.Section>
-          <TextField
-            label="Filter themes"
-            labelHidden
-            placeholder="Filter by theme name or ID, across every store"
-            value={search}
-            onChange={setSearch}
-            autoComplete="off"
-            clearButton
-            onClearButtonClick={() => setSearch("")}
-          />
-        </Layout.Section>
-
         {initialStores.map((store) => {
           const allThemes = storeThemes[store.shop] ?? [];
           const matching = allThemes.filter(matches);
@@ -389,7 +417,9 @@ export default function ThemeDevPage() {
                         {store.isEmbedded && <Badge>This store</Badge>}
                       </InlineStack>
                       <Text as="span" variant="bodySm" tone="subdued">
-                        {`${store.shop} - ${(storeThemes[store.shop] ?? []).length} themes`}
+                        {search.trim()
+                          ? `${store.shop} - ${matching.length} of ${allThemes.length} themes match`
+                          : `${store.shop} - ${allThemes.length} themes`}
                       </Text>
                     </BlockStack>
 
@@ -542,16 +572,22 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
           </BlockStack>
         </InlineStack>
 
-        {/* Actions on top, the two clipboard shortcuts on their own row beneath -
-            they're used together when collecting IDs for a deploy. */}
+        {/* Row 1: what you do to the theme, Preview first because it's the one
+            you reach for most. Row 2: the code editor and the two clipboard
+            shortcuts - the things you use while wiring up a deploy. Links render
+            as buttons too (Polaris Button takes a url), so both rows are one
+            consistent set of controls. */}
         <BlockStack gap="100" inlineAlign="end">
           <InlineStack gap="150" blockAlign="center" wrap>
-            {/* Links render as buttons too (Polaris Button takes a url), so the
-                whole row is one consistent set of hoverable controls. Shopify's
-                own naming: "Customize" is the visual editor, "Edit code" is the
-                code editor. */}
             <Button
-              variant="tertiary"
+              size="slim"
+              url={previewUrl(shop, theme.id)}
+              target="_blank"
+            >
+              Preview
+            </Button>
+            {/* Shopify's own naming: "Customize" is the visual editor. */}
+            <Button
               size="slim"
               url={editorUrl(shop, theme.id)}
               target="_blank"
@@ -559,23 +595,6 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
               Customize
             </Button>
             <Button
-              variant="tertiary"
-              size="slim"
-              url={codeEditorUrl(shop, theme.id)}
-              target="_blank"
-            >
-              Edit code
-            </Button>
-            <Button
-              variant="tertiary"
-              size="slim"
-              url={previewUrl(shop, theme.id)}
-              target="_blank"
-            >
-              Preview
-            </Button>
-            <Button
-              variant="tertiary"
               size="slim"
               disabled={busy}
               onClick={() => onAction("duplicate")}
@@ -583,7 +602,6 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
               Duplicate
             </Button>
             <Button
-              variant="tertiary"
               size="slim"
               disabled={busy}
               onClick={() => onAction("rename")}
@@ -592,7 +610,6 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
             </Button>
             {!isLive && (
               <Button
-                variant="tertiary"
                 size="slim"
                 disabled={busy || theme.processing}
                 onClick={() => onAction("publish")}
@@ -602,7 +619,6 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
             )}
             {!isLive && (
               <Button
-                variant="tertiary"
                 size="slim"
                 tone="critical"
                 disabled={busy}
@@ -614,6 +630,13 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
           </InlineStack>
 
           <InlineStack gap="150" blockAlign="center" wrap>
+            <Button
+              size="slim"
+              url={codeEditorUrl(shop, theme.id)}
+              target="_blank"
+            >
+              Edit code
+            </Button>
             <CopyButton label="Copy ID" value={numericThemeId(theme.id)} />
             <CopyButton
               label="Copy preview link"

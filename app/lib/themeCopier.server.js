@@ -204,6 +204,27 @@ export async function resolveActor(admin, userId) {
   return `Staff user ${userId}`;
 }
 
+// The order the regions are always listed in, everywhere. Fixed rather than
+// alphabetical or install-order so the stores sit in the same place on every
+// page - you learn the positions instead of re-reading the labels. `region`
+// comes from getShopInfo (currency-derived), so the UK store is GB.
+const REGION_ORDER = ["AU", "GB", "EU", "US"];
+
+export function sortStoresByRegion(stores) {
+  return [...stores].sort((a, b) => {
+    const ai = REGION_ORDER.indexOf(a.region ?? "");
+    const bi = REGION_ORDER.indexOf(b.region ?? "");
+    // Anything outside the known set (a new market, or a store we couldn't
+    // reach to identify) sorts last, alphabetically.
+    if (ai === -1 && bi === -1) {
+      return (a.name || a.shop).localeCompare(b.name || b.shop);
+    }
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+}
+
 // Every shop with an offline session - i.e. every store the app is installed on.
 // Excludes `currentShop` (that's the source, it's never a destination).
 export async function listDestinationShops(currentShop) {
