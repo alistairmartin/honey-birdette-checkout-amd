@@ -40,7 +40,12 @@ import {
   Text,
   TextField,
 } from "@shopify/polaris";
-import { ChevronDownIcon, ChevronRightIcon } from "@shopify/polaris-icons";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  PaintBrushFlatIcon,
+  ViewIcon,
+} from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate, unauthenticated } from "../shopify.server";
 import {
@@ -242,6 +247,18 @@ const roleBadge = (role) => {
 const shopLabel = (info) =>
   `${info.name}${info.flag ? ` ${info.flag}` : ""}`;
 
+// Results and history only carry the raw shop domain (it's what's in the copy
+// log), so the flag has to be looked up from the loaded stores. Returns e.g.
+// "🇺🇸 honey-birdette-usa.myshopify.com", falling back to the bare domain for a
+// store that's since been uninstalled.
+const makeShopDomainLabel = (stores) => {
+  const flags = new Map(stores.map((s) => [s.shop, s.flag]));
+  return (shop) => {
+    const flag = flags.get(shop);
+    return flag ? `${flag} ${shop}` : shop;
+  };
+};
+
 // Dates are formatted with an explicit locale AND timezone, never the system
 // default. The server renders in UTC and the browser renders in the viewer's
 // zone, so `toLocaleDateString(undefined, ...)` produces two different strings
@@ -293,6 +310,13 @@ function themeEditorUrl(shopDomain, themeGid, filename) {
 
   return `${base}?template=${encodeURIComponent(template).replace(/%2F/g, "/")}`;
 }
+
+// The storefront rendered with this theme. Note this is the shop home on that
+// theme, not the specific template - a template filename doesn't map to a URL
+// (a page template only resolves once a page is assigned to it), so linking the
+// theme root is the honest option.
+const storefrontPreviewUrl = (shopDomain, themeGid) =>
+  `https://${shopDomain}/?preview_theme_id=${String(themeGid).split("/").pop()}`;
 
 // The same file can be missing on two destinations; the wizard talks about the
 // set of files, not the per-store rows.
@@ -544,6 +568,8 @@ export default function TemplateCopierPage() {
   const [sourceShop, setSourceShop] = useState(initialSourceShop);
   const source = stores.find((s) => s.shop === sourceShop) ?? stores[0];
   const themes = source?.themes ?? [];
+
+  const shopDomainLabel = useMemo(() => makeShopDomainLabel(stores), [stores]);
 
   // Every store is a possible destination, including the source itself (copy into
   // another of its own themes). `isSource` is computed, not baked, because the
@@ -924,7 +950,7 @@ export default function TemplateCopierPage() {
 
         {results && (
           <Layout.Section>
-            <ResultsBanner results={results} />
+            <ResultsBanner results={results} shopDomainLabel={shopDomainLabel} />
           </Layout.Section>
         )}
 
@@ -1126,6 +1152,7 @@ export default function TemplateCopierPage() {
               onRevert={runRevert}
               reverting={revertFetcher.state !== "idle"}
               reverts={reverts}
+              shopDomainLabel={shopDomainLabel}
             />
           </Layout.Section>
         )}
@@ -1303,7 +1330,7 @@ export default function TemplateCopierPage() {
                     {reviewErrors.map((c) => (
                       <Text as="p" variant="bodySm" key={c.key ?? c.shop}>
                         <Text as="span" fontWeight="semibold">
-                          {c.shop}
+                          {shopDomainLabel(c.shop)}
                         </Text>
                         {`: ${c.error}`}
                       </Text>
@@ -1336,7 +1363,7 @@ export default function TemplateCopierPage() {
                       .map((c) => (
                         <Text as="p" variant="bodySm" key={c.key ?? c.shop}>
                           <Text as="span" fontWeight="semibold">
-                            {`${c.shop}${c.themeName ? ` (${c.themeName})` : ""}`}
+                            {`${shopDomainLabel(c.shop)}${c.themeName ? ` (${c.themeName})` : ""}`}
                           </Text>
                           {`: ${c.missingSections.join(", ")}`}
                         </Text>
@@ -1614,7 +1641,9 @@ function CopyProgress({ targets, progress, percentComplete, doneCount }) {
               {/* Open this region as soon as it lands, without waiting for the
                   other regions to finish. */}
               {entry?.state === "DONE" && (
-                <Link
+                <Button
+                  size="micro"
+                  icon={PaintBrushFlatIcon}
                   url={themeEditorUrl(
                     target.shop,
                     target.themeId,
@@ -1622,8 +1651,8 @@ function CopyProgress({ targets, progress, percentComplete, doneCount }) {
                   )}
                   target="_blank"
                 >
-                  Preview
-                </Link>
+                  Customize
+                </Button>
               )}
             </InlineStack>
           </InlineStack>
@@ -1740,7 +1769,7 @@ function TargetDiff({ check, targets }) {
 // reports whether the whole store failed (bad token, missing scope, theme gone)
 // or only some files did, and prints the exact message Shopify returned for each
 // one, so the fix doesn't require digging through server logs.
-function ResultsBanner({ results }) {
+function ResultsBanner({ results, shopDomainLabel }) {
   const failed = results.filter((r) => r.status !== "SUCCESS");
   const tone =
     failed.length === 0
@@ -1784,7 +1813,7 @@ function ResultsBanner({ results }) {
                   {r.status}
                 </Badge>
                 <Text as="span" variant="bodySm" fontWeight="semibold">
-                  {r.targetShop}
+                  {shopDomainLabel(r.targetShop)}
                 </Text>
                 <Text as="span" variant="bodySm">
                   {`${r.targetThemeName}: ${r.successCount}/${r.fileCount} copied`}
@@ -1804,12 +1833,14 @@ function ResultsBanner({ results }) {
                   just landed - one link per template, for every region. */}
               {r.files.filter((f) => f.status === "SUCCESS").length > 0 && (
                 <Box paddingInlineStart="300">
-                  <InlineStack gap="300" wrap>
+                  <InlineStack gap="150" wrap>
                     {r.files
                       .filter((f) => f.status === "SUCCESS")
                       .map((f) => (
-                        <Link
+                        <Button
                           key={f.filename}
+                          size="micro"
+                          icon={PaintBrushFlatIcon}
                           url={themeEditorUrl(
                             r.targetShop,
                             r.targetThemeId,
@@ -1817,9 +1848,18 @@ function ResultsBanner({ results }) {
                           )}
                           target="_blank"
                         >
-                          {`Preview ${f.filename.replace(/^templates\//, "")}`}
-                        </Link>
+                          {`Customize ${f.filename.replace(/^templates\//, "")}`}
+                        </Button>
                       ))}
+                    <Button
+                      size="micro"
+                      variant="tertiary"
+                      icon={ViewIcon}
+                      url={storefrontPreviewUrl(r.targetShop, r.targetThemeId)}
+                      target="_blank"
+                    >
+                      Preview store
+                    </Button>
                   </InlineStack>
                 </Box>
               )}
@@ -1854,7 +1894,7 @@ function ResultsBanner({ results }) {
                   {r.mediaRenames?.length > 0 && (
                     <Box paddingBlockStart="100">
                       <Text as="p" variant="bodySm">
-                        {`${r.mediaRenames.length} file${r.mediaRenames.length === 1 ? " was" : "s were"} renamed by ${r.targetShop} to keep filenames unique. The copied templates were updated to use the new names:`}
+                        {`${r.mediaRenames.length} file${r.mediaRenames.length === 1 ? " was" : "s were"} renamed by ${shopDomainLabel(r.targetShop)} to keep filenames unique. The copied templates were updated to use the new names:`}
                       </Text>
                       <List type="bullet">
                         {r.mediaRenames.map((m) => (
@@ -1901,7 +1941,7 @@ function ResultsBanner({ results }) {
 // Each destination in a batch can be reverted on its own, or the whole batch at
 // once: the pre-copy contents of every template were snapshotted, so putting them
 // back is exact rather than a trip through the theme editor's timeline.
-function HistoryCard({ history, onRevert, reverting, reverts }) {
+function HistoryCard({ history, onRevert, reverting, reverts, shopDomainLabel }) {
   // Batches are collapsed by default - the history is a scannable timeline, and
   // the per-theme detail is there when you want it, not in your way when you
   // don't. Keyed by batchId so expanding one leaves the rest alone.
@@ -1929,7 +1969,7 @@ function HistoryCard({ history, onRevert, reverting, reverts }) {
               {reverts.map((r, i) => (
                 <Text as="p" variant="bodySm" key={`${r.targetShop ?? i}`}>
                   {r.reverted
-                    ? `${r.targetShop} (${r.targetThemeName}): ${r.results.filter((x) => x.status === "RESTORED").length} restored, ${r.results.filter((x) => x.status === "DELETED").length} deleted`
+                    ? `${shopDomainLabel(r.targetShop)} (${r.targetThemeName}): ${r.results.filter((x) => x.status === "RESTORED").length} restored, ${r.results.filter((x) => x.status === "DELETED").length} deleted`
                     : `${r.targetShop ?? "Copy"}: ${r.error}`}
                 </Text>
               ))}
@@ -2044,7 +2084,7 @@ function HistoryCard({ history, onRevert, reverting, reverts }) {
                           {t.status}
                         </Badge>
                         <Text as="span" variant="bodySm">
-                          {`${t.targetShop} - ${t.targetThemeName}`}
+                          {`${shopDomainLabel(t.targetShop)} - ${t.targetThemeName}`}
                         </Text>
                         <Badge>{themeNumericId(t.targetThemeId)}</Badge>
                         {t.targetThemeRole === "MAIN" && (
@@ -2063,23 +2103,36 @@ function HistoryCard({ history, onRevert, reverting, reverts }) {
                       {/* Preview links for this region, one per template that
                           landed - the theme editor opens on that template. */}
                       {t.files.filter((f) => f.status === "SUCCESS").length > 0 && (
-                        <InlineStack gap="300" wrap>
-                          {t.files
-                            .filter((f) => f.status === "SUCCESS")
-                            .map((f) => (
-                              <Link
-                                key={f.filename}
-                                url={themeEditorUrl(
-                                  t.targetShop,
-                                  t.targetThemeId,
-                                  f.filename,
-                                )}
-                                target="_blank"
-                              >
-                                {`Preview ${f.filename.replace(/^templates\//, "")}`}
-                              </Link>
-                            ))}
-                        </InlineStack>
+                        <Box paddingBlockStart="100">
+                          <InlineStack gap="150" wrap>
+                            {t.files
+                              .filter((f) => f.status === "SUCCESS")
+                              .map((f) => (
+                                <Button
+                                  key={f.filename}
+                                  size="micro"
+                                  icon={PaintBrushFlatIcon}
+                                  url={themeEditorUrl(
+                                    t.targetShop,
+                                    t.targetThemeId,
+                                    f.filename,
+                                  )}
+                                  target="_blank"
+                                >
+                                  {`Customize ${f.filename.replace(/^templates\//, "")}`}
+                                </Button>
+                              ))}
+                            <Button
+                              size="micro"
+                              variant="tertiary"
+                              icon={ViewIcon}
+                              url={storefrontPreviewUrl(t.targetShop, t.targetThemeId)}
+                              target="_blank"
+                            >
+                              Preview store
+                            </Button>
+                          </InlineStack>
+                        </Box>
                       )}
                     </BlockStack>
 
