@@ -34,6 +34,7 @@ export default function App() {
         <Link to="/app/kibo-checker">Kibo Checker</Link>
         <Link to="/app/loyalty-tier-sync">Loyalty tier sync</Link>
         <Link to="/app/metafield-definitions">Metafield definitions</Link>
+        <Link to="/app/graphql">GraphQL explorer</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>

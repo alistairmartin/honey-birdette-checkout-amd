@@ -21,7 +21,6 @@ import {
   Checkbox,
   InlineStack,
   Layout,
-  Link,
   Modal,
   Page,
   Text,
@@ -108,10 +107,13 @@ const codeEditorUrl = (shop, themeGid) =>
 const previewUrl = (shop, themeGid) =>
   `https://${shop}/?preview_theme_id=${numericThemeId(themeGid)}`;
 
+// Only the roles worth calling out get a badge. Nearly every theme is
+// unpublished, so badging that adds noise to every row and says nothing - the
+// absence of a Live badge already means "not live".
 const roleBadge = (role) => {
   if (role === "MAIN") return <Badge tone="success">Live</Badge>;
   if (role === "DEVELOPMENT") return <Badge tone="info">Dev</Badge>;
-  return <Badge>Unpublished</Badge>;
+  return null;
 };
 
 // Clipboard writes can be refused inside the admin iframe, so fall back to a
@@ -151,7 +153,13 @@ function CopyButton({ label, value, disabled }) {
   };
 
   return (
-    <Button variant="plain" disabled={disabled} onClick={onClick}>
+    <Button
+      variant="tertiary"
+      size="slim"
+      tone={done ? "success" : undefined}
+      disabled={disabled}
+      onClick={onClick}
+    >
       {done ? "Copied" : label}
     </Button>
   );
@@ -413,11 +421,12 @@ export default function ThemeDevPage() {
 
                   {themes.length > 0 && (
                     <BlockStack gap="100">
-                      {themes.map((theme) => (
+                      {themes.map((theme, index) => (
                         <ThemeRow
                           key={theme.id}
                           shop={store.shop}
                           theme={theme}
+                          index={index}
                           checked={selected.includes(theme.id)}
                           onToggle={() => toggleSelected(theme.id)}
                           onAction={(mode) => openDialog(mode, store.shop, theme)}
@@ -494,15 +503,19 @@ export default function ThemeDevPage() {
 }
 
 // One theme: tick it for the deploy list, open it, preview it, or act on it.
-function ThemeRow({ shop, theme, checked, onToggle, onAction, busy }) {
+function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
   const isLive = theme.role === "MAIN";
+  // Zebra striping: with two lines of controls per row, alternating backgrounds
+  // are what keep one theme's actions visually attached to its name. Selection
+  // still wins, since that's the state you're tracking for the deploy list.
+  const background = checked
+    ? "bg-surface-selected"
+    : index % 2 === 1
+      ? "bg-surface-secondary"
+      : undefined;
 
   return (
-    <Box
-      padding="200"
-      borderRadius="200"
-      background={checked ? "bg-surface-selected" : undefined}
-    >
+    <Box padding="300" borderRadius="200" background={background}>
       <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
         <InlineStack gap="300" blockAlign="center" wrap={false}>
           <Checkbox
@@ -529,53 +542,85 @@ function ThemeRow({ shop, theme, checked, onToggle, onAction, busy }) {
           </BlockStack>
         </InlineStack>
 
-        <InlineStack gap="300" blockAlign="center" wrap>
-          {/* Shopify's own naming: "Customize" is the visual editor, "Edit code"
-              is the code editor. */}
-          <Link url={editorUrl(shop, theme.id)} target="_blank">
-            Customize
-          </Link>
-          <Link url={codeEditorUrl(shop, theme.id)} target="_blank">
-            Edit code
-          </Link>
-          <Link url={previewUrl(shop, theme.id)} target="_blank">
-            Preview
-          </Link>
-          <CopyButton label="Copy ID" value={numericThemeId(theme.id)} />
-          <CopyButton
-            label="Copy preview link"
-            value={previewUrl(shop, theme.id)}
-          />
-          <Button
-            variant="plain"
-            disabled={busy}
-            onClick={() => onAction("duplicate")}
-          >
-            Duplicate
-          </Button>
-          <Button variant="plain" disabled={busy} onClick={() => onAction("rename")}>
-            Rename
-          </Button>
-          {!isLive && (
+        {/* Actions on top, the two clipboard shortcuts on their own row beneath -
+            they're used together when collecting IDs for a deploy. */}
+        <BlockStack gap="100" inlineAlign="end">
+          <InlineStack gap="150" blockAlign="center" wrap>
+            {/* Links render as buttons too (Polaris Button takes a url), so the
+                whole row is one consistent set of hoverable controls. Shopify's
+                own naming: "Customize" is the visual editor, "Edit code" is the
+                code editor. */}
             <Button
-              variant="plain"
-              disabled={busy || theme.processing}
-              onClick={() => onAction("publish")}
+              variant="tertiary"
+              size="slim"
+              url={editorUrl(shop, theme.id)}
+              target="_blank"
             >
-              Publish
+              Customize
             </Button>
-          )}
-          {!isLive && (
             <Button
-              variant="plain"
-              tone="critical"
+              variant="tertiary"
+              size="slim"
+              url={codeEditorUrl(shop, theme.id)}
+              target="_blank"
+            >
+              Edit code
+            </Button>
+            <Button
+              variant="tertiary"
+              size="slim"
+              url={previewUrl(shop, theme.id)}
+              target="_blank"
+            >
+              Preview
+            </Button>
+            <Button
+              variant="tertiary"
+              size="slim"
               disabled={busy}
-              onClick={() => onAction("delete")}
+              onClick={() => onAction("duplicate")}
             >
-              Delete
+              Duplicate
             </Button>
-          )}
-        </InlineStack>
+            <Button
+              variant="tertiary"
+              size="slim"
+              disabled={busy}
+              onClick={() => onAction("rename")}
+            >
+              Rename
+            </Button>
+            {!isLive && (
+              <Button
+                variant="tertiary"
+                size="slim"
+                disabled={busy || theme.processing}
+                onClick={() => onAction("publish")}
+              >
+                Publish
+              </Button>
+            )}
+            {!isLive && (
+              <Button
+                variant="tertiary"
+                size="slim"
+                tone="critical"
+                disabled={busy}
+                onClick={() => onAction("delete")}
+              >
+                Delete
+              </Button>
+            )}
+          </InlineStack>
+
+          <InlineStack gap="150" blockAlign="center" wrap>
+            <CopyButton label="Copy ID" value={numericThemeId(theme.id)} />
+            <CopyButton
+              label="Copy preview link"
+              value={previewUrl(shop, theme.id)}
+            />
+          </InlineStack>
+        </BlockStack>
       </InlineStack>
     </Box>
   );
