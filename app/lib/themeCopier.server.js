@@ -19,7 +19,7 @@
 
 import prisma from "../db.server";
 import { unauthenticated } from "../shopify.server";
-import { adminGraphql } from "./adminGraphql.server";
+import { adminGraphql, sleep } from "./adminGraphql.server";
 
 // themeFilesUpsert takes at most 50 files per call.
 const UPSERT_BATCH_SIZE = 25;
@@ -638,6 +638,31 @@ const FILE_LOOKUP_QUERY = `#graphql
   }
 `;
 
+// Read back what a created file actually ended up being called. Shopify makes
+// filenames unique per store: if "hero.jpg" is already taken and it can't
+// replace it, the upload lands as "hero_<uuid>.jpg". The templates reference the
+// file BY NAME, so a silent rename would leave every reference to it broken.
+// Files are processed asynchronously, so the real name only appears once the
+// file reaches READY.
+const FILE_STATUS_QUERY = `#graphql
+  query CopierFileStatus($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      ... on MediaImage {
+        id
+        fileStatus
+        image {
+          url
+        }
+      }
+      ... on Video {
+        id
+        fileStatus
+        filename
+      }
+    }
+  }
+`;
+
 const FILE_CREATE_MUTATION = `#graphql
   mutation CopierFileCreate($files: [FileCreateInput!]!) {
     fileCreate(files: $files) {
@@ -671,6 +696,71 @@ const STAGED_UPLOADS_MUTATION = `#graphql
     }
   }
 `;
+
+// The filename Shopify actually gave a file, once it's finished processing.
+// Returns a Map of file GID -> { filename, ready }.
+async function resolveActualFilenames(admin, ids) {
+  const out = new Map();
+  if (ids.length === 0) return out;
+
+  // Files usually go READY within a second or two; give it a few tries rather
+  // than blocking the copy indefinitely.
+  const MAX_ATTEMPTS = 6;
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    const pending = ids.filter((id) => !out.get(id)?.ready);
+    if (pending.length === 0) break;
+    if (attempt > 0) await sleep(Math.min(500 * 2 ** (attempt - 1), 4000));
+
+    const body = await adminGraphql(admin, FILE_STATUS_QUERY, { ids: pending });
+
+    for (const node of body.data?.nodes ?? []) {
+      if (!node?.id) continue;
+      const ready = node.fileStatus === "READY";
+      let filename = node.filename ?? null;
+
+      if (!filename && node.image?.url) {
+        try {
+          filename = decodeURIComponent(
+            new URL(node.image.url).pathname.split("/").pop() ?? "",
+          );
+        } catch {
+          filename = null;
+        }
+      }
+
+      out.set(node.id, { filename, ready });
+    }
+  }
+
+  return out;
+}
+
+// Point the templates at the filenames the destination store actually used.
+// Returns a NEW array - `sourceFiles` is shared across every destination, so it
+// must never be mutated here; two stores can rename the same image differently.
+export function applyMediaRenames(files, renames) {
+  if (!renames || renames.size === 0) return files;
+
+  return files.map((file) => ({
+    ...file,
+    content: file.content.replace(MEDIA_REF, (match, scheme, raw) => {
+      let decoded = raw;
+      try {
+        decoded = decodeURIComponent(raw);
+      } catch {
+        // Keep the raw token; a malformed escape still identifies the file.
+      }
+      const kind = scheme === "shop_videos" ? "VIDEO" : "IMAGE";
+      const renamed = renames.get(`${kind}:${decoded}`);
+      if (!renamed) return match;
+      // Re-encode the way Shopify writes these references (spaces as %20),
+      // keeping any path separators intact.
+      const encoded = encodeURIComponent(renamed).replace(/%2F/g, "/");
+      return `shopify://${scheme}/${encoded}`;
+    }),
+  }));
+}
 
 // Every `shopify://shop_images/...` and `shopify://shop_videos/...` reference in
 // these templates, as [{ kind: "IMAGE" | "VIDEO", filename }].
@@ -905,16 +995,35 @@ export async function copyMedia({
         for (const { filename, kind } of batch) {
           results.push({ filename, kind, status: "FAILED", error: message });
         }
-      } else {
-        for (const { filename, kind, replacing } of batch) {
-          results.push({
-            filename,
-            kind,
-            status: replacing ? "OVERWRITTEN" : "COPIED",
-            error: null,
-          });
-        }
+        continue;
       }
+
+      // fileCreate returns the files in the order they were sent, so the Nth id
+      // belongs to the Nth request. Read back what each one is actually called:
+      // if the name was taken and Shopify couldn't replace it, the file landed
+      // with a uniquifying suffix and the templates must follow it there.
+      const created = body.data?.fileCreate?.files ?? [];
+      const ids = created.map((f) => f.id).filter(Boolean);
+      const actual = await resolveActualFilenames(targetAdmin, ids);
+
+      batch.forEach(({ filename, kind, replacing }, index) => {
+        const id = created[index]?.id ?? null;
+        const resolved = id ? actual.get(id) : null;
+        const actualFilename = resolved?.filename ?? null;
+        const renamed = Boolean(actualFilename && actualFilename !== filename);
+
+        results.push({
+          filename,
+          kind,
+          status: replacing ? "OVERWRITTEN" : "COPIED",
+          error: null,
+          // Set only when the destination store gave the file a different name.
+          actualFilename: renamed ? actualFilename : null,
+          // Shopify hadn't finished processing in time, so we couldn't confirm
+          // the name. Reported rather than assumed correct.
+          unverified: !resolved?.ready,
+        });
+      });
     } catch (err) {
       const message = err?.message ?? String(err);
       for (const { filename, kind } of batch) {
@@ -1026,8 +1135,10 @@ export async function copyToTarget({
       content: previousContents.get(f.filename) ?? null,
     }));
 
-    // Media first: a template that lands before its images renders broken for
-    // however long the gap is, and on a live theme that gap is customer-visible.
+    // Media first, templates second - and not just to avoid a window where the
+    // page renders without its images. The destination store decides the final
+    // filenames, and a template references media BY NAME, so the templates can
+    // only be written once we know what those names turned out to be.
     const media = copyMediaEnabled
       ? await copyMedia({
           sourceAdmin,
@@ -1037,12 +1148,22 @@ export async function copyToTarget({
         })
       : [];
 
+    // Anything the destination renamed (e.g. "hero.jpg" -> "hero_a1b2c3.jpg"
+    // because that name was taken) is rewritten into this target's copy of the
+    // templates, so the references resolve instead of rendering as broken media.
+    const renames = new Map(
+      media
+        .filter((m) => m.actualFilename)
+        .map((m) => [`${m.kind}:${m.filename}`, m.actualFilename]),
+    );
+    const filesToWrite = applyMediaRenames(sourceFiles, renames);
+
     const results = new Map(
       sourceFiles.map((f) => [f.filename, { filename: f.filename, status: "PENDING", error: null }]),
     );
 
-    for (let i = 0; i < sourceFiles.length; i += UPSERT_BATCH_SIZE) {
-      const batch = sourceFiles.slice(i, i + UPSERT_BATCH_SIZE);
+    for (let i = 0; i < filesToWrite.length; i += UPSERT_BATCH_SIZE) {
+      const batch = filesToWrite.slice(i, i + UPSERT_BATCH_SIZE);
       const body = await adminGraphql(targetAdmin, UPSERT_MUTATION, {
         themeId: targetThemeId,
         files: batch.map((f) => ({
@@ -1100,6 +1221,11 @@ export async function copyToTarget({
       status,
       files,
       media,
+      // [{ kind, from, to }] - reported so it's visible that the destination
+      // store renamed a file and the templates were pointed at the new name.
+      mediaRenames: media
+        .filter((m) => m.actualFilename)
+        .map((m) => ({ kind: m.kind, from: m.filename, to: m.actualFilename })),
       previous,
       error: null,
     };
@@ -1119,6 +1245,7 @@ export async function copyToTarget({
         error: message,
       })),
       media: [],
+      mediaRenames: [],
       previous: [],
       error: message,
     };

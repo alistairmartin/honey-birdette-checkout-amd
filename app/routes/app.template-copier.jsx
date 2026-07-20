@@ -1848,6 +1848,33 @@ function ResultsBanner({ results }) {
                     {`Images and videos: ${mediaCopied.length} copied, ${media.length - mediaCopied.length - mediaFailed.length} already present`}
                     {mediaFailed.length ? `, ${mediaFailed.length} failed` : ""}
                   </Text>
+
+                  {/* The destination store renamed a file to keep it unique, so
+                      the templates were rewritten to point at the new name. */}
+                  {r.mediaRenames?.length > 0 && (
+                    <Box paddingBlockStart="100">
+                      <Text as="p" variant="bodySm">
+                        {`${r.mediaRenames.length} file${r.mediaRenames.length === 1 ? " was" : "s were"} renamed by ${r.targetShop} to keep filenames unique. The copied templates were updated to use the new names:`}
+                      </Text>
+                      <List type="bullet">
+                        {r.mediaRenames.map((m) => (
+                          <List.Item key={`${m.kind}:${m.from}`}>
+                            <Text as="span" variant="bodySm">
+                              {`${m.from} -> ${m.to}`}
+                            </Text>
+                          </List.Item>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
+
+                  {media.some((m) => m.unverified) && (
+                    <Box paddingBlockStart="100">
+                      <Text as="p" variant="bodySm" tone="caution">
+                        {`${media.filter((m) => m.unverified).length} file(s) were still processing, so their final filenames couldn't be confirmed. If an image renders broken, re-run the copy.`}
+                      </Text>
+                    </Box>
+                  )}
                   {mediaFailed.length > 0 && (
                     <List type="bullet">
                       {mediaFailed.map((i) => (
