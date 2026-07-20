@@ -17,6 +17,16 @@ const shopify = shopifyApp({
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
+  // Online sessions carry `onlineAccessInfo.associated_user` - the acting staff
+  // member's name and email - which is what lets the template copier's history
+  // say who ran a copy instead of just their numeric ID. The alternative,
+  // Admin API's staffMember query, needs the Plus-gated `read_users` scope.
+  //
+  // This does NOT replace the offline sessions: token exchange mints and stores
+  // an offline session first and an online one in addition, so the
+  // `unauthenticated.admin(shop)` calls (checkout API routes, the Kibo sweep,
+  // cross-store template copies) keep working off the offline token as before.
+  useOnlineTokens: true,
   distribution: AppDistribution.AppStore,
   restResources,
   webhooks: {

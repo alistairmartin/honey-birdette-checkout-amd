@@ -165,15 +165,40 @@ export async function getShopInfo(admin, shop) {
   };
 }
 
-// Who ran this copy. The acting staff member's user ID comes from the session
-// token's `sub` claim (see the api.template-copy route) - that's the one piece
-// of "who" Shopify always gives an embedded app, even on an offline session.
-// The ID alone isn't much use for "go ask them", so we turn it into a name and
-// email via the staffMember query. That query needs no extra scope for most
-// stores, but if it's ever refused we fall back to a labelled ID rather than
-// losing the attribution - the whole point is to know who to ask after a bad
-// copy, and an ID still identifies them in the admin.
-export async function resolveActor(admin, userId) {
+// Who ran this copy, as "Name <email>", for the history's "by ..." line - the
+// point being to know who to ask when a template lands wrong.
+//
+// Three sources, best first:
+//
+//   1. The online session's `associated_user`. Name and email, no extra scope,
+//      already in the session row. This is why the app sets `useOnlineTokens`
+//      (see app/shopify.server.js).
+//   2. The staffMember query, keyed off the session token's `sub` claim. Only
+//      reachable with the `read_users` scope, which is Plus-gated and NOT in
+//      this app's scopes - so in practice this is a no-op that will start
+//      working if that scope is ever added.
+//   3. The bare user ID. Not much use for "go ask them", but it still
+//      identifies them in the admin, which beats losing attribution entirely.
+export async function resolveActor(admin, userId, session = null) {
+  const user = session?.onlineAccessInfo?.associated_user;
+  if (user) {
+    // The Prisma session adapter stringifies these columns unconditionally, so
+    // an empty one arrives as the literal "null" rather than null. Without this
+    // the history would read "Camille null <null>".
+    const field = (value) => {
+      const text = String(value ?? "").trim();
+      return text && text !== "null" && text !== "undefined" ? text : "";
+    };
+
+    const name = [field(user.first_name), field(user.last_name)]
+      .filter(Boolean)
+      .join(" ");
+    const email = field(user.email);
+    const owner = user.account_owner ? " (store owner)" : "";
+    if (name && email) return `${name} <${email}>${owner}`;
+    if (name || email) return `${name || email}${owner}`;
+  }
+
   if (!userId) return null;
 
   try {
@@ -197,8 +222,12 @@ export async function resolveActor(admin, userId) {
       if (staff.name && staff.email) return `${staff.name} <${staff.email}>${owner}`;
       return `${staff.name || staff.email}${owner}`;
     }
-  } catch {
-    // Fall through to the ID.
+  } catch (err) {
+    // Logged rather than swallowed: this failing silently is exactly why the
+    // history showed a bare ID for so long without anyone knowing the reason.
+    console.warn(
+      `[themeCopier] Couldn't resolve staff member ${userId}: ${err?.message ?? err}`,
+    );
   }
 
   return `Staff user ${userId}`;

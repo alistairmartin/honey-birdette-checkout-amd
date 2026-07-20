@@ -82,10 +82,11 @@ export const action = async ({ request }) => {
 
     const sourceFiles = await readFiles(sourceAdmin, sourceThemeId, filenames);
 
-    // The acting staff member, resolved from the session token's `sub`. Recorded
-    // on the copy so the history says who to ask if a template ends up wrong.
-    // Always resolved on the embedded admin - that's where the user is logged in.
-    const copiedBy = await resolveActor(admin, sessionToken?.sub);
+    // The acting staff member, from the online session's associated_user (with
+    // the session token's `sub` as a fallback). Recorded on the copy so the
+    // history says who to ask if a template ends up wrong. Always resolved on
+    // the embedded admin - that's where the user is logged in.
+    const copiedBy = await resolveActor(admin, sessionToken?.sub, session);
 
     // copyToTarget resolves rather than throws, so a dead store reports its own
     // failure in the result instead of 500ing this request.
