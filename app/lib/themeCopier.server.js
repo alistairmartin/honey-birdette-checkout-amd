@@ -391,18 +391,111 @@ export async function readFiles(admin, themeId, filenames) {
 // `sections` map and the nested `blocks` of each section can name a type; only
 // section types resolve to a sections/<type>.liquid file, so blocks are ignored.
 export function sectionTypesIn(content) {
+  return templateDependencies(content).sectionTypes;
+}
+
+// What a JSON template needs to exist in the theme alongside it.
+//
+// A section's `type` resolves to sections/<type>.liquid. A *theme block's*
+// `type` resolves to blocks/<type>.liquid, and blocks nest arbitrarily deep -
+// which is exactly what bit us: a template referencing an AI-generated block was
+// accepted by our old check (it only read the top-level sections map) and then
+// rejected outright by Shopify with "The given theme block type must be defined
+// in the theme blocks folder".
+//
+// Note a nested `type` can also be a *local* block declared in the section's own
+// schema (e.g. "text"), which is not a file. We don't try to tell them apart
+// here - the caller resolves that by checking which types actually exist as
+// files in the source theme.
+export function templateDependencies(content) {
   let parsed;
   try {
     parsed = JSON.parse(content);
   } catch {
-    return []; // .liquid template, or malformed JSON - nothing to check.
+    return { sectionTypes: [], blockTypes: [] }; // .liquid template, or not JSON.
   }
 
-  const types = new Set();
+  const sectionTypes = new Set();
+  const blockTypes = new Set();
+
+  const walkBlocks = (blocks, depth = 0) => {
+    // Templates are authored data; guard against a pathological nesting depth.
+    if (!blocks || depth > 20) return;
+    for (const block of Object.values(blocks)) {
+      if (block?.type) blockTypes.add(block.type);
+      if (block?.blocks) walkBlocks(block.blocks, depth + 1);
+    }
+  };
+
   for (const section of Object.values(parsed?.sections ?? {})) {
-    if (section?.type) types.add(section.type);
+    if (section?.type) sectionTypes.add(section.type);
+    walkBlocks(section?.blocks);
   }
-  return [...types];
+
+  return { sectionTypes: [...sectionTypes], blockTypes: [...blockTypes] };
+}
+
+// Which of these exact filenames exist in a theme.
+async function themeFilesPresent(admin, themeId, filenames) {
+  const present = new Set();
+
+  for (let i = 0; i < filenames.length; i += 50) {
+    const chunk = filenames.slice(i, i + 50);
+    const body = await adminGraphql(admin, FILE_LIST_QUERY, {
+      themeId,
+      patterns: chunk,
+      after: null,
+    });
+    for (const node of body.data?.theme?.files?.nodes ?? []) {
+      present.add(node.filename);
+    }
+  }
+
+  return present;
+}
+
+// Work out which section/block files the chosen templates depend on, and which
+// of those the destination theme is missing.
+//
+// A type only counts as a real dependency if it exists as a file in the SOURCE
+// theme - that's what separates a theme block (a file we can copy) from a local
+// block declared inside a section's schema (not a file, nothing to copy).
+export async function planDependencies({
+  sourceAdmin,
+  sourceThemeId,
+  targetAdmin,
+  targetThemeId,
+  files,
+}) {
+  const sectionTypes = new Set();
+  const blockTypes = new Set();
+  for (const file of files) {
+    const deps = templateDependencies(file.content);
+    deps.sectionTypes.forEach((t) => sectionTypes.add(t));
+    deps.blockTypes.forEach((t) => blockTypes.add(t));
+  }
+
+  const candidates = [
+    ...[...sectionTypes].map((t) => `sections/${t}.liquid`),
+    ...[...blockTypes].map((t) => `blocks/${t}.liquid`),
+  ];
+  if (candidates.length === 0) {
+    return { toCopy: [], alreadyPresent: [], unresolved: [] };
+  }
+
+  const [onSource, onTarget] = await Promise.all([
+    themeFilesPresent(sourceAdmin, sourceThemeId, candidates),
+    themeFilesPresent(targetAdmin, targetThemeId, candidates),
+  ]);
+
+  return {
+    // Real files the destination hasn't got - these are what break the upsert.
+    toCopy: candidates.filter((f) => onSource.has(f) && !onTarget.has(f)),
+    alreadyPresent: candidates.filter((f) => onTarget.has(f)),
+    // Referenced by the template but not a file in either theme. Usually a local
+    // block type (fine); occasionally a genuinely dangling reference.
+    unresolved: candidates.filter((f) => !onSource.has(f) && !onTarget.has(f)),
+  };
 }
 
 // Which sections do the chosen templates need that the destination theme doesn't
@@ -905,12 +998,18 @@ export async function copyMedia({
   targetAdmin,
   refs,
   overwriteExisting = false,
+  onProgress = () => {},
 }) {
   const results = [];
   const toCreate = [];
 
+  let checked = 0;
   for (const ref of refs) {
     const { kind, filename } = ref;
+    checked += 1;
+    onProgress(
+      `Checking ${kind === "VIDEO" ? "video" : "image"} ${checked}/${refs.length}: ${filename}`,
+    );
     try {
       const existing = await findMedia(targetAdmin, ref);
       if (existing && !overwriteExisting) {
@@ -1038,30 +1137,62 @@ export async function copyMedia({
 // Everything the confirm screen needs about one destination: what breaks
 // (missing sections), what changes (per-file diffs), and which referenced images
 // and videos the destination store is missing.
-export async function reviewTarget({ targetShop, targetThemeId, sourceFiles }) {
+export async function reviewTarget({
+  targetShop,
+  targetThemeId,
+  sourceFiles,
+  sourceAdmin,
+  sourceThemeId,
+}) {
   const admin = await adminFor(targetShop);
   const refs = mediaRefsIn(sourceFiles);
 
-  const [targetContents, missingSections, media] = await Promise.all([
+  const [targetContents, media, dependencies] = await Promise.all([
     readFilesIfPresent(
       admin,
       targetThemeId,
       sourceFiles.map((f) => f.filename),
     ),
-    preflightMissingSections(admin, targetThemeId, sourceFiles),
     mediaStatusOnTarget(admin, refs),
+    sourceAdmin && sourceThemeId
+      ? planDependencies({
+          sourceAdmin,
+          sourceThemeId,
+          targetAdmin: admin,
+          targetThemeId,
+          files: sourceFiles,
+        })
+      : Promise.resolve({ toCopy: [], alreadyPresent: [], unresolved: [] }),
   ]);
+
+  // Media the template points at that isn't in the SOURCE store's Files. The
+  // reference is already broken on the source theme, so copying won't make it
+  // worse - but it's worth knowing before you copy rather than after.
+  const missingOnSource = [];
+  if (sourceAdmin) {
+    for (const ref of refs) {
+      try {
+        if (!(await findMedia(sourceAdmin, ref))) missingOnSource.push(ref);
+      } catch {
+        // A lookup failure isn't proof it's missing; stay quiet.
+      }
+    }
+  }
 
   const files = sourceFiles.map((f) =>
     diffFile(f.filename, f.content, targetContents.get(f.filename)),
   );
 
   return {
-    missingSections,
+    // Section/block files that will be copied so the templates are accepted.
+    dependenciesToCopy: dependencies.toCopy,
+    // Referenced types that are files nowhere - usually local block types.
+    dependenciesUnresolved: dependencies.unresolved,
     files,
     mediaReferenced: refs,
     mediaMissing: media.missing,
     mediaPresent: media.present,
+    mediaMissingOnSource: missingOnSource,
     changedCount: files.filter((f) => f.status === "CHANGED").length,
     newCount: files.filter((f) => f.status === "NEW").length,
     identicalCount: files.filter((f) => f.status === "IDENTICAL").length,
@@ -1087,6 +1218,9 @@ export async function copyToTarget({
   targetThemeId,
   copyMediaEnabled = true,
   overwriteExistingMedia = false,
+  // Section/theme-block files the templates need. On by default: without them
+  // Shopify rejects the template outright, so a copy without them mostly fails.
+  copyDependencies = true,
   copiedBy,
 }) {
   const base = {
@@ -1158,6 +1292,55 @@ export async function copyToTarget({
     );
     const filesToWrite = applyMediaRenames(sourceFiles, renames);
 
+    // Section and theme-block files the templates depend on. Shopify REJECTS a
+    // template that names a block type with no blocks/<type>.liquid behind it,
+    // so these have to land before the templates do. Only files the destination
+    // is missing are copied - existing shared code is never overwritten.
+    const dependencies = [];
+    if (copyDependencies) {
+      const plan = await planDependencies({
+        sourceAdmin,
+        sourceThemeId: sourceTheme.id,
+        targetAdmin,
+        targetThemeId,
+        files: sourceFiles,
+      });
+
+      if (plan.toCopy.length > 0) {
+        const depFiles = await readFiles(
+          sourceAdmin,
+          sourceTheme.id,
+          plan.toCopy,
+        );
+
+        for (let i = 0; i < depFiles.length; i += UPSERT_BATCH_SIZE) {
+          const batch = depFiles.slice(i, i + UPSERT_BATCH_SIZE);
+          const body = await adminGraphql(targetAdmin, UPSERT_MUTATION, {
+            themeId: targetThemeId,
+            files: batch.map((f) => ({
+              filename: f.filename,
+              body: { type: "TEXT", value: f.content },
+            })),
+          });
+          const payload = body.data?.themeFilesUpsert;
+          const failed = new Map();
+          for (const err of payload?.userErrors ?? []) {
+            const names = err.filename
+              ? [err.filename]
+              : batch.map((f) => f.filename);
+            for (const n of names) failed.set(n, err.message);
+          }
+          for (const f of batch) {
+            dependencies.push({
+              filename: f.filename,
+              status: failed.has(f.filename) ? "FAILED" : "COPIED",
+              error: failed.get(f.filename) ?? null,
+            });
+          }
+        }
+      }
+    }
+
     const results = new Map(
       sourceFiles.map((f) => [f.filename, { filename: f.filename, status: "PENDING", error: null }]),
     );
@@ -1221,6 +1404,8 @@ export async function copyToTarget({
       status,
       files,
       media,
+      // Section/block files copied so the templates would be accepted.
+      dependencies,
       // [{ kind, from, to }] - reported so it's visible that the destination
       // store renamed a file and the templates were pointed at the new name.
       mediaRenames: media
@@ -1245,6 +1430,7 @@ export async function copyToTarget({
         error: message,
       })),
       media: [],
+      dependencies: [],
       mediaRenames: [],
       previous: [],
       error: message,

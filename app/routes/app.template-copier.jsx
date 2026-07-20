@@ -191,16 +191,20 @@ export const action = async ({ request }) => {
               targetShop: target.shop,
               targetThemeId: target.themeId,
               sourceFiles,
+              sourceAdmin,
+              sourceThemeId,
             });
             return { ...target, ...review };
           } catch (err) {
             return {
               ...target,
-              missingSections: [],
+              dependenciesToCopy: [],
+              dependenciesUnresolved: [],
               files: [],
               mediaReferenced: [],
               mediaMissing: [],
               mediaPresent: [],
+              mediaMissingOnSource: [],
               error: err?.message ?? String(err),
             };
           }
@@ -672,22 +676,14 @@ export default function TemplateCopierPage() {
         : [...prev, filename],
     );
 
+  // Ticking a store only opens its theme picker - it never picks a theme for
+  // you. Defaulting to the live theme would mean one stray click could target a
+  // production storefront, so the destination theme is always a deliberate
+  // choice.
   const toggleShop = (shop) => {
-    const enabling = !enabledShops.includes(shop);
     setEnabledShops((prev) =>
-      enabling ? [...prev, shop] : prev.filter((s) => s !== shop),
+      prev.includes(shop) ? prev.filter((s) => s !== shop) : [...prev, shop],
     );
-    // Default a newly-enabled OTHER store to its live theme - the common case.
-    // The source store gets no default: copying onto the very theme you're
-    // copying from is never what's meant, so you pick the target theme yourself.
-    if (!enabling) return;
-    setTargetThemes((prev) => {
-      if (prev[shop]?.length) return prev;
-      const dest = destinations.find((d) => d.shop === shop);
-      if (dest?.isSource) return prev;
-      const main = dest?.themes.find((t) => t.role === "MAIN") ?? dest?.themes[0];
-      return main ? { ...prev, [shop]: [main.id] } : prev;
-    });
   };
 
   // Add or remove one theme within a store's destination set.
@@ -734,6 +730,16 @@ export default function TemplateCopierPage() {
   const destinationFlags = [
     ...new Set(destinations.map((d) => d.flag).filter(Boolean)),
   ].join(" or ");
+
+  // "🇬🇧 🇪🇺 🇺🇸" - the stores actually selected, for wording the media choices
+  // in terms of where the files land rather than "the destination store".
+  const targetFlagList = [
+    ...new Set(
+      targets
+        .map((t) => destinations.find((d) => d.shop === t.shop)?.flag)
+        .filter(Boolean),
+    ),
+  ].join(" ");
 
   const liveTargets = targets.filter((t) => t.role === "MAIN");
   const canCopy = selected.length > 0 && targets.length > 0 && sourceThemeId;
@@ -887,8 +893,14 @@ export default function TemplateCopierPage() {
   // A destination we couldn't even inspect. The copy will almost certainly fail
   // for that store, so say so before the button is pressed, not after.
   const reviewErrors = review?.filter((c) => c.error) ?? [];
-  const missingSectionsFound =
-    review?.some((c) => c.missingSections?.length > 0) ?? false;
+  // Section/theme-block files the destination themes are missing. These are
+  // copied automatically - without them Shopify rejects the template outright.
+  const dependenciesFound =
+    review?.some((c) => c.dependenciesToCopy?.length > 0) ?? false;
+  // Media the template references that isn't in the source store's Files.
+  const brokenSourceMedia = dedupeMedia(
+    (review ?? []).flatMap((c) => c.mediaMissingOnSource ?? []),
+  );
 
   // Images and videos referenced by the selected templates, and how they land on
   // each destination: some stores may already have a file of that name, some not.
@@ -1349,25 +1361,36 @@ export default function TemplateCopierPage() {
                   <TargetDiff key={c.key ?? c.shop} check={c} targets={targets} />
                 ))}
 
-              {missingSectionsFound && (
-                <Banner tone="warning" title="Some sections are missing">
+              {dependenciesFound && (
+                <Banner tone="info" title="Section and block files will be copied too">
                   <BlockStack gap="200">
                     <Text as="p" variant="bodySm">
-                      These templates reference sections the destination theme
-                      doesn't have. Only templates are copied, not section code, so
-                      those sections render as nothing until the section files exist
-                      on the destination theme.
+                      These templates use sections and blocks that the destination
+                      theme doesn't have yet. Shopify won't accept a template whose
+                      blocks are missing, so those files are copied first. Files
+                      the destination already has are left exactly as they are.
                     </Text>
                     {(review ?? [])
-                      .filter((c) => c.missingSections?.length > 0)
+                      .filter((c) => c.dependenciesToCopy?.length > 0)
                       .map((c) => (
                         <Text as="p" variant="bodySm" key={c.key ?? c.shop}>
                           <Text as="span" fontWeight="semibold">
                             {`${shopDomainLabel(c.shop)}${c.themeName ? ` (${c.themeName})` : ""}`}
                           </Text>
-                          {`: ${c.missingSections.join(", ")}`}
+                          {`: ${c.dependenciesToCopy.join(", ")}`}
                         </Text>
                       ))}
+                  </BlockStack>
+                </Banner>
+              )}
+
+              {brokenSourceMedia.length > 0 && (
+                <Banner tone="warning" title="Some images are already missing on the source store">
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodySm">
+                      {`These templates point at ${mediaNoun(brokenSourceMedia)} that ${brokenSourceMedia.length === 1 ? "isn't" : "aren't"} in ${shopLabel(source)}'s Files any more, so ${brokenSourceMedia.length === 1 ? "it's" : "they're"} already broken there. Copying won't make this worse, but the same gap will exist on the destination.`}
+                    </Text>
+                    <MediaList refs={brokenSourceMedia} maxHeight="120px" />
                   </BlockStack>
                 </Banner>
               )}
@@ -1377,15 +1400,15 @@ export default function TemplateCopierPage() {
           <Modal.Section>
             <BlockStack gap="400">
               <Text as="p">
-                {`These templates reference ${mediaNoun(mediaReferenced)} from this store's Files. A template that lands without its media renders broken, so the files are copied across too, under the same filenames the templates point at.`}
+                {`These templates use ${mediaNoun(mediaReferenced)} from ${shopLabel(source)}'s Files. If the images aren't on the other store too, the copied page shows blank spaces where they should be - so they're copied across using the same filenames.`}
               </Text>
 
               <Checkbox
-                label="Copy referenced images and videos into the destination store's Files"
+                label={`Copy these images and videos to ${targetFlagList || "the destination stores"}`}
                 helpText={
                   mediaToCreate.length > 0
-                    ? `${mediaNoun(mediaToCreate)} missing on at least one destination store.`
-                    : "Every referenced file already exists on the destination stores."
+                    ? `${mediaNoun(mediaToCreate)} not there yet.`
+                    : "Every file is already on those stores."
                 }
                 checked={copyMedia}
                 onChange={setCopyMedia}
@@ -1403,23 +1426,23 @@ export default function TemplateCopierPage() {
                 >
                   <BlockStack gap="300">
                     <Text as="h3" variant="headingSm">
-                      {`${mediaNoun(mediaConflicts)} already exist on the destination store with the same filename`}
+                      {`${mediaNoun(mediaConflicts)} already there with the same filename`}
                     </Text>
                     <ChoiceList
                       title="What should happen to those?"
                       titleHidden
                       choices={[
                         {
-                          label: "Keep the destination store's existing file",
+                          label: `Keep the file that's already on ${targetFlagList || "the destination stores"}`,
                           value: "keep",
                           helpText:
-                            "The template still resolves, because the filename matches. Other pages using that file are untouched.",
+                            "Nothing is uploaded. The copied page uses the image already on that store, and nothing else on that store changes.",
                         },
                         {
-                          label: "Overwrite with the file from this store",
+                          label: `Replace it with the file from ${source.flag || shopLabel(source)}`,
                           value: "overwrite",
                           helpText:
-                            "Replaces the file on the destination store. Every other page there that uses it changes too, and this can't be reverted.",
+                            "Uploads over the top of the existing image. Every other page on that store using this image changes too, and this can't be undone.",
                         },
                       ]}
                       selected={[overwriteMedia ? "overwrite" : "keep"]}
@@ -1435,14 +1458,14 @@ export default function TemplateCopierPage() {
               {copyMedia && mediaToCreate.length > 0 && (
                 <BlockStack gap="200">
                   <Text as="h3" variant="headingSm">
-                    {`${mediaNoun(mediaToCreate)} will be uploaded to the destination store`}
+                    {`${mediaNoun(mediaToCreate)} will be uploaded`}
                   </Text>
                   <MediaList refs={mediaToCreate} maxHeight="160px" />
                   {mediaToCreate.some((r) => r.kind === "VIDEO") && (
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Videos are downloaded and re-uploaded (Shopify won't ingest a
-                      video from a URL), so a copy with videos takes longer. Files
-                      over 250 MB are skipped and reported.
+                      Videos have to be downloaded and re-uploaded one at a time, so a
+                      copy with videos takes longer. Anything over 250 MB is
+                      skipped and reported.
                     </Text>
                   )}
                 </BlockStack>
@@ -1451,7 +1474,7 @@ export default function TemplateCopierPage() {
               {!copyMedia && mediaToCreate.length > 0 && (
                 <Banner tone="warning" title="Media will be missing">
                   <Text as="p" variant="bodySm">
-                    {`${mediaNoun(mediaToCreate)} referenced by these templates ${mediaToCreate.length === 1 ? "isn't" : "aren't"} on the destination store. Those render as broken until someone uploads them by hand under the same filename.`}
+                    {`${mediaNoun(mediaToCreate)} used by these templates ${mediaToCreate.length === 1 ? "isn't" : "aren't"} on the other store. Those spots will be blank until someone uploads them by hand with the same filename.`}
                   </Text>
                 </Banner>
               )}
