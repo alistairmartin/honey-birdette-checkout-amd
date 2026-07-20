@@ -95,8 +95,14 @@ export const action = async ({ request }) => {
 
 const storeHandle = (shop) => shop.replace(/\.myshopify\.com$/, "");
 
+// The visual theme editor (Shopify calls this "Customize").
 const editorUrl = (shop, themeGid) =>
   `https://admin.shopify.com/store/${storeHandle(shop)}/themes/${numericThemeId(themeGid)}/editor`;
+
+// The code editor is the same path without /editor - Shopify's own shortcut for
+// it is /admin/themes/current, i.e. /themes/<id> with no suffix.
+const codeEditorUrl = (shop, themeGid) =>
+  `https://admin.shopify.com/store/${storeHandle(shop)}/themes/${numericThemeId(themeGid)}`;
 
 // The storefront rendered with this theme, without publishing it.
 const previewUrl = (shop, themeGid) =>
@@ -524,8 +530,13 @@ function ThemeRow({ shop, theme, checked, onToggle, onAction, busy }) {
         </InlineStack>
 
         <InlineStack gap="300" blockAlign="center" wrap>
+          {/* Shopify's own naming: "Customize" is the visual editor, "Edit code"
+              is the code editor. */}
           <Link url={editorUrl(shop, theme.id)} target="_blank">
-            Edit
+            Customize
+          </Link>
+          <Link url={codeEditorUrl(shop, theme.id)} target="_blank">
+            Edit code
           </Link>
           <Link url={previewUrl(shop, theme.id)} target="_blank">
             Preview
