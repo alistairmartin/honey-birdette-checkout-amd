@@ -24,7 +24,6 @@ import {
   Link,
   Modal,
   Page,
-  Scrollable,
   Text,
   TextField,
 } from "@shopify/polaris";
@@ -109,6 +108,49 @@ const roleBadge = (role) => {
   return <Badge>Unpublished</Badge>;
 };
 
+// Clipboard writes can be refused inside the admin iframe, so fall back to a
+// hidden textarea + execCommand rather than failing silently.
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const el = document.createElement("textarea");
+      el.value = text;
+      el.setAttribute("readonly", "");
+      el.style.position = "fixed";
+      el.style.opacity = "0";
+      document.body.appendChild(el);
+      el.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(el);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
+// A button that copies and briefly confirms it did, so there's feedback without
+// a toast for every click.
+function CopyButton({ label, value, disabled }) {
+  const [done, setDone] = useState(false);
+
+  const onClick = async () => {
+    if (await copyText(value)) {
+      setDone(true);
+      setTimeout(() => setDone(false), 1500);
+    }
+  };
+
+  return (
+    <Button variant="plain" disabled={disabled} onClick={onClick}>
+      {done ? "Copied" : label}
+    </Button>
+  );
+}
+
 const shopLabel = (store) =>
   `${store.name}${store.flag ? ` ${store.flag}` : ""}`;
 
@@ -126,6 +168,9 @@ const editedOn = (iso) =>
       }).format(new Date(iso))
     : "";
 
+// How many themes each store shows before you ask for more.
+const PAGE_SIZE = 6;
+
 export default function ThemeDevPage() {
   const { stores: initialStores } = useLoaderData();
   const fetcher = useFetcher();
@@ -141,6 +186,12 @@ export default function ThemeDevPage() {
   // { shop, theme, mode: "duplicate" | "rename" | "publish" | "delete" }
   const [dialog, setDialog] = useState(null);
   const [nameDraft, setNameDraft] = useState("");
+  // Gate for the two actions that can't be undone from here. Reset every time a
+  // dialog opens, so a previous confirmation can never carry over.
+  const [confirmed, setConfirmed] = useState(false);
+  // These stores carry 100+ themes, so each store shows a page at a time.
+  // { [shop]: howManyVisible }
+  const [visibleCount, setVisibleCount] = useState({});
 
   const busy = fetcher.state !== "idle";
   const result = fetcher.data;
@@ -173,6 +224,7 @@ export default function ThemeDevPage() {
 
   const openDialog = (mode, shop, theme) => {
     setDialog({ mode, shop, theme });
+    setConfirmed(false);
     setNameDraft(
       mode === "duplicate"
         ? `${theme.name} copy`
@@ -303,10 +355,12 @@ export default function ThemeDevPage() {
         </Layout.Section>
 
         {initialStores.map((store) => {
-          const themes = (storeThemes[store.shop] ?? []).filter(matches);
-          const liveTheme = (storeThemes[store.shop] ?? []).find(
-            (t) => t.role === "MAIN",
-          );
+          const allThemes = storeThemes[store.shop] ?? [];
+          const matching = allThemes.filter(matches);
+          const shown = visibleCount[store.shop] ?? PAGE_SIZE;
+          const themes = matching.slice(0, shown);
+          const remaining = matching.length - themes.length;
+          const liveTheme = allThemes.find((t) => t.role === "MAIN");
 
           return (
             <Layout.Section key={store.shop}>
@@ -352,21 +406,65 @@ export default function ThemeDevPage() {
                   )}
 
                   {themes.length > 0 && (
-                    <Scrollable style={{ maxHeight: "420px" }}>
-                      <BlockStack gap="100">
-                        {themes.map((theme) => (
-                          <ThemeRow
-                            key={theme.id}
-                            shop={store.shop}
-                            theme={theme}
-                            checked={selected.includes(theme.id)}
-                            onToggle={() => toggleSelected(theme.id)}
-                            onAction={(mode) => openDialog(mode, store.shop, theme)}
-                            busy={busy}
-                          />
-                        ))}
-                      </BlockStack>
-                    </Scrollable>
+                    <BlockStack gap="100">
+                      {themes.map((theme) => (
+                        <ThemeRow
+                          key={theme.id}
+                          shop={store.shop}
+                          theme={theme}
+                          checked={selected.includes(theme.id)}
+                          onToggle={() => toggleSelected(theme.id)}
+                          onAction={(mode) => openDialog(mode, store.shop, theme)}
+                          busy={busy}
+                        />
+                      ))}
+                    </BlockStack>
+                  )}
+
+                  {remaining > 0 && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Button
+                        onClick={() =>
+                          setVisibleCount((prev) => ({
+                            ...prev,
+                            [store.shop]: shown + PAGE_SIZE,
+                          }))
+                        }
+                      >
+                        {`Load ${Math.min(PAGE_SIZE, remaining)} more`}
+                      </Button>
+                      <Button
+                        variant="plain"
+                        onClick={() =>
+                          setVisibleCount((prev) => ({
+                            ...prev,
+                            [store.shop]: matching.length,
+                          }))
+                        }
+                      >
+                        {`Show all ${matching.length}`}
+                      </Button>
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {`${remaining} more`}
+                      </Text>
+                    </InlineStack>
+                  )}
+
+                  {/* Collapse back down once you've expanded a long list. */}
+                  {remaining === 0 && shown > PAGE_SIZE && matching.length > PAGE_SIZE && (
+                    <InlineStack>
+                      <Button
+                        variant="plain"
+                        onClick={() =>
+                          setVisibleCount((prev) => ({
+                            ...prev,
+                            [store.shop]: PAGE_SIZE,
+                          }))
+                        }
+                      >
+                        Show fewer
+                      </Button>
+                    </InlineStack>
                   )}
                 </BlockStack>
               </Card>
@@ -379,6 +477,8 @@ export default function ThemeDevPage() {
         dialog={dialog}
         nameDraft={nameDraft}
         setNameDraft={setNameDraft}
+        confirmed={confirmed}
+        setConfirmed={setConfirmed}
         onClose={() => setDialog(null)}
         onConfirm={runIntent}
         busy={busy}
@@ -423,13 +523,18 @@ function ThemeRow({ shop, theme, checked, onToggle, onAction, busy }) {
           </BlockStack>
         </InlineStack>
 
-        <InlineStack gap="300" blockAlign="center" wrap={false}>
+        <InlineStack gap="300" blockAlign="center" wrap>
           <Link url={editorUrl(shop, theme.id)} target="_blank">
             Edit
           </Link>
           <Link url={previewUrl(shop, theme.id)} target="_blank">
             Preview
           </Link>
+          <CopyButton label="Copy ID" value={numericThemeId(theme.id)} />
+          <CopyButton
+            label="Copy preview link"
+            value={previewUrl(shop, theme.id)}
+          />
           <Button
             variant="plain"
             disabled={busy}
@@ -468,28 +573,41 @@ function ThemeRow({ shop, theme, checked, onToggle, onAction, busy }) {
 // Duplicate and rename take a name; publish and delete just need confirming.
 // Publishing and deleting are the two that can hurt, so they say what they do
 // in plain terms rather than "Are you sure?".
-function ThemeDialog({ dialog, nameDraft, setNameDraft, onClose, onConfirm, busy }) {
+function ThemeDialog({
+  dialog,
+  nameDraft,
+  setNameDraft,
+  confirmed,
+  setConfirmed,
+  onClose,
+  onConfirm,
+  busy,
+}) {
   if (!dialog) return null;
   const { mode, shop, theme } = dialog;
   const needsName = mode === "duplicate" || mode === "rename";
+  // Publishing changes what customers see; deleting is permanent. Both need an
+  // explicit tick before the button unlocks - a modal alone is too easy to
+  // click through.
+  const needsAcknowledgement = mode === "publish" || mode === "delete";
 
   const title =
     mode === "duplicate"
-      ? `Duplicate "${theme.name}"`
+      ? `Duplicate "${theme.name}"?`
       : mode === "rename"
         ? `Rename "${theme.name}"`
         : mode === "publish"
-          ? `Publish "${theme.name}"?`
-          : `Delete "${theme.name}"?`;
+          ? `Are you sure you want to publish "${theme.name}"?`
+          : `Are you sure you want to delete "${theme.name}"?`;
 
   const confirmLabel =
     mode === "duplicate"
-      ? "Duplicate"
+      ? "Yes, duplicate"
       : mode === "rename"
         ? "Rename"
         : mode === "publish"
-          ? "Publish to live"
-          : "Delete theme";
+          ? "Yes, publish to live"
+          : "Yes, delete theme";
 
   return (
     <Modal
@@ -500,7 +618,10 @@ function ThemeDialog({ dialog, nameDraft, setNameDraft, onClose, onConfirm, busy
         content: confirmLabel,
         destructive: mode === "publish" || mode === "delete",
         loading: busy,
-        disabled: busy || (needsName && !nameDraft.trim()),
+        disabled:
+          busy ||
+          (needsName && !nameDraft.trim()) ||
+          (needsAcknowledgement && !confirmed),
         onAction: () =>
           onConfirm(mode, shop, theme.id, needsName ? nameDraft : undefined),
       }}
@@ -528,18 +649,33 @@ function ThemeDialog({ dialog, nameDraft, setNameDraft, onClose, onConfirm, busy
 
           {mode === "publish" && (
             <Banner tone="critical" title="This changes the live storefront">
-              <Text as="p" variant="bodySm">
-                Customers on {shop} see this theme immediately. The current live
-                theme becomes unpublished - to undo, publish it back.
-              </Text>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodySm">
+                  Customers on {shop} see this theme immediately. The current live
+                  theme becomes unpublished - to undo, publish it back.
+                </Text>
+                <Checkbox
+                  label="I understand this goes live straight away"
+                  checked={confirmed}
+                  onChange={setConfirmed}
+                />
+              </BlockStack>
             </Banner>
           )}
 
           {mode === "delete" && (
             <Banner tone="critical" title="This can't be undone">
-              <Text as="p" variant="bodySm">
-                The theme and its files are removed from {shop} permanently.
-              </Text>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodySm">
+                  The theme and its files are removed from {shop} permanently.
+                  There is no revert.
+                </Text>
+                <Checkbox
+                  label="I understand this permanently deletes the theme"
+                  checked={confirmed}
+                  onChange={setConfirmed}
+                />
+              </BlockStack>
             </Banner>
           )}
 
