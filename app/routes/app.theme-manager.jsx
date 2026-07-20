@@ -1,4 +1,4 @@
-// Theme Dev - every store's themes in one screen, for deploy prep.
+// Theme Manager - every store's themes in one screen, for deploy prep.
 //
 // The workflow this exists for: duplicate the live theme on each store, collect
 // the new theme IDs, paste them into the deploy file, deploy. Doing that across
@@ -6,7 +6,7 @@
 // copying IDs out of URLs. Here it's one page: duplicate in place, tick the
 // themes you want, copy the IDs as a plain list.
 //
-// See app/lib/themeDev.server.js for the API side.
+// See app/lib/themeManager.server.js for the API side.
 
 import { json } from "@remix-run/node";
 import { useEffect, useMemo, useState } from "react";
@@ -26,6 +26,17 @@ import {
   Text,
   TextField,
 } from "@shopify/polaris";
+import {
+  CheckCircleIcon,
+  ClipboardIcon,
+  CodeIcon,
+  DeleteIcon,
+  DuplicateIcon,
+  LinkIcon,
+  PaintBrushFlatIcon,
+  TextBlockIcon,
+  ViewIcon,
+} from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
@@ -35,7 +46,7 @@ import {
   publishTheme,
   refreshStoreThemes,
   renameTheme,
-} from "../lib/themeDev.server";
+} from "../lib/themeManager.server";
 
 // Defined here rather than imported from the .server lib: the component uses it,
 // and Remix strips server modules out of the client bundle.
@@ -142,7 +153,7 @@ async function copyText(text) {
 
 // A button that copies and briefly confirms it did, so there's feedback without
 // a toast for every click.
-function CopyButton({ label, value, disabled }) {
+function CopyButton({ label, value, icon, disabled }) {
   const [done, setDone] = useState(false);
 
   const onClick = async () => {
@@ -154,7 +165,9 @@ function CopyButton({ label, value, disabled }) {
 
   return (
     <Button
+      variant="tertiary"
       size="slim"
+      icon={done ? CheckCircleIcon : icon}
       tone={done ? "success" : undefined}
       disabled={disabled}
       onClick={onClick}
@@ -184,7 +197,7 @@ const editedOn = (iso) =>
 // How many themes each store shows before you ask for more.
 const PAGE_SIZE = 6;
 
-export default function ThemeDevPage() {
+export default function ThemeManagerPage() {
   const { stores: initialStores } = useLoaderData();
   const fetcher = useFetcher();
 
@@ -301,7 +314,7 @@ export default function ThemeDevPage() {
 
   return (
     <Page fullWidth>
-      <TitleBar title="Theme Dev" />
+      <TitleBar title="Theme Manager" />
       <Layout>
         <Layout.Section>
           <Text as="p" variant="bodyMd" tone="subdued">
@@ -578,9 +591,11 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
             as buttons too (Polaris Button takes a url), so both rows are one
             consistent set of controls. */}
         <BlockStack gap="100" inlineAlign="end">
+          {/* Row 1 is the primary set: bordered buttons with icons. */}
           <InlineStack gap="150" blockAlign="center" wrap>
             <Button
               size="slim"
+              icon={ViewIcon}
               url={previewUrl(shop, theme.id)}
               target="_blank"
             >
@@ -589,6 +604,7 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
             {/* Shopify's own naming: "Customize" is the visual editor. */}
             <Button
               size="slim"
+              icon={PaintBrushFlatIcon}
               url={editorUrl(shop, theme.id)}
               target="_blank"
             >
@@ -596,6 +612,7 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
             </Button>
             <Button
               size="slim"
+              icon={DuplicateIcon}
               disabled={busy}
               onClick={() => onAction("duplicate")}
             >
@@ -603,6 +620,7 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
             </Button>
             <Button
               size="slim"
+              icon={TextBlockIcon}
               disabled={busy}
               onClick={() => onAction("rename")}
             >
@@ -611,6 +629,7 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
             {!isLive && (
               <Button
                 size="slim"
+                icon={CheckCircleIcon}
                 disabled={busy || theme.processing}
                 onClick={() => onAction("publish")}
               >
@@ -620,6 +639,7 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
             {!isLive && (
               <Button
                 size="slim"
+                icon={DeleteIcon}
                 tone="critical"
                 disabled={busy}
                 onClick={() => onAction("delete")}
@@ -629,17 +649,26 @@ function ThemeRow({ shop, theme, index, checked, onToggle, onAction, busy }) {
             )}
           </InlineStack>
 
+          {/* Row 2 is secondary: borderless (tertiary) so it reads as a quieter
+              set of shortcuts rather than competing with the actions above. */}
           <InlineStack gap="150" blockAlign="center" wrap>
             <Button
+              variant="tertiary"
               size="slim"
+              icon={CodeIcon}
               url={codeEditorUrl(shop, theme.id)}
               target="_blank"
             >
               Edit code
             </Button>
-            <CopyButton label="Copy ID" value={numericThemeId(theme.id)} />
+            <CopyButton
+              label="Copy ID"
+              icon={ClipboardIcon}
+              value={numericThemeId(theme.id)}
+            />
             <CopyButton
               label="Copy preview link"
+              icon={LinkIcon}
               value={previewUrl(shop, theme.id)}
             />
           </InlineStack>

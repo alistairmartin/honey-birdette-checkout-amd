@@ -24,7 +24,7 @@ export default function App() {
           Home
         </Link>
         <Link to="/app/template-copier">Template copier</Link>
-        <Link to="/app/theme-dev">Theme Dev</Link>
+        <Link to="/app/theme-manager">Theme Manager</Link>
         <Link to="/app/gift-with-purchase">Gift with purchase</Link>
         <Link to="/app/checkout-recommendations">Checkout recommendations</Link>
         <Link to="/app/lingerie-set-sync">Lingerie set sync</Link>

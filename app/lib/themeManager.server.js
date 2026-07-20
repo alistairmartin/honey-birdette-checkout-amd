@@ -1,8 +1,8 @@
-// Theme Dev - every store's themes in one view, with the operations you need
+// Theme Manager - every store's themes in one view, with the operations you need
 // when prepping a deploy: duplicate a theme (usually the live one), rename it,
 // grab its ID for the deploy file, and clean up afterwards.
 //
-// Backs app/routes/app.theme-dev.jsx. Reaches other stores the same way the
+// Backs app/routes/app.theme-manager.jsx. Reaches other stores the same way the
 // Template copier does: `unauthenticated.admin(shop)` against the offline session
 // stored for each installed store.
 //
@@ -30,7 +30,7 @@ const THEME_FIELDS = `
 `;
 
 const THEMES_QUERY = `#graphql
-  query ThemeDevThemes($after: String) {
+  query ThemeManagerThemes($after: String) {
     themes(first: 50, after: $after) {
       nodes {
         ${THEME_FIELDS}
@@ -44,7 +44,7 @@ const THEMES_QUERY = `#graphql
 `;
 
 const DUPLICATE_MUTATION = `#graphql
-  mutation ThemeDevDuplicate($id: ID!, $name: String) {
+  mutation ThemeManagerDuplicate($id: ID!, $name: String) {
     themeDuplicate(id: $id, name: $name) {
       newTheme {
         ${THEME_FIELDS}
@@ -58,7 +58,7 @@ const DUPLICATE_MUTATION = `#graphql
 `;
 
 const RENAME_MUTATION = `#graphql
-  mutation ThemeDevRename($id: ID!, $input: OnlineStoreThemeInput!) {
+  mutation ThemeManagerRename($id: ID!, $input: OnlineStoreThemeInput!) {
     themeUpdate(id: $id, input: $input) {
       theme {
         ${THEME_FIELDS}
@@ -72,7 +72,7 @@ const RENAME_MUTATION = `#graphql
 `;
 
 const PUBLISH_MUTATION = `#graphql
-  mutation ThemeDevPublish($id: ID!) {
+  mutation ThemeManagerPublish($id: ID!) {
     themePublish(id: $id) {
       theme {
         ${THEME_FIELDS}
@@ -86,7 +86,7 @@ const PUBLISH_MUTATION = `#graphql
 `;
 
 const DELETE_MUTATION = `#graphql
-  mutation ThemeDevDelete($id: ID!) {
+  mutation ThemeManagerDelete($id: ID!) {
     themeDelete(id: $id) {
       deletedThemeId
       userErrors {
