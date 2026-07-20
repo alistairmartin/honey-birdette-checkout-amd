@@ -308,8 +308,15 @@ const mediaNoun = (refs) => {
   return parts.join(" and ") || "nothing";
 };
 
+// The numeric part of a theme GID ("gid://shopify/OnlineStoreTheme/123" -> "123").
+// That's the ID shown in the theme editor URL, so it's the one worth surfacing
+// when a store carries a dozen themes with near-identical names.
+const themeNumericId = (gid) => String(gid ?? "").split("/").pop();
+
+// The ID is part of the searchable text as well as a badge, so you can paste a
+// theme ID straight from an admin URL into the picker and land on it.
 const themeLabel = (theme) =>
-  `${theme.name}${theme.role === "MAIN" ? " (live)" : ""} - edited ${editedOn(theme.updatedAt)}`;
+  `${theme.name}${theme.role === "MAIN" ? " (live)" : ""} - edited ${editedOn(theme.updatedAt)} - #${themeNumericId(theme.id)}`;
 
 // Polaris exposes no style hook on Autocomplete.TextField, so the theme field is
 // styled by class: the pointer cursor says "this is a picker, click it" rather
@@ -500,6 +507,7 @@ function MultiThemePicker({ label, themes, selectedIds, onToggle, disabled, hint
                 <Text as="span" variant="bodySm">
                   {theme.name}
                 </Text>
+                <Badge>{themeNumericId(theme.id)}</Badge>
               </InlineStack>
             </Tag>
           ))}
@@ -930,7 +938,12 @@ export default function TemplateCopierPage() {
                     {source.shop}
                   </Text>
                 </BlockStack>
-                {sourceTheme && roleBadge(sourceTheme.role)}
+                {sourceTheme && (
+                  <InlineStack gap="150" blockAlign="center">
+                    <Badge>{themeNumericId(sourceTheme.id)}</Badge>
+                    {roleBadge(sourceTheme.role)}
+                  </InlineStack>
+                )}
               </InlineStack>
 
               {/* Which store to copy FROM. Any installed store, not just the one
@@ -1435,6 +1448,7 @@ export default function TemplateCopierPage() {
                               : "not checked"}
                           </Text>
                         </Text>
+                        <Badge>{themeNumericId(t.themeId)}</Badge>
                         {t.role === "MAIN" && (
                           <Badge tone="critical">Live theme</Badge>
                         )}
@@ -1567,9 +1581,12 @@ function CopyProgress({ targets, progress, percentComplete, doneCount }) {
                 <Text as="span" variant="bodySm" fontWeight="semibold">
                   {target.name}
                 </Text>
-                <Text as="span" variant="bodySm" tone="subdued">
-                  {target.themeName}
-                </Text>
+                <InlineStack gap="150" blockAlign="center">
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {target.themeName}
+                  </Text>
+                  <Badge>{themeNumericId(target.themeId)}</Badge>
+                </InlineStack>
               </BlockStack>
             </InlineStack>
 
@@ -1654,6 +1671,7 @@ function TargetDiff({ check, targets }) {
           <Text as="span" variant="bodySm" tone="subdued">
             {target?.themeName}
           </Text>
+          {target?.themeId && <Badge>{themeNumericId(target.themeId)}</Badge>}
           {target?.role === "MAIN" && <Badge tone="critical">Live theme</Badge>}
           {/* Look at what you're about to overwrite, before you overwrite it. */}
           {target && (
@@ -1998,6 +2016,7 @@ function HistoryCard({ history, onRevert, reverting, reverts }) {
                         <Text as="span" variant="bodySm">
                           {`${t.targetShop} - ${t.targetThemeName}`}
                         </Text>
+                        <Badge>{themeNumericId(t.targetThemeId)}</Badge>
                         {t.targetThemeRole === "MAIN" && (
                           <Badge tone="critical">Live</Badge>
                         )}
