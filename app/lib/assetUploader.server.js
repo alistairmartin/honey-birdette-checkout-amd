@@ -1,14 +1,14 @@
 // Asset uploader - bulk uploads into Shopify Files (Content > Files).
 //
 // The upload happens in three hops, and the middle one deliberately skips this
-// server: Render would have to hold 30 full-size photos in memory otherwise.
+// server: Render would have to hold 50 full-size photos in memory otherwise.
 //
 //   1. stageUploads()  - ask Shopify for one signed target per file
 //   2. browser         - POSTs each file straight to that target (see the route)
 //   3. createFiles()   - hand the resulting resourceUrls back to Shopify
 //
-// Shopify then processes the files asynchronously, so pollFiles() exists to
-// turn UPLOADED into READY (or surface FAILED) once they settle.
+// Shopify processes the files asynchronously after step 3, so they appear in
+// the admin a moment after the page reports success.
 
 export { buildFilename } from "./assetNaming";
 
@@ -54,21 +54,6 @@ const FILE_CREATE = `#graphql
         }
       }
       userErrors { field message }
-    }
-  }
-`;
-
-const FILES_STATUS = `#graphql
-  query AssetUploaderStatus($ids: [ID!]!) {
-    nodes(ids: $ids) {
-      ... on GenericFile { id fileStatus url fileErrors { code details } }
-      ... on MediaImage {
-        id
-        fileStatus
-        fileErrors { code details }
-        image { url width height }
-      }
-      ... on Video { id fileStatus fileErrors { code details } }
     }
   }
 `;
@@ -128,12 +113,4 @@ export async function createFiles(admin, files) {
   const result = body?.data?.fileCreate;
   throwOnUserErrors(result?.userErrors, "fileCreate");
   return result?.files ?? [];
-}
-
-/** Re-reads file status after Shopify's async processing. */
-export async function pollFiles(admin, ids) {
-  if (!ids?.length) return [];
-  const response = await admin.graphql(FILES_STATUS, { variables: { ids } });
-  const body = await response.json();
-  return (body?.data?.nodes ?? []).filter(Boolean);
 }

@@ -942,7 +942,7 @@ export default function TemplateCopierPage() {
 
   return (
     <Page>
-      <TitleBar title="Template copier" />
+      <TitleBar title="Template Copier" />
       <style>{THEME_PICKER_STYLES}</style>
       <Layout>
         <Layout.Section>

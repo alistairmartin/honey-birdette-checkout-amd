@@ -1,6 +1,10 @@
-// Filename rules for the asset uploader. Deliberately not a .server module:
-// the page previews the final names as you type, and the action rebuilds them
-// server-side, so both sides have to agree exactly.
+// Filename rules and limits for the asset uploader. Deliberately not a .server
+// module: the page previews the final names as you type, and the action rebuilds
+// them server-side, so both sides have to agree exactly.
+
+// Shopify caps a single fileCreate call at 50 assets, and staged uploads the
+// same way, so this is the ceiling rather than a comfort margin.
+export const MAX_FILES = 50;
 
 // Shopify rejects filenames with anything exotic in them, so everything outside
 // this set collapses to a hyphen. The extension is handled separately.
