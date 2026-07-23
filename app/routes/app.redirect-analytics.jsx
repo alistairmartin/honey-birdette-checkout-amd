@@ -29,6 +29,9 @@ import {
   canonicalStore,
   storeLabel,
   sourceIsoFor,
+  overlaysFor,
+  catchmentSummary,
+  catchmentFor,
 } from "../lib/redirectAnalytics.shared";
 
 export async function loader({ request }) {
@@ -622,6 +625,12 @@ export default function RedirectAnalytics() {
                     ))}
                   </ButtonGroup>
                 )}
+                {mapOrigin !== "ALL" && catchmentFor(mapOrigin) && (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {`Coverage: ${catchmentSummary(mapOrigin)}. Outlined countries all resolve to this same store - only the currency or language changes.`}
+                  </Text>
+                )}
+
                 {destForOrigin.length > 0 && (
                   <InlineStack gap="200" blockAlign="center" wrap>
                     <Text as="span" variant="bodySm" tone="subdued">
@@ -639,6 +648,7 @@ export default function RedirectAnalytics() {
                   valueLabel="orders"
                   sourceIso={mapOrigin === "ALL" ? [] : sourceIsoFor(mapOrigin)}
                   sourceLabel={`${storeLabel(mapOrigin)} store (source)`}
+                  overlays={mapOrigin === "ALL" ? [] : overlaysFor(mapOrigin)}
                 />
               </BlockStack>
             </Card>
