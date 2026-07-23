@@ -6,6 +6,10 @@ import { Text, Spinner, BlockStack, InlineStack, Box } from "@shopify/polaris";
 const RAMP = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"];
 const ZERO_FILL = "var(--p-color-bg-surface-secondary, #ebebeb)";
 const STROKE = "var(--p-color-bg-surface, #ffffff)";
+// Red (palette slot 8) marks the source store - the one visitors were redirected
+// away from. A different hue, not a step of the blue ramp, so it never reads as
+// "lots of orders".
+const SOURCE_FILL = "#e34948";
 
 function countryName(code, fallback) {
   try {
@@ -44,7 +48,12 @@ function bucketIndex(count, buckets) {
 }
 
 // `counts` is { ISO2(uppercase): number } — e.g. detected-country order counts.
-export default function WorldChoropleth({ counts, valueLabel = "orders" }) {
+export default function WorldChoropleth({
+  counts,
+  valueLabel = "orders",
+  sourceIso = [],
+  sourceLabel = "Source store",
+}) {
   const [map, setMap] = useState(null);
   const [error, setError] = useState(null);
   const [hover, setHover] = useState(null); // { name, count, x, y }
@@ -75,6 +84,10 @@ export default function WorldChoropleth({ counts, valueLabel = "orders" }) {
 
   const max = useMemo(() => Math.max(0, ...Object.values(byId)), [byId]);
   const buckets = useMemo(() => makeBuckets(max), [max]);
+  const sourceSet = useMemo(
+    () => new Set((sourceIso || []).map((c) => String(c).toLowerCase())),
+    [sourceIso],
+  );
 
   if (error) {
     return (
@@ -105,6 +118,7 @@ export default function WorldChoropleth({ counts, valueLabel = "orders" }) {
     setHover({
       name: countryName(loc.id.toUpperCase(), loc.name),
       count,
+      isSource: sourceSet.has(loc.id),
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     });
@@ -121,6 +135,9 @@ export default function WorldChoropleth({ counts, valueLabel = "orders" }) {
   if (max > buckets[buckets.length - 1]) {
     legend[legend.length - 1].label = `${buckets[buckets.length - 2] + 1}+`;
   }
+  if (sourceSet.size) {
+    legend.push({ color: SOURCE_FILL, label: sourceLabel });
+  }
 
   return (
     <BlockStack gap="300">
@@ -134,7 +151,12 @@ export default function WorldChoropleth({ counts, valueLabel = "orders" }) {
         >
           {map.locations.map((loc) => {
             const count = byId[loc.id] || 0;
-            const fill = count ? RAMP[bucketIndex(count, buckets)] : ZERO_FILL;
+            const isSource = sourceSet.has(loc.id);
+            const fill = isSource
+              ? SOURCE_FILL
+              : count
+                ? RAMP[bucketIndex(count, buckets)]
+                : ZERO_FILL;
             return (
               <path
                 key={loc.id}
@@ -143,7 +165,7 @@ export default function WorldChoropleth({ counts, valueLabel = "orders" }) {
                 stroke={STROKE}
                 strokeWidth={0.5}
                 onMouseMove={(e) => onMove(e, loc)}
-                style={{ cursor: count ? "pointer" : "default" }}
+                style={{ cursor: count || isSource ? "pointer" : "default" }}
               />
             );
           })}
@@ -170,6 +192,12 @@ export default function WorldChoropleth({ counts, valueLabel = "orders" }) {
             <strong>{hover.name}</strong>
             <br />
             {hover.count.toLocaleString()} {valueLabel}
+            {hover.isSource && (
+              <>
+                <br />
+                <span style={{ color: SOURCE_FILL, fontWeight: 600 }}>{sourceLabel}</span>
+              </>
+            )}
           </div>
         )}
       </div>

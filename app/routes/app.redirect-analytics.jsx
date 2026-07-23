@@ -25,6 +25,11 @@ import {
 } from "../lib/redirectAnalytics.server";
 import WorldChoropleth from "../components/WorldChoropleth";
 import BarList from "../components/BarList";
+import {
+  canonicalStore,
+  storeLabel,
+  sourceIsoFor,
+} from "../lib/redirectAnalytics.shared";
 
 export async function loader({ request }) {
   const { session } = await authenticate.admin(request);
@@ -71,19 +76,6 @@ function countryName(code) {
   }
 }
 
-const STORE_LABEL = {
-  AU: "Australia (AU)",
-  UK: "United Kingdom (UK)",
-  GB: "United Kingdom (GB)",
-  EU: "Europe (EU)",
-  US: "United States (US)",
-  NZ: "New Zealand (NZ)",
-  CA: "Canada (CA)",
-};
-
-function storeLabel(code) {
-  return STORE_LABEL[code] || code;
-}
 
 const WINDOW_OPTIONS = [
   { label: "Last 7 days", value: "7" },
@@ -227,7 +219,11 @@ export default function RedirectAnalytics() {
     lastData.current = data;
 
     const cur = currentRef.current;
-    const destRegion = cur?.region || cur?.shop || "(unknown)";
+    // A store's region comes from its selling currency (GBP -> GB, EUR -> EU),
+    // so fold it onto the same canonical code the origin attribute uses.
+    const destRegion = cur?.region
+      ? canonicalStore(cur.region)
+      : cur?.shop || "(unknown)";
 
     // Merge into combined totals.
     setCombined((prev) => {
@@ -638,7 +634,12 @@ export default function RedirectAnalytics() {
                     ))}
                   </InlineStack>
                 )}
-                <WorldChoropleth counts={mapCounts} valueLabel="orders" />
+                <WorldChoropleth
+                  counts={mapCounts}
+                  valueLabel="orders"
+                  sourceIso={mapOrigin === "ALL" ? [] : sourceIsoFor(mapOrigin)}
+                  sourceLabel={`${storeLabel(mapOrigin)} store (source)`}
+                />
               </BlockStack>
             </Card>
 
