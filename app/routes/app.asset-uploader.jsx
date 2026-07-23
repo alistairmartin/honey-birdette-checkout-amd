@@ -32,45 +32,17 @@ import { DeleteIcon, NoteIcon } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { buildFilename, MAX_FILES } from "../lib/assetNaming";
-import { createFiles, stageUploads } from "../lib/assetUploader.server";
 
 // How many files go up the wire at once. Higher saturates a typical office
 // connection and makes the per-file progress meaningless.
 const UPLOAD_CONCURRENCY = 4;
 
+// Resource route, not this page's action - see the comment at the top of it.
+const UPLOAD_ENDPOINT = "/api/asset-upload";
+
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
   return json({ maxFiles: MAX_FILES });
-};
-
-export const action = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
-  const form = await request.formData();
-  const intent = form.get("intent");
-
-  try {
-    if (intent === "stage") {
-      const files = JSON.parse(form.get("files") || "[]");
-      if (!files.length) return json({ error: "No files supplied." }, { status: 400 });
-      if (files.length > MAX_FILES) {
-        return json(
-          { error: `Too many files. The limit is ${MAX_FILES} per batch.` },
-          { status: 400 },
-        );
-      }
-      return json({ intent, targets: await stageUploads(admin, files) });
-    }
-
-    if (intent === "create") {
-      const files = JSON.parse(form.get("files") || "[]");
-      const created = await createFiles(admin, files);
-      return json({ intent, files: created });
-    }
-
-    return json({ error: `Unknown intent: ${intent}` }, { status: 400 });
-  } catch (error) {
-    return json({ intent, error: error.message }, { status: 500 });
-  }
 };
 
 const todayStamp = () => new Date().toISOString().slice(0, 10);
@@ -239,11 +211,22 @@ export default function AssetUploader() {
   const callAction = async (payload) => {
     const body = new FormData();
     for (const [key, value] of Object.entries(payload)) body.append(key, value);
-    const response = await fetch(window.location.pathname, {
-      method: "POST",
-      body,
-    });
-    const result = await response.json();
+    const response = await fetch(UPLOAD_ENDPOINT, { method: "POST", body });
+
+    // Never assume JSON: an auth redirect or a crash answers with HTML, and
+    // response.json() would throw the useless "Unexpected token '<'".
+    const raw = await response.text();
+    let result;
+    try {
+      result = JSON.parse(raw);
+    } catch {
+      throw new Error(
+        response.ok
+          ? "The server didn't return JSON. Reload the page and try again."
+          : `Request failed (HTTP ${response.status})`,
+      );
+    }
+
     if (result.error) throw new Error(result.error);
     return result;
   };
