@@ -83,6 +83,10 @@ export default function AssetUploader() {
   const [dateFormat, setDateFormat] = useState("iso");
   const [datePosition, setDatePosition] = useState("suffix");
   const [numberFiles, setNumberFiles] = useState(false);
+  // Alt text applied to every file, and per-file overrides keyed by the File
+  // object itself so reordering or renaming can't detach one from its file.
+  const [defaultAlt, setDefaultAlt] = useState("");
+  const [altOverrides, setAltOverrides] = useState(() => new Map());
 
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -107,8 +111,20 @@ export default function AssetUploader() {
           keepOriginalName,
           index: numberFiles ? i + 1 : null,
         }),
+        // An override wins even when it's blank - that's how you say "no alt
+        // text on this one" while the rest of the batch shares the default.
+        alt: (altOverrides.has(file) ? altOverrides.get(file) : defaultAlt).trim(),
       })),
-    [files, prefix, dateStamp, datePosition, keepOriginalName, numberFiles],
+    [
+      files,
+      prefix,
+      dateStamp,
+      datePosition,
+      keepOriginalName,
+      numberFiles,
+      defaultAlt,
+      altOverrides,
+    ],
   );
 
   // Two files can easily collapse to the same name once you drop the original
@@ -122,6 +138,11 @@ export default function AssetUploader() {
     }
     return dupes;
   }, [namedFiles]);
+
+  const missingAltCount = useMemo(
+    () => namedFiles.filter(({ alt }) => !alt).length,
+    [namedFiles],
+  );
 
   const previewUrlFor = useCallback((file) => {
     if (!file.type.startsWith("image/")) return null;
@@ -152,6 +173,10 @@ export default function AssetUploader() {
     [],
   );
 
+  const setAltFor = useCallback((target, value) => {
+    setAltOverrides((current) => new Map(current).set(target, value));
+  }, []);
+
   const removeFile = useCallback((target) => {
     const url = previewUrls.current.get(target);
     if (url) {
@@ -159,6 +184,12 @@ export default function AssetUploader() {
       previewUrls.current.delete(target);
     }
     setFiles((current) => current.filter((file) => file !== target));
+    setAltOverrides((current) => {
+      if (!current.has(target)) return current;
+      const next = new Map(current);
+      next.delete(target);
+      return next;
+    });
   }, []);
 
   // Drops the queue and its object URLs. Kept separate from the banners so a
@@ -167,6 +198,7 @@ export default function AssetUploader() {
     for (const url of previewUrls.current.values()) URL.revokeObjectURL(url);
     previewUrls.current.clear();
     setFiles([]);
+    setAltOverrides(new Map());
   }, []);
 
   const clearAll = useCallback(() => {
@@ -256,11 +288,11 @@ export default function AssetUploader() {
       const { files: created } = await callAction({
         intent: "create",
         files: JSON.stringify(
-          namedFiles.map(({ file, filename }, index) => ({
+          namedFiles.map(({ file, filename, alt }, index) => ({
             resourceUrl: targets[index].resourceUrl,
             filename,
             mimeType: file.type,
-            alt: prefix || filename,
+            alt,
           })),
         ),
       });
@@ -395,6 +427,32 @@ export default function AssetUploader() {
 
             <Card>
               <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">
+                  Alt text
+                </Text>
+
+                <TextField
+                  label="Applies to every file"
+                  value={defaultAlt}
+                  onChange={setDefaultAlt}
+                  autoComplete="off"
+                  maxLength={512}
+                  showCharacterCount
+                  placeholder="eg. Model wearing the Golf Club set on a fairway"
+                  helpText="Describe what's in the shot. Override any individual file below."
+                />
+
+                {missingAltCount > 0 && (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {missingAltCount} of {files.length} will upload without alt
+                    text. You can add it later under Content &gt; Files.
+                  </Text>
+                )}
+              </BlockStack>
+            </Card>
+
+            <Card>
+              <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="h2" variant="headingMd">
                     Files
@@ -429,47 +487,64 @@ export default function AssetUploader() {
 
                 {namedFiles.length > 0 && (
                   <BlockStack gap="200">
-                    {namedFiles.map(({ file, filename }) => (
+                    {namedFiles.map(({ file, filename, alt }) => (
                       <Box
                         key={`${file.name}-${file.lastModified}-${file.size}`}
                         padding="200"
                         borderRadius="200"
                         background="bg-surface-secondary"
                       >
-                        <InlineStack
-                          gap="300"
-                          blockAlign="center"
-                          align="space-between"
-                          wrap={false}
-                        >
-                          <InlineStack gap="300" blockAlign="center" wrap={false}>
-                            <Thumbnail
-                              size="small"
-                              alt={file.name}
-                              source={previewUrlFor(file) || NoteIcon}
-                            />
-                            <BlockStack gap="050">
-                              <Text as="span" variant="bodyMd" fontWeight="medium">
-                                {filename}
-                              </Text>
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                {file.name} &middot; {prettyBytes(file.size)}
-                              </Text>
-                            </BlockStack>
+                        <BlockStack gap="200">
+                          <InlineStack
+                            gap="300"
+                            blockAlign="center"
+                            align="space-between"
+                            wrap={false}
+                          >
+                            <InlineStack gap="300" blockAlign="center" wrap={false}>
+                              <Thumbnail
+                                size="small"
+                                alt={alt || file.name}
+                                source={previewUrlFor(file) || NoteIcon}
+                              />
+                              <BlockStack gap="050">
+                                <Text as="span" variant="bodyMd" fontWeight="medium">
+                                  {filename}
+                                </Text>
+                                <Text as="span" variant="bodySm" tone="subdued">
+                                  {file.name} &middot; {prettyBytes(file.size)}
+                                </Text>
+                              </BlockStack>
+                            </InlineStack>
+                            <InlineStack gap="200" blockAlign="center">
+                              {duplicateNames.has(filename) && (
+                                <Badge tone="warning">Duplicate name</Badge>
+                              )}
+                              <Button
+                                icon={DeleteIcon}
+                                variant="tertiary"
+                                accessibilityLabel={`Remove ${file.name}`}
+                                onClick={() => removeFile(file)}
+                                disabled={uploading}
+                              />
+                            </InlineStack>
                           </InlineStack>
-                          <InlineStack gap="200" blockAlign="center">
-                            {duplicateNames.has(filename) && (
-                              <Badge tone="warning">Duplicate name</Badge>
-                            )}
-                            <Button
-                              icon={DeleteIcon}
-                              variant="tertiary"
-                              accessibilityLabel={`Remove ${file.name}`}
-                              onClick={() => removeFile(file)}
-                              disabled={uploading}
-                            />
-                          </InlineStack>
-                        </InlineStack>
+
+                          <TextField
+                            label={`Alt text for ${filename}`}
+                            labelHidden
+                            value={
+                              altOverrides.has(file)
+                                ? altOverrides.get(file)
+                                : defaultAlt
+                            }
+                            onChange={(value) => setAltFor(file, value)}
+                            autoComplete="off"
+                            maxLength={512}
+                            disabled={uploading}
+                            placeholder="Alt text"
+                          />
+                        </BlockStack>
                       </Box>
                     ))}
                   </BlockStack>
