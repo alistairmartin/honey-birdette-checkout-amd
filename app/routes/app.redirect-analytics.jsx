@@ -13,6 +13,8 @@ import {
   Select,
   DataTable,
   ProgressBar,
+  ButtonGroup,
+  Badge,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -21,6 +23,8 @@ import {
   listInstalledShops,
   adminForShop,
 } from "../lib/redirectAnalytics.server";
+import WorldChoropleth from "../components/WorldChoropleth";
+import BarList from "../components/BarList";
 
 export async function loader({ request }) {
   const { session } = await authenticate.admin(request);
@@ -147,6 +151,7 @@ export default function RedirectAnalytics() {
   );
 
   const [windowDays, setWindowDays] = useState("30");
+  const [mapOrigin, setMapOrigin] = useState("ALL"); // map filter: origin store
   const [running, setRunning] = useState(false);
   const [fatals, setFatals] = useState([]);
   const [hasRun, setHasRun] = useState(false);
@@ -209,6 +214,7 @@ export default function RedirectAnalytics() {
     setMatrix({});
     setOrders([]);
     setSampleCapped(false);
+    setMapOrigin("ALL");
     sinceISORef.current = computeSinceISO(windowDays);
     queueRef.current = [...reachableShops];
     startNextShop();
@@ -409,6 +415,67 @@ export default function RedirectAnalytics() {
     );
   }
 
+  const originBarData = useMemo(
+    () =>
+      sortedEntries(combined.byOrigin).map(([code, n]) => ({
+        label: storeLabel(code),
+        value: n,
+      })),
+    [combined.byOrigin],
+  );
+
+  const detectedBarData = useMemo(
+    () =>
+      sortedEntries(combined.byDetected)
+        .slice(0, 12)
+        .map(([code, n]) => ({
+          label: code.startsWith("(") ? code : `${countryName(code)} (${code})`,
+          value: n,
+        })),
+    [combined.byDetected],
+  );
+
+  // Map filter: origin stores actually present, in canonical order + "All".
+  const originFilterOptions = useMemo(() => {
+    const present = Object.keys(combined.byOrigin).filter((c) => !c.startsWith("("));
+    const canonical = ["AU", "UK", "EU", "US"];
+    const ordered = [
+      ...canonical.filter((c) => present.includes(c)),
+      ...present.filter((c) => !canonical.includes(c)).sort(),
+    ];
+    return ["ALL", ...ordered];
+  }, [combined.byOrigin]);
+
+  // Detected-country counts feeding the map, filtered to a single origin store
+  // by summing the FROM>DETECTED flow pairs. "ALL" uses the global breakdown.
+  const mapCounts = useMemo(() => {
+    if (mapOrigin === "ALL") return combined.byDetected;
+    const out = {};
+    for (const [flow, n] of Object.entries(combined.flows)) {
+      const [from, detected] = flow.split(">");
+      if (from === mapOrigin && !detected.startsWith("(")) {
+        out[detected] = (out[detected] || 0) + n;
+      }
+    }
+    return out;
+  }, [mapOrigin, combined.byDetected, combined.flows]);
+
+  const mapTotal = useMemo(
+    () => Object.values(mapCounts).reduce((a, b) => a + b, 0),
+    [mapCounts],
+  );
+
+  // Which stores the selected origin's visitors actually ended up buying on.
+  const destForOrigin = useMemo(() => {
+    if (mapOrigin === "ALL") return [];
+    const out = {};
+    for (const [flow, n] of Object.entries(matrix)) {
+      const [from, dest] = flow.split(">");
+      if (from === mapOrigin) out[dest] = (out[dest] || 0) + n;
+    }
+    return sortedEntries(out);
+  }, [mapOrigin, matrix]);
+
   const unreachable = shops.filter((s) => !s.reachable);
   const scannedStores = Object.values(perStore).filter((b) => b.scanned > 0).length;
 
@@ -532,6 +599,70 @@ export default function RedirectAnalytics() {
 
         {combined.redirected > 0 && (
           <>
+            <Card>
+              <BlockStack gap="300">
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingMd">
+                    {mapOrigin === "ALL"
+                      ? "Where customers are detected"
+                      : `Where ${storeLabel(mapOrigin)} visitors are redirected to`}
+                  </Text>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {mapOrigin === "ALL"
+                      ? "Redirected orders by geo-detected country across all stores. Darker = more orders. Hover a country for its total."
+                      : `Geo-detected country of orders redirected away from the ${storeLabel(mapOrigin)} store - i.e. where those visitors actually were. ${mapTotal.toLocaleString()} order(s).`}
+                  </Text>
+                </BlockStack>
+                {originFilterOptions.length > 1 && (
+                  <ButtonGroup variant="segmented">
+                    {originFilterOptions.map((opt) => (
+                      <Button
+                        key={opt}
+                        pressed={mapOrigin === opt}
+                        onClick={() => setMapOrigin(opt)}
+                      >
+                        {opt === "ALL" ? "All stores" : opt}
+                      </Button>
+                    ))}
+                  </ButtonGroup>
+                )}
+                {destForOrigin.length > 0 && (
+                  <InlineStack gap="200" blockAlign="center" wrap>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      Ended up purchasing on:
+                    </Text>
+                    {destForOrigin.map(([dest, n]) => (
+                      <Badge key={dest} tone={dest === mapOrigin ? undefined : "info"}>
+                        {`${storeLabel(dest)} · ${n.toLocaleString()}`}
+                      </Badge>
+                    ))}
+                  </InlineStack>
+                )}
+                <WorldChoropleth counts={mapCounts} valueLabel="orders" />
+              </BlockStack>
+            </Card>
+
+            <Card>
+              <BlockStack gap="400">
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "var(--p-space-500, 20px)",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  }}
+                >
+                  <BlockStack gap="300">
+                    <Text as="h3" variant="headingSm">Redirected from (origin store)</Text>
+                    <BarList data={originBarData} total={combined.redirected} />
+                  </BlockStack>
+                  <BlockStack gap="300">
+                    <Text as="h3" variant="headingSm">Top detected countries</Text>
+                    <BarList data={detectedBarData} total={combined.redirected} />
+                  </BlockStack>
+                </div>
+              </BlockStack>
+            </Card>
+
             <Card padding="0">
               <Box padding="400" paddingBlockEnd="200">
                 <Text as="h2" variant="headingMd">Redirected from (origin store)</Text>
