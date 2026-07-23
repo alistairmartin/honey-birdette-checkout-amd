@@ -16,6 +16,7 @@ import prisma from "../db.server";
 import { unauthenticated } from "../shopify.server";
 import { adminGraphql, costPause, sleep, BUDGET_MS } from "./adminGraphql.server";
 import { getShopInfo } from "./themeCopier.server";
+import { canonicalStore } from "./redirectAnalytics.shared";
 
 // Every store the app is installed on (one offline session each). Returns
 // merchant-facing name + region + flag so the dashboard can label each store,
@@ -81,6 +82,7 @@ function getAttr(order, key) {
   return v ? String(v).trim().toUpperCase() : null;
 }
 
+
 function bump(map, key) {
   if (!key) return;
   map[key] = (map[key] || 0) + 1;
@@ -123,7 +125,7 @@ export async function scanBatch({ admin, cursor, sinceISO }) {
 
     for (const order of conn.nodes) {
       partial.scanned += 1;
-      const from = getAttr(order, ATTR_FROM);
+      const from = canonicalStore(getAttr(order, ATTR_FROM));
       const detected = getAttr(order, ATTR_DETECTED);
       const country = getAttr(order, ATTR_COUNTRY);
 
