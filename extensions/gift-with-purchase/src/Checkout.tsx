@@ -415,17 +415,21 @@ type ResolvedGiftOption = {
 
 function formatMoney(amount: number | string, currencyCode: string = "AUD") {
   const n = Number(amount || 0);
+  // Whole amounts drop the decimals (team request): "A$100", not "A$100.00".
+  // Fractional amounts (e.g. a 50%-off gift at £67.50) keep their cents so the
+  // shown price matches the discount the buyer actually pays.
+  const hasCents = Math.abs(n - Math.round(n)) >= 0.005;
+  const fractionDigits = hasCents ? 2 : 0;
   try {
-    // No decimal places (team request): show "A$100", not "A$100.00".
     return n.toLocaleString(undefined, {
       style: "currency",
       currency: currencyCode,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
     });
   } catch (_e) {
     // Fallback if locale doesn't support the currency
-    return `${currencyCode} ${Math.round(n)}`;
+    return `${currencyCode} ${hasCents ? n.toFixed(2) : Math.round(n)}`;
   }
 }
 

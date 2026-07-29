@@ -66,6 +66,57 @@ export const action = async ({ request }) => {
   const shop = String(formData.get("shop") || "");
   const themeId = String(formData.get("themeId") || "");
 
+  // Bulk intents act on the ticked themes across stores. Items run one at a
+  // time - a failure on one theme doesn't stop the rest, and every affected
+  // store is re-read once at the end.
+  if (intent === "bulkDuplicate" || intent === "bulkRename" || intent === "bulkDelete") {
+    let items = [];
+    try {
+      items = JSON.parse(String(formData.get("items") || "[]"));
+    } catch {
+      return json({ intent, error: "Couldn't read the selected themes" }, { status: 400 });
+    }
+    const name = String(formData.get("name") || "");
+
+    const newThemeIds = [];
+    const deletedThemeIds = [];
+    const failures = [];
+    let done = 0;
+
+    for (const item of items) {
+      try {
+        if (intent === "bulkDuplicate") {
+          const theme = await duplicateTheme(item.shop, item.themeId, name);
+          newThemeIds.push(theme.id);
+        } else if (intent === "bulkRename") {
+          await renameTheme(item.shop, item.themeId, name);
+        } else {
+          await deleteTheme(item.shop, item.themeId);
+          deletedThemeIds.push(item.themeId);
+        }
+        done += 1;
+      } catch (err) {
+        failures.push(`${item.shop} (${item.themeId.split("/").pop()}): ${err?.message ?? String(err)}`);
+      }
+    }
+
+    const shops = [...new Set(items.map((i) => i.shop))];
+    const storeUpdates = Object.fromEntries(
+      await Promise.all(shops.map(async (s) => [s, await refreshStoreThemes(s)])),
+    );
+
+    const verb =
+      intent === "bulkDuplicate" ? "Duplicated" : intent === "bulkRename" ? "Renamed" : "Deleted";
+    return json({
+      intent,
+      storeUpdates,
+      newThemeIds,
+      deletedThemeIds,
+      message: `${verb} ${done} of ${items.length} theme${items.length === 1 ? "" : "s"}`,
+      error: failures.length ? failures.join("; ") : undefined,
+    });
+  }
+
   try {
     let message = "";
     let newTheme = null;
@@ -225,6 +276,22 @@ export default function ThemeManagerPage() {
   // Fold a completed mutation back into the local theme lists, and auto-select a
   // freshly duplicated theme - it's the ID you came here for.
   useEffect(() => {
+    // Bulk results carry updates for several stores at once.
+    if (result?.storeUpdates) {
+      setStoreThemes((prev) => ({ ...prev, ...result.storeUpdates }));
+      setSelected((prev) => {
+        let next = prev;
+        if (result.deletedThemeIds?.length) {
+          next = next.filter((id) => !result.deletedThemeIds.includes(id));
+        }
+        if (result.newThemeIds?.length) {
+          next = [...next, ...result.newThemeIds.filter((id) => !next.includes(id))];
+        }
+        return next;
+      });
+      setDialog(null);
+      return;
+    }
     if (!result?.themes || !result.shop) return;
     setStoreThemes((prev) => ({ ...prev, [result.shop]: result.themes }));
     if (result.newThemeId) {
@@ -257,6 +324,45 @@ export default function ThemeManagerPage() {
         : mode === "rename"
           ? theme.name
           : "",
+    );
+  };
+
+  // The ticked themes with their store, in store order - what the bulk actions
+  // operate on.
+  const selectedItems = useMemo(() => {
+    const items = [];
+    for (const store of initialStores) {
+      for (const theme of storeThemes[store.shop] ?? []) {
+        if (selected.includes(theme.id)) items.push({ shop: store.shop, theme });
+      }
+    }
+    return items;
+  }, [initialStores, storeThemes, selected]);
+
+  const openBulkDialog = (mode) => {
+    // Live themes can't be deleted (Shopify refuses, and the row hides the
+    // button) - drop them from a bulk delete rather than letting it half-fail.
+    const items =
+      mode === "bulkDelete"
+        ? selectedItems.filter(({ theme }) => theme.role !== "MAIN")
+        : selectedItems;
+    setDialog({
+      mode,
+      items,
+      skippedLive: mode === "bulkDelete" ? selectedItems.length - items.length : 0,
+    });
+    setConfirmed(false);
+    setNameDraft("");
+  };
+
+  const runBulk = (mode, items, name) => {
+    fetcher.submit(
+      {
+        intent: mode,
+        items: JSON.stringify(items.map(({ shop, theme }) => ({ shop, themeId: theme.id }))),
+        name: name ?? "",
+      },
+      { method: "post" },
     );
   };
 
@@ -377,11 +483,37 @@ export default function ThemeManagerPage() {
                     automatically.
                   </Text>
                 </BlockStack>
-                <InlineStack gap="200">
+                <InlineStack gap="200" wrap>
                   {selected.length > 0 && (
                     <Button variant="plain" onClick={() => setSelected([])}>
                       Clear
                     </Button>
+                  )}
+                  {selectedItems.length > 0 && (
+                    <>
+                      <Button
+                        icon={DuplicateIcon}
+                        disabled={busy}
+                        onClick={() => openBulkDialog("bulkDuplicate")}
+                      >
+                        Duplicate selected
+                      </Button>
+                      <Button
+                        icon={TextBlockIcon}
+                        disabled={busy}
+                        onClick={() => openBulkDialog("bulkRename")}
+                      >
+                        Rename selected
+                      </Button>
+                      <Button
+                        icon={DeleteIcon}
+                        tone="critical"
+                        disabled={busy}
+                        onClick={() => openBulkDialog("bulkDelete")}
+                      >
+                        Delete selected
+                      </Button>
+                    </>
                   )}
                   <Button
                     variant="primary"
@@ -541,6 +673,17 @@ export default function ThemeManagerPage() {
         onConfirm={runIntent}
         busy={busy}
       />
+
+      <BulkThemeDialog
+        dialog={dialog}
+        nameDraft={nameDraft}
+        setNameDraft={setNameDraft}
+        confirmed={confirmed}
+        setConfirmed={setConfirmed}
+        onClose={() => setDialog(null)}
+        onConfirm={runBulk}
+        busy={busy}
+      />
     </Page>
   );
 }
@@ -694,7 +837,7 @@ function ThemeDialog({
   onConfirm,
   busy,
 }) {
-  if (!dialog) return null;
+  if (!dialog || dialog.mode.startsWith("bulk")) return null;
   const { mode, shop, theme } = dialog;
   const needsName = mode === "duplicate" || mode === "rename";
   // Publishing changes what customers see; deleting is permanent. Both need an
@@ -795,6 +938,123 @@ function ThemeDialog({
               Duplicating the live theme doesn't affect customers - the copy is
               created unpublished.
             </Text>
+          )}
+        </BlockStack>
+      </Modal.Section>
+    </Modal>
+  );
+}
+
+// The bulk actions: duplicate, rename, or delete every ticked theme. All three
+// confirm before running; delete additionally needs the "I understand" tick,
+// same as deleting a single theme, and never touches live themes.
+function BulkThemeDialog({
+  dialog,
+  nameDraft,
+  setNameDraft,
+  confirmed,
+  setConfirmed,
+  onClose,
+  onConfirm,
+  busy,
+}) {
+  if (!dialog?.mode?.startsWith("bulk")) return null;
+  const { mode, items, skippedLive } = dialog;
+  const count = items.length;
+  const plural = count === 1 ? "theme" : "themes";
+  const isDelete = mode === "bulkDelete";
+  // Rename needs the name; for duplicate it's optional (blank falls back to
+  // Shopify's "Copy of ..." default). The same name is applied to every theme -
+  // that's the deploy workflow: one version name across all four stores.
+  const needsName = mode === "bulkRename";
+  const takesName = mode === "bulkDuplicate" || mode === "bulkRename";
+
+  const title =
+    mode === "bulkDuplicate"
+      ? `Are you sure you want to duplicate ${count} ${plural}?`
+      : mode === "bulkRename"
+        ? `Are you sure you want to rename ${count} ${plural}?`
+        : `Are you sure you want to delete ${count} ${plural}?`;
+
+  const confirmLabel =
+    mode === "bulkDuplicate"
+      ? `Yes, duplicate ${count} ${plural}`
+      : mode === "bulkRename"
+        ? `Yes, rename ${count} ${plural}`
+        : `Yes, delete ${count} ${plural}`;
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={title}
+      primaryAction={{
+        content: confirmLabel,
+        destructive: isDelete,
+        loading: busy,
+        disabled:
+          busy ||
+          count === 0 ||
+          (needsName && !nameDraft.trim()) ||
+          (isDelete && !confirmed),
+        onAction: () => onConfirm(mode, items, takesName ? nameDraft : undefined),
+      }}
+      secondaryActions={[{ content: "Cancel", onAction: onClose }]}
+    >
+      <Modal.Section>
+        <BlockStack gap="300">
+          {count > 0 ? (
+            <BlockStack gap="100">
+              {items.map(({ shop, theme }) => (
+                <Text key={theme.id} as="p" variant="bodySm">
+                  {`${storeHandle(shop)} — ${theme.name} (${numericThemeId(theme.id)})`}
+                </Text>
+              ))}
+            </BlockStack>
+          ) : (
+            <Text as="p" variant="bodySm" tone="subdued">
+              Nothing to delete - only live themes are selected, and live themes
+              can't be deleted.
+            </Text>
+          )}
+
+          {skippedLive > 0 && count > 0 && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              {`${skippedLive} live ${skippedLive === 1 ? "theme is" : "themes are"} in your selection and will be skipped - live themes can't be deleted.`}
+            </Text>
+          )}
+
+          {takesName && (
+            <TextField
+              label={
+                mode === "bulkDuplicate"
+                  ? "Name for the new themes"
+                  : "New name for all selected themes"
+              }
+              value={nameDraft}
+              onChange={setNameDraft}
+              autoComplete="off"
+              helpText={
+                mode === "bulkDuplicate"
+                  ? 'Applied to every copy. Leave blank for Shopify\'s default "Copy of ..." names. Copies are created unpublished and their IDs are selected for you.'
+                  : "Every selected theme gets this exact name."
+              }
+            />
+          )}
+
+          {isDelete && count > 0 && (
+            <Banner tone="critical" title="This can't be undone">
+              <BlockStack gap="200">
+                <Text as="p" variant="bodySm">
+                  {`${count === 1 ? "This theme and its files are" : `These ${count} themes and their files are`} removed permanently. There is no revert.`}
+                </Text>
+                <Checkbox
+                  label={`I understand this permanently deletes ${count === 1 ? "this theme" : `all ${count} themes`}`}
+                  checked={confirmed}
+                  onChange={setConfirmed}
+                />
+              </BlockStack>
+            </Banner>
           )}
         </BlockStack>
       </Modal.Section>
