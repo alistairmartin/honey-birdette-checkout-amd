@@ -33,17 +33,50 @@ const OPTIONS = {
 const KEYS = Object.keys(OPTIONS);
 const EMPTY_SIZES = KEYS.reduce((acc, k) => ({ ...acc, [k]: null }), {});
 
-// band + cup render under Bra headings; everything else uses its own locale key.
-const LABEL_KEY = { band: "braBand", cup: "braCup" };
-
-// Categories grouped by body area for the form. Every key in OPTIONS must appear
-// in exactly one group. `title` is a locale key. Reorder / regroup here freely.
-const GROUPS = [
-  { title: "groupBrasTops", keys: ["band", "cup", "corset", "top", "bodysuit"] },
-  { title: "groupKnickers", keys: ["thong", "brief"] },
-  { title: "groupLegwear", keys: ["suspender", "hosiery"] },
-  { title: "groupApparel", keys: ["skirt", "swimsuit", "robe", "latex"] },
+// The form collects a short list of sizes; some fan out to several stored keys
+// on save (Bottoms -> thong/brief/skirt, Corset -> bodysuit) so the metafield
+// contract and the theme stay unchanged. `label` is a locale key; `ranges`
+// picks which OPTIONS list the dropdown shows.
+const FIELDS = [
+  { key: "band", label: "braBand", ranges: "band" },
+  { key: "cup", label: "braCup", ranges: "cup" },
+  { key: "corset", label: "corset", ranges: "corset" },
+  { key: "suspender", label: "suspender", ranges: "suspender" },
+  { key: "bottoms", label: "bottoms", ranges: "brief" },
+  { key: "hosiery", label: "hosiery", ranges: "hosiery" },
+  { key: "robe", label: "robe", ranges: "robe" },
 ];
+
+// Stored sizes -> form values. Bottoms reads whichever bottoms key was saved.
+function toDraft(sizes) {
+  return {
+    band: sizes.band || null,
+    cup: sizes.cup || null,
+    corset: sizes.corset || null,
+    suspender: sizes.suspender || null,
+    bottoms: sizes.thong || sizes.brief || sizes.skirt || null,
+    hosiery: sizes.hosiery || null,
+    robe: sizes.robe || null,
+  };
+}
+
+// Form values -> full stored shape. Keys no longer collected in the form
+// (top, swimsuit, latex) keep any previously saved value.
+function fromDraft(draft, existing) {
+  return {
+    ...existing,
+    band: draft.band,
+    cup: draft.cup,
+    corset: draft.corset,
+    suspender: draft.suspender,
+    hosiery: draft.hosiery,
+    robe: draft.robe,
+    bodysuit: draft.corset,
+    thong: draft.bottoms,
+    brief: draft.bottoms,
+    skirt: draft.bottoms,
+  };
+}
 
 const DEFAULT_API_URL = "https://honey-birdette-checkout-amd.onrender.com";
 
@@ -56,15 +89,18 @@ function apiBase() {
   return String(raw).replace(/\/+$/, "");
 }
 
-// Human-readable summary, e.g. "BRA 10D · THONG M · DRESS 12". Bra is band+cup
-// combined; every other set category is shown as "KEY value".
+// Human-readable summary matching the form vocabulary, e.g. "BRA 10D ·
+// BOTTOMS M". One Bottoms entry covers the fanned-out thong/brief/skirt keys;
+// bodysuit (fed by corset) isn't repeated.
 function summarize(s) {
   const parts = [];
   if (s.band && s.cup) parts.push(`BRA ${s.band}${s.cup}`);
-  for (const key of KEYS) {
-    if (key === "band" || key === "cup") continue;
-    if (s[key]) parts.push(`${key.toUpperCase()} ${s[key]}`);
-  }
+  if (s.corset) parts.push(`CORSET ${s.corset}`);
+  if (s.suspender) parts.push(`SUSPENDER ${s.suspender}`);
+  const bottoms = s.thong || s.brief || s.skirt;
+  if (bottoms) parts.push(`BOTTOMS ${bottoms}`);
+  if (s.hosiery) parts.push(`STOCKINGS ${s.hosiery}`);
+  if (s.robe) parts.push(`ROBE & CHEMISE ${s.robe}`);
   return parts.join(" · ");
 }
 
@@ -89,9 +125,10 @@ function SizeProfileBlock() {
   const [saveError, setSaveError] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // `savedSizes` = what's persisted; `draft` = the working selection.
+  // `savedSizes` = the persisted full key set; `draft` = the working form
+  // selection (short FIELDS shape).
   const [savedSizes, setSavedSizes] = useState(EMPTY_SIZES);
-  const [draft, setDraft] = useState(EMPTY_SIZES);
+  const [draft, setDraft] = useState(toDraft(EMPTY_SIZES));
 
   // Load the current profile from the backend on mount.
   useEffect(() => {
@@ -109,7 +146,7 @@ function SizeProfileBlock() {
         const incoming = normalize(await resp.json());
         if (!cancelled) {
           setSavedSizes(incoming);
-          setDraft(incoming);
+          setDraft(toDraft(incoming));
         }
       } catch (e) {
         if (!cancelled) setLoadError(true);
@@ -142,14 +179,14 @@ function SizeProfileBlock() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ sizes: draft }),
+        body: JSON.stringify({ sizes: fromDraft(draft, savedSizes) }),
       });
       if (!resp.ok) throw new Error(`POST failed: ${resp.status}`);
       const data = await resp.json();
       if (data?.userErrors?.length) throw new Error("userErrors");
       const persisted = normalize(data);
       setSavedSizes(persisted);
-      setDraft(persisted);
+      setDraft(toDraft(persisted));
       setSaved(true);
     } catch (e) {
       setSaveError(true);
@@ -171,7 +208,7 @@ function SizeProfileBlock() {
   }
 
   const summary = summarize(savedSizes);
-  const dirty = !sameSizes(draft, savedSizes);
+  const dirty = !sameSizes(fromDraft(draft, savedSizes), savedSizes);
 
   return (
     <s-box border="base" padding="base" borderRadius="base">
@@ -190,23 +227,19 @@ function SizeProfileBlock() {
           </s-banner>
         )}
 
-        {GROUPS.map((group) => (
-          <s-stack key={group.title} gap="base">
-            <s-text type="strong">{t(group.title)}</s-text>
-            {group.keys.map((key) => (
-              <>
-                <SizeSelect
-                  key={key}
-                  label={t(LABEL_KEY[key] || key)}
-                  options={OPTIONS[key]}
-                  value={draft[key]}
-                  onPick={(v) => pick(key, v)}
-                />
-                {key === "cup" && <s-text color="subdued">{t("braHint")}</s-text>}
-              </>
-            ))}
-          </s-stack>
-        ))}
+        {/* Two-column pairing mirrors the storefront modal: band/cup,
+            corset/suspender, bottoms/stockings, robe on its own row. */}
+        <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+          {FIELDS.map((field) => (
+            <SizeSelect
+              key={field.key}
+              label={t(field.label)}
+              options={OPTIONS[field.ranges]}
+              value={draft[field.key]}
+              onPick={(v) => pick(field.key, v)}
+            />
+          ))}
+        </s-grid>
 
         {saveError && (
           <s-banner tone="critical">
