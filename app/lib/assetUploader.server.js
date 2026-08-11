@@ -94,6 +94,33 @@ export async function stageUploads(admin, files) {
   }));
 }
 
+const FILE_STATUS_QUERY = `#graphql
+  query AssetUploaderFileStatus($id: ID!) {
+    node(id: $id) {
+      ... on MediaImage {
+        fileStatus
+        image { url }
+      }
+      ... on GenericFile {
+        fileStatus
+        url
+      }
+    }
+  }
+`;
+
+// Post-fileCreate status check. Shopify processes uploads asynchronously, so
+// the CDN url is null until fileStatus reaches READY - callers poll this.
+export async function fileStatus(admin, id) {
+  const response = await admin.graphql(FILE_STATUS_QUERY, { variables: { id } });
+  const body = await response.json();
+  const node = body?.data?.node;
+  return {
+    status: node?.fileStatus ?? "UNKNOWN",
+    url: node?.image?.url ?? node?.url ?? null,
+  };
+}
+
 /**
  * Turns uploaded staged resources into real Shopify files.
  * @param files [{ resourceUrl, filename, mimeType, alt }]

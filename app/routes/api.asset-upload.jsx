@@ -14,7 +14,7 @@
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { MAX_FILES } from "../lib/assetNaming";
-import { createFiles, stageUploads } from "../lib/assetUploader.server";
+import { createFiles, fileStatus, stageUploads } from "../lib/assetUploader.server";
 
 export const action = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
@@ -39,6 +39,16 @@ export const action = async ({ request }) => {
     if (intent === "create") {
       const files = JSON.parse(form.get("files") || "[]");
       return json({ intent, files: await createFiles(admin, files) });
+    }
+
+    // Processing is async after fileCreate; pages poll here until the CDN url
+    // exists (fileStatus READY).
+    if (intent === "poll") {
+      const id = form.get("id");
+      if (!id) {
+        return json({ intent, error: "No file id supplied." }, { status: 400 });
+      }
+      return json({ intent, file: await fileStatus(admin, id) });
     }
 
     return json({ intent, error: `Unknown intent: ${intent}` }, { status: 400 });
