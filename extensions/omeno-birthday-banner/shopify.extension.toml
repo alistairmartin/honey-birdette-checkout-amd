@@ -27,11 +27,11 @@ scopes = "read_customers, write_customers, read_metaobjects, write_metaobjects"
 
 [[extensions.metafields]]
 namespace = "custom"
-key = "customer_birthday_day"
+key = "birthday_day"
 
 [[extensions.metafields]]
 namespace = "custom"
-key = "customer_birthday_month"
+key = "birthday_month"
 
 [[extensions.metafields]]
 namespace = "custom"

@@ -37,7 +37,7 @@ function CustomerBirthdayBlock() {
     region: settings.region || DEFAULT_CONFIG.region,
     shopifyDomain: settings.shopify_domain || DEFAULT_CONFIG.shopifyDomain,
     proxyUrl: settings.proxy_url || DEFAULT_CONFIG.proxyUrl,
-    showDebug: settings.show_debug !== undefined ? settings.show_debug : true // Default to true for testing
+    showDebug: settings.show_debug !== undefined ? settings.show_debug : false // Hidden unless enabled in admin
   };
 
   const [loading, setLoading] = useState(true);
@@ -50,6 +50,7 @@ function CustomerBirthdayBlock() {
   const [customerId, setCustomerId] = useState<string>("");
   const [showDebug, setShowDebug] = useState(false);
   const [debug, setDebug] = useState<string>("");
+  const [refreshKey, setRefreshKey] = useState(0);
   const translate = useTranslate();
 
   // Log configuration on mount
@@ -131,7 +132,7 @@ function CustomerBirthdayBlock() {
     }
 
     fetchCustomerTags();
-  }, [customerId, storeConfig.proxyUrl, storeConfig.shopifyDomain, storeConfig.region]);
+  }, [customerId, refreshKey, storeConfig.proxyUrl, storeConfig.shopifyDomain, storeConfig.region]);
 
   async function save() {
     setError(undefined);
@@ -212,6 +213,9 @@ function CustomerBirthdayBlock() {
       console.log("✅ Birthday saved!");
       setSaved(translate("birthdaySaved"));
       setTimeout(() => setSaved(undefined), 3000);
+
+      // Re-fetch so the widget shows what the server actually stored
+      setRefreshKey((k) => k + 1);
     } catch (e: any) {
       console.error("❌ Save error:", e);
       setError(e?.message || "Something went wrong");
