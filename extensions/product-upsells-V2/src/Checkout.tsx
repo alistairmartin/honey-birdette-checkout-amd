@@ -18,6 +18,8 @@ import {
   InlineSpacer,
   SkeletonText,
   SkeletonImage,
+  Modal,
+  Pressable,
   useCartLines,
   useApplyCartLinesChange,
   useApi,
@@ -34,6 +36,110 @@ import {
 
 // Set up the entry point for the extension
 export default reactExtension("purchase.checkout.block.render", () => <App />);
+
+// ---------------------------------------------------------------------------
+// Variant / size picker helpers (ported from checkout-recommendations)
+// ---------------------------------------------------------------------------
+
+// Shopify represents single-variant products with one synthetic "Title /
+// Default Title" option; we hide it so those products skip the picker.
+const isDefaultOption = (option) =>
+  String(option?.name).toLowerCase() === "title" &&
+  String(option?.value).toLowerCase() === "default title";
+
+// Reshape the configured variant's product into the picker data: every
+// purchasable variant (with its per-option values) plus the option axes
+// (e.g. "Bra Size", "Brief Size") so the modal can render a button row per option.
+const buildPicker = (variant) => {
+  const product = variant?.product || {};
+  const allVariants = (product?.variants?.nodes || []).filter((v) => v?.id);
+  const available = allVariants.filter((v) => v.availableForSale);
+
+  const variants = available.map((v) => {
+    const optionValues = {};
+    (v.selectedOptions || []).forEach((o) => {
+      if (!isDefaultOption(o)) optionValues[o.name] = o.value;
+    });
+    return {
+      id: v.id,
+      price: v.price?.amount ?? "0.00",
+      compareAtPrice: v.compareAtPrice?.amount ?? null,
+      optionValues,
+    };
+  });
+
+  const options = [];
+  const byName = {};
+  available.forEach((v) => {
+    (v.selectedOptions || []).forEach((o) => {
+      if (isDefaultOption(o)) return;
+      if (!byName[o.name]) {
+        byName[o.name] = { name: o.name, values: [] };
+        options.push(byName[o.name]);
+      }
+      if (!byName[o.name].values.includes(o.value)) byName[o.name].values.push(o.value);
+    });
+  });
+
+  const fallbackAlt = product.title || "Product image";
+  const imageNodes = [product.featuredImage, ...(product.images?.nodes || [])].filter((n) => n?.url);
+  const seenUrls = new Set();
+  const images = [];
+  imageNodes.forEach((node) => {
+    if (seenUrls.has(node.url)) return;
+    seenUrls.add(node.url);
+    images.push({ url: node.url, alt: node.altText || fallbackAlt });
+  });
+
+  return {
+    productId: product.id || variant?.id,
+    variantId: variant?.id,
+    title: product.title || "",
+    images,
+    variants,
+    options,
+    // Only open the picker when there is a real choice to make.
+    hasOptions: options.length > 0 && variants.length > 1,
+  };
+};
+
+// Find the available variant matching an option selection (name -> value).
+const findVariant = (card, selection) =>
+  card.variants.find((v) => card.options.every((o) => v.optionValues[o.name] === selection[o.name]));
+
+// Whether choosing `value` for `option` can still yield an available variant,
+// given the buyer's current picks for the OTHER options. Drives button enabling.
+const valueIsAvailable = (card, selection, option, value) =>
+  card.variants.some(
+    (v) =>
+      v.optionValues[option.name] === value &&
+      card.options.every((o) => o.name === option.name || v.optionValues[o.name] === selection[o.name])
+  );
+
+// Apply a single option change, then snap the other options to a real available
+// variant so the selection never lands on a non-existent combination.
+const reconcileSelection = (card, selection, changedName, changedValue) => {
+  const next = { ...selection, [changedName]: changedValue };
+  if (findVariant(card, next)) return next;
+  const fallback = card.variants.find((v) => v.optionValues[changedName] === changedValue);
+  if (fallback) card.options.forEach((o) => { next[o.name] = fallback.optionValues[o.name]; });
+  return next;
+};
+
+// The buyer's default selection: the option values of the merchant-configured
+// variant (falls back to the first available variant if that one sold out).
+const defaultSelection = (card) => {
+  const variant = card.variants.find((v) => v.id === card.variantId) || card.variants[0];
+  const selection = {};
+  card.options.forEach((o) => { selection[o.name] = variant?.optionValues[o.name]; });
+  return selection;
+};
+
+// Append Shopify CDN resize params so each render gets a crisp, right-sized image.
+const sizedImage = (url, size) =>
+  url
+    ? `${url}${url.includes("?") ? "&" : "?"}width=${size}&height=${size}&crop=center`
+    : "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png";
 
 function App() {
   const { query, i18n } = useApi();
@@ -438,10 +544,23 @@ useEffect(() => {
                 amount
               }
               product {
+                id
                 title
-                images(first: 1) {
+                featuredImage { url altText }
+                images(first: 10) {
                   nodes {
                     url
+                    altText
+                  }
+                }
+                variants(first: 50) {
+                  nodes {
+                    id
+                    title
+                    availableForSale
+                    selectedOptions { name value }
+                    price { amount }
+                    compareAtPrice { amount }
                   }
                 }
               }
@@ -661,9 +780,13 @@ function ProductOffer({
   const filteredItems = allItems.filter((item) => {
     if (!item.variant) return false; // skip if no variant data
 
-    console.log(item)
+    // Hide once ANY variant of the product is in the cart (the buyer may have
+    // picked a different size via the picker than the configured variant).
+    const productId = item.variant?.product?.id;
     const isInCart = cartLines.some(
-      (line) => line.merchandise.id === item.variant.id
+      (line) =>
+        line.merchandise.id === item.variant.id ||
+        (productId && line.merchandise?.product?.id === productId)
     );
     return !isInCart;
   });
@@ -734,11 +857,30 @@ function VariantCard({
   handleAddToCart
 }) {
   const product = variant?.product || {};
-  const variantTitle = variant?.title || "";
-  const priceAmount = variant?.price?.amount || "0.00";
-  const compareAtAmount = variant?.compareAtPrice?.amount || null;
-  const imageUrl = product?.images?.nodes?.[0]?.url || "";
   const translate = useTranslate();
+  const { ui } = useApi();
+
+  // Size picker data (ported from checkout-recommendations). For products with
+  // real options the Add button opens a modal; the buyer's pick drives the price
+  // shown on the card and the variant that gets added.
+  const card = buildPicker(variant);
+  const [selection, setSelection] = useState(() => defaultSelection(card));
+  const selected =
+    findVariant(card, selection) ||
+    card.variants.find((v) => v.id === card.variantId) ||
+    card.variants[0];
+
+  const images = (card.images.length ? card.images : [{ url: "", alt: product.title || "Product image" }]).slice(0, 7);
+  const [activeImage, setActiveImage] = useState(0);
+  const activeIdx = Math.min(activeImage, images.length - 1);
+  const mainImage = images[activeIdx];
+
+  const selectedVariantId = card.hasOptions && selected ? selected.id : variant?.id;
+  const priceAmount = (card.hasOptions && selected ? selected.price : variant?.price?.amount) || "0.00";
+  const compareAtAmount = (card.hasOptions && selected ? selected.compareAtPrice : variant?.compareAtPrice?.amount) || null;
+  const imageUrl = images[0]?.url || "";
+  // Modal ids must be DOM-safe; product gids contain "/" and ":".
+  const modalId = `upsell-${String(card.productId).replace(/[^a-zA-Z0-9]/g, "")}`;
 
   if (title === "Upsell Title") {
     return null;
@@ -775,9 +917,95 @@ function VariantCard({
   }
 
   // Provide a fallback image if none is available
-  const finalImageUrl = imageUrl
-    ? `${imageUrl}&width=200&crop=center&height=200`
-    : "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png";
+  const finalImageUrl = sizedImage(imageUrl, 200);
+  const modalImageUrl = sizedImage(mainImage?.url, 600);
+  const modalPrice = isGWP ? "FREE" : stripCurrency(i18n.formatCurrency(priceAmount).replace(/\.00$/, ""));
+  const addLabel = isGWP ? translate("add-free-gift") : translate("add-to-cart");
+
+  const sizePickerModal = card.hasOptions ? (
+    <Modal id={modalId} accessibilityLabel={card.title || title} padding>
+      <BlockStack spacing="base">
+        {/* Row: product image (left) | title over price (right). */}
+        <Grid columns={["fill", "fill"]} spacing="base" blockAlignment="center">
+          <Image
+            source={modalImageUrl}
+            accessibilityDescription={mainImage?.alt || card.title}
+            aspectRatio={1}
+            fit="cover"
+            border="none"
+            cornerRadius="base"
+          />
+          <BlockStack spacing="tight">
+            <Text emphasis="bold">{card.title || title}</Text>
+            <Text appearance="subdued">{modalPrice}</Text>
+          </BlockStack>
+        </Grid>
+
+        {/* Tappable thumbnail strip to switch the main image. */}
+        {images.length > 1 && (
+          <ScrollView direction="inline" padding="none" hint="innerShadow">
+            <InlineLayout spacing="tight" columns={images.map(() => 56)} blockAlignment="center">
+              {images.map((image, index) => (
+                <Pressable
+                  key={image.url}
+                  onPress={() => setActiveImage(index)}
+                  cornerRadius="base"
+                  border={index === activeIdx ? "base" : "none"}
+                  padding="none"
+                  accessibilityLabel={`View image ${index + 1}`}
+                >
+                  <Image
+                    source={sizedImage(image.url, 160)}
+                    accessibilityDescription={image.alt}
+                    aspectRatio={1}
+                    fit="cover"
+                    border="none"
+                    cornerRadius="base"
+                  />
+                </Pressable>
+              ))}
+            </InlineLayout>
+          </ScrollView>
+        )}
+
+        {/* One row of selector buttons per option (e.g. Size, Cup). */}
+        {card.options.map((option) => (
+          <BlockStack key={option.name} spacing="tight">
+            <Text appearance="subdued">{option.name}</Text>
+            <Grid
+              columns={Array(Math.min(option.values.length, 4)).fill("fill")}
+              spacing="tight"
+            >
+              {option.values.map((value) => (
+                <Button
+                  key={value}
+                  kind={selection[option.name] === value ? "primary" : "secondary"}
+                  disabled={!valueIsAvailable(card, selection, option, value)}
+                  onPress={() =>
+                    setSelection((prev) => reconcileSelection(card, prev, option.name, value))
+                  }
+                >
+                  {value}
+                </Button>
+              ))}
+            </Grid>
+          </BlockStack>
+        ))}
+
+        <Button
+          kind="primary"
+          loading={adding}
+          disabled={!selected}
+          onPress={() => {
+            ui.overlay.close(modalId);
+            handleAddToCart(selectedVariantId, isGiftbox, isGWP ? null : compareAtAmount);
+          }}
+        >
+          {addLabel}
+        </Button>
+      </BlockStack>
+    </Modal>
+  ) : null;
 
   // --- Insert isGiftboxDisabled flag here ---
   const isGiftboxDisabled = pickupSelected && isGiftbox;
@@ -848,13 +1076,20 @@ function VariantCard({
                 Not available for Pickup Orders
               </Text>
             ) : (
-              <Button
-                kind={isGWP ? "secondary" : "secondary" }
-                loading={adding}
-                onPress={() => handleAddToCart(variant.id, isGiftbox, isGWP ? null : compareAtAmount)}
-              >
-                {isGWP ? translate('add-free-gift') : translate('add-to-cart') }
-              </Button>
+              card.hasOptions ? (
+                // Multi-variant: open the size picker instead of adding blindly.
+                <Button kind="secondary" loading={adding} overlay={sizePickerModal}>
+                  {addLabel}
+                </Button>
+              ) : (
+                <Button
+                  kind="secondary"
+                  loading={adding}
+                  onPress={() => handleAddToCart(variant.id, isGiftbox, isGWP ? null : compareAtAmount)}
+                >
+                  {addLabel}
+                </Button>
+              )
             )}
           </InlineLayout>
         )}

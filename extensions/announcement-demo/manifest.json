@@ -1,0 +1,7 @@
+{
+  "purchase.thank-you.announcement.render": {},
+  "customer-account.profile.announcement.render": {},
+  "customer-account.order-index.announcement.render": {},
+  "customer-account.order-status.announcement.render": {},
+  "purchase.checkout.block.render": {}
+}

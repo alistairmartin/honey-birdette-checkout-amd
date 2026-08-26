@@ -3,6 +3,8 @@ import {
   Banner,
   BlockStack,
   Button,
+  Card,
+  Divider,
   Form,
   Text,
   Select,
@@ -257,11 +259,14 @@ function CustomerBirthdayBlock() {
   }
 
   return (
-    <View padding="base" cornerRadius="base" background="subdued">
+    <Card padding>
       <BlockStack spacing="base">
+      <BlockStack spacing="extraTight">
         <Text size="large" emphasis="bold">{translate("birthdayTitle")}</Text>
-        <Text>{translate("birthdayDescription")}</Text>
-
+        <Text appearance="subdued">{translate("birthdayDescription")}</Text>
+      </BlockStack>
+      <Divider />
+      <BlockStack spacing="base">
          {storeConfig.showDebug && (
         <Text size="small" appearance="subdued">
           Region: {storeConfig.region}
@@ -326,6 +331,7 @@ function CustomerBirthdayBlock() {
           </BlockStack>
         </Form>
       </BlockStack>
-    </View>
+      </BlockStack>
+    </Card>
   );
 }
