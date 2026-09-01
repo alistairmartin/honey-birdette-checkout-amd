@@ -60,6 +60,19 @@ export const action = async ({ request }) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// 2x the ~600px email body width; the CDN resizes on the fly.
+const BANNER_WIDTH = 1200;
+
+function withBannerWidth(cdnUrl) {
+  try {
+    const parsed = new URL(cdnUrl);
+    parsed.searchParams.set("width", String(BANNER_WIDTH));
+    return parsed.toString();
+  } catch {
+    return cdnUrl;
+  }
+}
+
 // Plain fetch rather than useFetcher: each step needs the previous step's
 // response. Never assume JSON - an auth redirect answers with HTML.
 async function callUploadEndpoint(payload) {
@@ -169,7 +182,7 @@ export default function EmailBannerPage() {
         );
       }
 
-      setUrl(cdnUrl);
+      setUrl(withBannerWidth(cdnUrl));
       setUploadedName(file.name);
     } catch (err) {
       setUploadError(err?.message ?? String(err));
@@ -227,7 +240,7 @@ export default function EmailBannerPage() {
                     onChange={setUrl}
                     autoComplete="off"
                     placeholder="https://cdn.shopify.com/s/files/.../email-banner.jpg?v=..."
-                    helpText="Must be a full https:// URL."
+                    helpText="Must be a full https:// URL. Uploads get &width=1200 appended automatically; if pasting a URL yourself, add &width=1200 (or ?width=1200 if it has no query string) so Shopify serves a resized copy - 1200px is 2x the ~600px email body width, sharp on retina without bloating the email."
                     disabled={uploading}
                     connectedRight={
                       <Button

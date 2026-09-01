@@ -502,7 +502,7 @@ useEffect(() => {
 
     const attributes = [
       { key: "_checkout_upsell", value: "true" },
-      { key: "_addSource", value: "Checkout" },
+      { key: "__addSource", value: "Checkout" },
       ...(hasCompareAt
         ? [
             { key: "__originPrice", value: String(compareAtCents) },
