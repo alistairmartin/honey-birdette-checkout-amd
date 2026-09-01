@@ -73,6 +73,24 @@ function withBannerWidth(cdnUrl) {
   }
 }
 
+function withoutBannerWidth(cdnUrl) {
+  try {
+    const parsed = new URL(cdnUrl);
+    parsed.searchParams.delete("width");
+    return parsed.toString();
+  } catch {
+    return cdnUrl;
+  }
+}
+
+function hasBannerWidth(cdnUrl) {
+  try {
+    return new URL(cdnUrl).searchParams.has("width");
+  } catch {
+    return false;
+  }
+}
+
 // Plain fetch rather than useFetcher: each step needs the previous step's
 // response. Never assume JSON - an auth redirect answers with HTML.
 async function callUploadEndpoint(payload) {
@@ -182,7 +200,7 @@ export default function EmailBannerPage() {
         );
       }
 
-      setUrl(withBannerWidth(cdnUrl));
+      setUrl(cdnUrl);
       setUploadedName(file.name);
     } catch (err) {
       setUploadError(err?.message ?? String(err));
@@ -240,7 +258,7 @@ export default function EmailBannerPage() {
                     onChange={setUrl}
                     autoComplete="off"
                     placeholder="https://cdn.shopify.com/s/files/.../email-banner.jpg?v=..."
-                    helpText="Must be a full https:// URL. Uploads get &width=1200 appended automatically; if pasting a URL yourself, add &width=1200 (or ?width=1200 if it has no query string) so Shopify serves a resized copy - 1200px is 2x the ~600px email body width, sharp on retina without bloating the email."
+                    helpText="Must be a full https:// URL. Optional: the resize button below appends width=1200 so Shopify serves a resized copy - 1200px is 2x the ~600px email body width, sharp on retina without bloating the email."
                     disabled={uploading}
                     connectedRight={
                       <Button
@@ -257,7 +275,7 @@ export default function EmailBannerPage() {
                       {uploadStep}
                     </Text>
                   ) : null}
-                  <InlineStack>
+                  <InlineStack gap="200">
                     <Button
                       variant="primary"
                       submit
@@ -266,6 +284,21 @@ export default function EmailBannerPage() {
                     >
                       Apply to all stores
                     </Button>
+                    {hasBannerWidth(url) ? (
+                      <Button
+                        onClick={() => setUrl(withoutBannerWidth(url))}
+                        disabled={uploading || saving}
+                      >
+                        Remove width={BANNER_WIDTH} resize
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={() => setUrl(withBannerWidth(url))}
+                        disabled={!previewUrl || uploading || saving}
+                      >
+                        Resize to {BANNER_WIDTH}px
+                      </Button>
+                    )}
                   </InlineStack>
                 </BlockStack>
               </fetcher.Form>
