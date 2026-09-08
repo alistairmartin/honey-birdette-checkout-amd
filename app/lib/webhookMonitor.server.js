@@ -565,6 +565,7 @@ export const WINDOWS = {
   "15m": { minutes: 15, bucketMinutes: 1 },
   "1h": { minutes: 60, bucketMinutes: 1 },
   "6h": { minutes: 360, bucketMinutes: 5 },
+  "12h": { minutes: 720, bucketMinutes: 10 },
   "24h": { minutes: 1440, bucketMinutes: 15 },
   "7d": { minutes: 10080, bucketMinutes: 60 },
   // Longer windows come from the hourly rollup (90 day retention), so bucket

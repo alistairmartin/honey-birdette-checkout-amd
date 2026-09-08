@@ -38,13 +38,14 @@ const WINDOW_OPTIONS = [
   { label: "Last 15 minutes", value: "15m" },
   { label: "Last hour", value: "1h" },
   { label: "Last 6 hours", value: "6h" },
+  { label: "Last 12 hours", value: "12h" },
   { label: "Last 24 hours", value: "24h" },
   { label: "Last 7 days", value: "7d" },
   { label: "Last 14 days", value: "14d" },
   { label: "Last 30 days", value: "30d" },
 ];
 // Windows long enough that a bare clock time is ambiguous.
-const DATED_WINDOWS = new Set(["24h", "7d", "14d", "30d"]);
+const DATED_WINDOWS = new Set(["12h", "24h", "7d", "14d", "30d"]);
 
 // One colour per topic on the timeline. Order matters: the first topics listed
 // get the most distinguishable colours.
