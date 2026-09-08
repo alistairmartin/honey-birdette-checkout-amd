@@ -121,3 +121,79 @@ model GwpAppV1Config {
 
   @@index([shop])
 }
+
+// ---------------------------------------------------------------------------
+// Webhook monitor (see WEBHOOK_MONITOR_HANDOFF.md). Observation only: the app
+// records one row per webhook delivery Shopify sends it and never processes
+// or forwards anything. No PII is stored - ids, timestamps, statuses, tags,
+// counts and a fingerprint hash only.
+// ---------------------------------------------------------------------------
+
+// One row per webhook delivery this app receives.
+model WebhookEvent {
+  id                String   @id @default(cuid())
+  shop              String
+  // e.g. ORDERS_UPDATED (as returned by authenticate.webhook)
+  topic             String
+  // X-Shopify-Webhook-Id. Shopify retries with the same id, so unique dedupes.
+  webhookId         String   @unique
+  eventId           String?
+  // order | customer | fulfillment | fulfillment_event | inventory_level
+  resourceType      String
+  // numeric id as a string (inventory: "<inventory_item_id>:<location_id>")
+  resourceId        String
+  // order name (#12345) or fulfillment name; null for customers/inventory
+  resourceName      String?
+  // X-Shopify-Triggered-At: when Shopify emitted it. receivedAt - triggeredAt
+  // is the delivery lag.
+  triggeredAt       DateTime?
+  receivedAt        DateTime @default(now())
+  // payload.updated_at
+  resourceUpdatedAt DateTime?
+  // See classify* in app/lib/webhookMonitor.server.js
+  classification    String
+  // sha1 of the fields that matter for this resource type
+  fingerprint       String
+  // Same fingerprint as the previous row for this resource = nothing a backend
+  // cares about changed. This is the dashboard's "noise" count.
+  repeatOfPrev      Boolean  @default(false)
+  payloadBytes      Int
+  // Best-effort origin guess: kibo | omneo | pos | youpay | shopify | unknown
+  source            String?
+  // The non-PII fingerprint inputs (statuses, counts, hashed contact fields)
+  // as JSON, so the next row for the same resource can say WHAT changed.
+  summaryJson       String   @default("{}")
+  apiVersion        String?
+
+  @@index([shop, receivedAt])
+  @@index([shop, topic, receivedAt])
+  @@index([shop, resourceType, resourceId, receivedAt])
+}
+
+// Optional: legacy backend queue depth, posted every minute by a cron on that
+// server to /api/webhook-monitor/queue-depth.
+model WebhookQueueSample {
+  id        String   @id @default(cuid())
+  shop      String
+  files     Int
+  // age of the oldest queued file in seconds
+  oldestAge Int?
+  sampledAt DateTime @default(now())
+
+  @@index([shop, sampledAt])
+}
+
+// Hourly rollup of WebhookEvent so raw rows can be pruned after 3 days while
+// the dashboard's 7 day window still works. Kept 90 days.
+model WebhookHourly {
+  id             String   @id @default(cuid())
+  shop           String
+  topic          String
+  classification String
+  hour           DateTime
+  count          Int
+  repeats        Int
+
+  @@unique([shop, topic, classification, hour])
+  @@index([shop, hour])
+}

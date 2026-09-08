@@ -4,10 +4,39 @@ import {
   syncBundleAcrossDiscounts,
   syncBundleIndexToCartTransform,
 } from "../lib/lubricantBundle.server";
+import {
+  MONITORED_TOPICS,
+  readWebhookHeaders,
+  recordWebhookEvent,
+} from "../lib/webhookMonitor.server";
 
 export const action = async ({ request }) => {
+  // Read headers and body size before authenticate.webhook consumes the body.
+  // These are observation-only inputs for the webhook monitor.
+  const monitorHeaders = readWebhookHeaders(request);
+  const payloadBytes = Number(request.headers.get("content-length")) || 0;
+
   const { topic, shop, session, admin, payload } =
     await authenticate.webhook(request);
+
+  // Webhook monitor: record and return, never process. One cheap insert, no
+  // Admin API, and it runs even when the shop has uninstalled (no admin) so
+  // the record is complete. See WEBHOOK_MONITOR_HANDOFF.md.
+  if (MONITORED_TOPICS.has(topic)) {
+    try {
+      await recordWebhookEvent({
+        shop,
+        topic,
+        payload,
+        headers: monitorHeaders,
+        payloadBytes,
+      });
+    } catch (err) {
+      // Never let a monitoring failure make Shopify retry the delivery.
+      console.error(`[webhook-monitor] ${topic} on ${shop} failed:`, err?.message || err);
+    }
+    throw new Response();
+  }
 
   if (!admin) {
     // The admin context isn't returned if the webhook fired after a shop was uninstalled.

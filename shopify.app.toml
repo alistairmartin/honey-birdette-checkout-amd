@@ -29,6 +29,18 @@ api_version = "2026-01"
   uri = "/webhooks"
   filter = "type:lubricant_bundle"
 
+  # Webhook monitor (WEBHOOK_MONITOR_HANDOFF.md): observe-only. The handler
+  # records one row per delivery and returns; nothing is processed.
+  [[webhooks.subscriptions]]
+  topics = [
+    "orders/create", "orders/updated", "orders/cancelled",
+    "fulfillments/create", "fulfillments/update",
+    "fulfillment_events/create",
+    "customers/create", "customers/update",
+    "inventory_levels/update",
+  ]
+  uri = "/webhooks"
+
 [pos]
 embedded = false
 
