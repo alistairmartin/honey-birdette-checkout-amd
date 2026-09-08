@@ -718,6 +718,16 @@ export default function WebhookMonitor() {
             <Text as="h2" variant="headingMd">
               Totals for the window
             </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Every time something changes on an order, customer, shipment or
+              stock level, Shopify sends this app a message (a webhook). Events
+              is how many arrived. Flagged noise is the share the backend did
+              not need: messages about an order that was already shipped, paid
+              and closed (a courier scan), customer updates where nothing
+              visible changed (a loyalty balance write), or a message that
+              repeated the previous one word for word. Delivery lag is how long
+              a message took to reach us after Shopify sent it.
+            </Text>
             <InlineStack gap="800" wrap>
               <BigNumber label="Events" value={fmtInt(data.totals.events)} />
               <BigNumber
@@ -749,6 +759,12 @@ export default function WebhookMonitor() {
             <Text as="h2" variant="headingMd">
               Timeline ({data.timeline.bucketMinutes} minute buckets)
             </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              How many messages arrived in each slice of time, coloured by
+              type. Tall spikes are bursts, such as a courier posting a batch
+              of tracking scans or a stock sync. Click a colour in the legend
+              to hide that type; hover a bar for the breakdown.
+            </Text>
             <StackedTimeline timeline={data.timeline} windowKey={data.window} />
           </BlockStack>
         </Card>
@@ -757,6 +773,14 @@ export default function WebhookMonitor() {
           <BlockStack gap="300">
             <Text as="h2" variant="headingMd">
               By topic and classification
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Topic is the kind of message Shopify sent. Classification is our
+              reading of why it was sent (new order, tracking only, refund,
+              silent, and so on). Count is how many. Repeats is how many of
+              those said exactly the same thing as the previous message about
+              the same order, customer or shipment, so the backend learned
+              nothing new. A high Repeats number is the first place to cut.
             </Text>
             {topicClassRows.length ? (
               <DataTable
@@ -862,6 +886,11 @@ export default function WebhookMonitor() {
           <BlockStack gap="300">
             <Text as="h2" variant="headingMd">
               Recent events
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              The last 100 messages, newest first. Repeat means it matched the
+              message before it. Source is a best guess at what caused the
+              change. Lag is delivery time from Shopify to this app.
             </Text>
             <InlineStack gap="300" blockAlign="end" wrap>
               <Box minWidth="220px">
