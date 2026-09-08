@@ -778,9 +778,14 @@ export default function WebhookMonitor() {
               Topic is the kind of message Shopify sent. Classification is our
               reading of why it was sent (new order, tracking only, refund,
               silent, and so on). Count is how many. Repeats is how many of
-              those said exactly the same thing as the previous message about
-              the same order, customer or shipment, so the backend learned
-              nothing new. A high Repeats number is the first place to cut.
+              those carried no new data at all: the order, customer or
+              shipment was in exactly the same state as the last message we
+              received about it (same payment status, same fulfilment status,
+              same tags, same tracking, same totals). Shopify sent it again
+              because something it does not include in the message changed,
+              usually a courier scan or a metafield write. The backend would
+              have been correct to ignore every one of them, so a high Repeats
+              number is the first place to cut.
             </Text>
             {topicClassRows.length ? (
               <DataTable
