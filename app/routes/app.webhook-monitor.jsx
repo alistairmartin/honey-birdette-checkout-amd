@@ -1,5 +1,9 @@
 import { json } from "@remix-run/node";
-import { useLoaderData, useRevalidator, useSearchParams } from "@remix-run/react";
+import {
+  useLoaderData,
+  useRevalidator,
+  useSearchParams,
+} from "@remix-run/react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Page,
@@ -55,7 +59,13 @@ const TOPIC_COLOURS = {
   FULFILLMENT_EVENTS_CREATE: "#5C6AC4",
   INVENTORY_LEVELS_UPDATE: "#6D7175",
 };
-const FALLBACK_COLOURS = ["#00A0AC", "#F49342", "#9C6ADE", "#47C1BF", "#DE3618"];
+const FALLBACK_COLOURS = [
+  "#00A0AC",
+  "#F49342",
+  "#9C6ADE",
+  "#47C1BF",
+  "#DE3618",
+];
 
 const CLASS_TONE = {
   new_order: "success",
@@ -83,7 +93,9 @@ export async function loader({ request }) {
 
   const requested = url.searchParams.get("shop");
   const shop =
-    requested && shops.some((s) => s.shop === requested) ? requested : session.shop;
+    requested && shops.some((s) => s.shop === requested)
+      ? requested
+      : session.shop;
   if (!shops.some((s) => s.shop === shop)) {
     shops.unshift({ shop, label: shopLabel(shop) });
   }
@@ -137,7 +149,11 @@ function fmtTime(iso, withDate = false) {
 }
 
 function topicSlug(topic) {
-  return topic.toLowerCase().replace(/_/g, "/").replace("fulfillment/events", "fulfillment_events").replace("inventory/levels", "inventory_levels");
+  return topic
+    .toLowerCase()
+    .replace(/_/g, "/")
+    .replace("fulfillment/events", "fulfillment_events")
+    .replace("inventory/levels", "inventory_levels");
 }
 
 function adminUrl(shop, resourceType, resourceId, orderId) {
@@ -155,7 +171,9 @@ function adminUrl(shop, resourceType, resourceId, orderId) {
 }
 
 function colourFor(topic, index) {
-  return TOPIC_COLOURS[topic] || FALLBACK_COLOURS[index % FALLBACK_COLOURS.length];
+  return (
+    TOPIC_COLOURS[topic] || FALLBACK_COLOURS[index % FALLBACK_COLOURS.length]
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -180,7 +198,8 @@ function StackedTimeline({ timeline, windowKey }) {
   const [hover, setHover] = useState(null);
 
   const visibleTopics = topics.filter((t) => !hidden.has(t));
-  const totalOf = (b) => visibleTopics.reduce((a, t) => a + (b.counts[t] || 0), 0);
+  const totalOf = (b) =>
+    visibleTopics.reduce((a, t) => a + (b.counts[t] || 0), 0);
 
   const max = Math.max(1, ...series.map(totalOf));
   const barW = plotW / Math.max(1, series.length);
@@ -214,7 +233,6 @@ function StackedTimeline({ timeline, windowKey }) {
     setHover({
       index: i,
       x: br.left - wr.left + br.width / 2,
-      y: br.top - wr.top,
       flip: br.left - wr.left > wr.width * 0.6,
     });
   };
@@ -223,91 +241,109 @@ function StackedTimeline({ timeline, windowKey }) {
 
   return (
     <BlockStack gap="300">
+      {/* Outer wrapper is the popover's positioning context; the inner div
+          scrolls. overflow-x:auto also clips vertically, so the popover must
+          live outside it. */}
       <div
         data-chart-wrap
-        style={{ overflowX: "auto", position: "relative" }}
+        style={{ position: "relative" }}
         onMouseLeave={() => setHover(null)}
       >
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          width="100%"
-          style={{ minWidth: 640, display: "block" }}
-          role="img"
-          aria-label="Events per bucket, stacked by topic"
-        >
-          {Array.from({ length: yTicks + 1 }).map((_, i) => {
-            const v = Math.round((max / yTicks) * i);
-            const y = padT + plotH - (plotH * v) / max;
-            return (
-              <g key={i}>
-                <line x1={padL} x2={width - 8} y1={y} y2={y} stroke="#E3E3E3" strokeWidth="1" />
-                <text x={padL - 6} y={y + 4} fontSize="11" fill="#6D7175" textAnchor="end">
-                  {v}
-                </text>
-              </g>
-            );
-          })}
-          {series.map((b, i) => {
-            let yCursor = padT + plotH;
-            const x = padL + i * barW;
-            const active = hover && hover.index === i;
-            return (
-              <g
-                key={b.at}
-                onMouseEnter={onBarEnter(i)}
-                style={{ cursor: "default" }}
-              >
-                {/* Full-height hit area so thin or empty bars are hoverable */}
-                <rect
-                  x={x}
-                  y={padT}
-                  width={Math.max(1, barW)}
-                  height={plotH}
-                  fill={active ? "rgba(0,0,0,0.05)" : "transparent"}
-                />
-                {visibleTopics.map((t) => {
-                  const c = b.counts[t] || 0;
-                  if (!c) return null;
-                  const h = (plotH * c) / max;
-                  yCursor -= h;
-                  return (
-                    <rect
-                      key={t}
-                      x={x + 0.5}
-                      y={yCursor}
-                      width={Math.max(1, barW - 1)}
-                      height={h}
-                      fill={colourFor(t, topics.indexOf(t))}
-                      opacity={hover && !active ? 0.7 : 1}
-                    />
-                  );
-                })}
-                {i % labelEvery === 0 && (
+        <div style={{ overflowX: "auto" }}>
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            width="100%"
+            style={{ minWidth: 640, display: "block" }}
+            role="img"
+            aria-label="Events per bucket, stacked by topic"
+          >
+            {Array.from({ length: yTicks + 1 }).map((_, i) => {
+              const v = Math.round((max / yTicks) * i);
+              const y = padT + plotH - (plotH * v) / max;
+              return (
+                <g key={i}>
+                  <line
+                    x1={padL}
+                    x2={width - 8}
+                    y1={y}
+                    y2={y}
+                    stroke="#E3E3E3"
+                    strokeWidth="1"
+                  />
                   <text
-                    x={x + barW / 2}
-                    y={height - 8}
+                    x={padL - 6}
+                    y={y + 4}
                     fontSize="11"
                     fill="#6D7175"
-                    textAnchor="middle"
+                    textAnchor="end"
                   >
-                    {fmtTime(b.at, withDate).replace(/:\d\d$/, "")}
+                    {v}
                   </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
+                </g>
+              );
+            })}
+            {series.map((b, i) => {
+              let yCursor = padT + plotH;
+              const x = padL + i * barW;
+              const active = hover && hover.index === i;
+              return (
+                <g
+                  key={b.at}
+                  onMouseEnter={onBarEnter(i)}
+                  style={{ cursor: "default" }}
+                >
+                  {/* Full-height hit area so thin or empty bars are hoverable */}
+                  <rect
+                    x={x}
+                    y={padT}
+                    width={Math.max(1, barW)}
+                    height={plotH}
+                    fill={active ? "rgba(0,0,0,0.05)" : "transparent"}
+                  />
+                  {visibleTopics.map((t) => {
+                    const c = b.counts[t] || 0;
+                    if (!c) return null;
+                    const h = (plotH * c) / max;
+                    yCursor -= h;
+                    return (
+                      <rect
+                        key={t}
+                        x={x + 0.5}
+                        y={yCursor}
+                        width={Math.max(1, barW - 1)}
+                        height={h}
+                        fill={colourFor(t, topics.indexOf(t))}
+                        opacity={hover && !active ? 0.7 : 1}
+                      />
+                    );
+                  })}
+                  {i % labelEvery === 0 && (
+                    <text
+                      x={x + barW / 2}
+                      y={height - 8}
+                      fontSize="11"
+                      fill="#6D7175"
+                      textAnchor="middle"
+                    >
+                      {fmtTime(b.at, withDate).replace(/:\d\d$/, "")}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
         {hovered && (
           <div
             role="dialog"
             aria-label="Bucket detail"
             style={{
               position: "absolute",
-              top: Math.max(0, hover.y - 8),
+              top: 4,
               left: hover.x,
               transform: hover.flip
-                ? "translate(calc(-100% - 10px), -100%)"
-                : "translate(10px, -100%)",
+                ? "translateX(calc(-100% - 12px))"
+                : "translateX(12px)",
               zIndex: 20,
               pointerEvents: "none",
               minWidth: 200,
@@ -328,7 +364,13 @@ function StackedTimeline({ timeline, windowKey }) {
                 {visibleTopics
                   .filter((t) => hovered.counts[t])
                   .map((t) => (
-                    <InlineStack key={t} gap="200" align="space-between" blockAlign="center" wrap={false}>
+                    <InlineStack
+                      key={t}
+                      gap="200"
+                      align="space-between"
+                      blockAlign="center"
+                      wrap={false}
+                    >
                       <InlineStack gap="100" blockAlign="center" wrap={false}>
                         <span
                           style={{
@@ -380,7 +422,9 @@ function StackedTimeline({ timeline, windowKey }) {
                 padding: "2px 8px",
                 border: "1px solid transparent",
                 borderRadius: 999,
-                background: off ? "transparent" : "var(--p-color-bg-surface-secondary, #F1F1F1)",
+                background: off
+                  ? "transparent"
+                  : "var(--p-color-bg-surface-secondary, #F1F1F1)",
                 cursor: "pointer",
                 opacity: off ? 0.45 : 1,
                 font: "inherit",
@@ -395,7 +439,11 @@ function StackedTimeline({ timeline, windowKey }) {
                   background: colourFor(t, ti),
                 }}
               />
-              <Text as="span" variant="bodySm" textDecorationLine={off ? "line-through" : undefined}>
+              <Text
+                as="span"
+                variant="bodySm"
+                textDecorationLine={off ? "line-through" : undefined}
+              >
                 {topicSlug(t)}
               </Text>
             </button>
@@ -454,7 +502,13 @@ function QueueLine({ samples }) {
           return (
             <g key={f}>
               <line x1={padL} x2={width - 8} y1={y} y2={y} stroke="#E3E3E3" />
-              <text x={padL - 6} y={y + 4} fontSize="11" fill="#6D7175" textAnchor="end">
+              <text
+                x={padL - 6}
+                y={y + 4}
+                fontSize="11"
+                fill="#6D7175"
+                textAnchor="end"
+              >
                 {fmtInt(max * f)}
               </text>
             </g>
@@ -469,7 +523,13 @@ function QueueLine({ samples }) {
         <text x={padL} y={height - 6} fontSize="11" fill="#6D7175">
           {fmtTime(samples[0].sampledAt, true)}
         </text>
-        <text x={width - 8} y={height - 6} fontSize="11" fill="#6D7175" textAnchor="end">
+        <text
+          x={width - 8}
+          y={height - 6}
+          fontSize="11"
+          fill="#6D7175"
+          textAnchor="end"
+        >
           {fmtTime(samples[samples.length - 1].sampledAt, true)}
         </text>
       </svg>
@@ -522,7 +582,10 @@ export default function WebhookMonitor() {
     setParams(next, { replace: true, preventScrollReset: true });
   };
 
-  const shopOptions = data.shops.map((s) => ({ label: s.label, value: s.shop }));
+  const shopOptions = data.shops.map((s) => ({
+    label: s.label,
+    value: s.shop,
+  }));
   const topicFilter = params.get("topic") || "";
   const classFilter = params.get("class") || "";
 
@@ -534,7 +597,9 @@ export default function WebhookMonitor() {
           {r.classification}
         </Badge>,
         fmtInt(r.count),
-        data.totals.events ? `${((r.count / data.totals.events) * 100).toFixed(1)}%` : "0%",
+        data.totals.events
+          ? `${((r.count / data.totals.events) * 100).toFixed(1)}%`
+          : "0%",
         fmtInt(r.repeats),
       ]),
     [data.byTopicClass, data.totals.events],
@@ -657,7 +722,9 @@ export default function WebhookMonitor() {
               <BigNumber label="Events" value={fmtInt(data.totals.events)} />
               <BigNumber
                 label="Events / min"
-                value={data.totals.perMinute.toFixed(data.totals.perMinute < 10 ? 2 : 1)}
+                value={data.totals.perMinute.toFixed(
+                  data.totals.perMinute < 10 ? 2 : 1,
+                )}
               />
               <BigNumber
                 label="Flagged noise"
@@ -693,8 +760,20 @@ export default function WebhookMonitor() {
             </Text>
             {topicClassRows.length ? (
               <DataTable
-                columnContentTypes={["text", "text", "numeric", "numeric", "numeric"]}
-                headings={["Topic", "Classification", "Count", "% of total", "Repeats"]}
+                columnContentTypes={[
+                  "text",
+                  "text",
+                  "numeric",
+                  "numeric",
+                  "numeric",
+                ]}
+                headings={[
+                  "Topic",
+                  "Classification",
+                  "Count",
+                  "% of total",
+                  "Repeats",
+                ]}
                 rows={topicClassRows}
                 increasedTableDensity
               />
@@ -718,7 +797,13 @@ export default function WebhookMonitor() {
             </Text>
             {resourceRows.length ? (
               <DataTable
-                columnContentTypes={["text", "text", "text", "numeric", "numeric"]}
+                columnContentTypes={[
+                  "text",
+                  "text",
+                  "text",
+                  "numeric",
+                  "numeric",
+                ]}
                 headings={["Type", "Resource", "Topics", "Rows", "Repeats"]}
                 rows={resourceRows}
                 increasedTableDensity
@@ -737,13 +822,18 @@ export default function WebhookMonitor() {
               <Text as="h2" variant="headingMd">
                 Legacy queue depth
               </Text>
-              {queue?.rising && <Badge tone="critical">Rising for 15 min</Badge>}
+              {queue?.rising && (
+                <Badge tone="critical">Rising for 15 min</Badge>
+              )}
               {queue?.stale && <Badge tone="warning">Feed stale</Badge>}
             </InlineStack>
             {queue ? (
               <BlockStack gap="300">
                 <InlineStack gap="800" wrap>
-                  <BigNumber label="Files queued now" value={fmtInt(queue.current)} />
+                  <BigNumber
+                    label="Files queued now"
+                    value={fmtInt(queue.current)}
+                  />
                   <BigNumber
                     label="Oldest file age"
                     value={fmtSeconds(queue.oldestAge)}
@@ -758,9 +848,9 @@ export default function WebhookMonitor() {
               </BlockStack>
             ) : (
               <Text as="p" tone="subdued">
-                No samples for this store in the window. The legacy server
-                needs the one-line cron from WEBHOOK_MONITOR_HANDOFF.md posting
-                to /api/webhook-monitor/queue-depth.
+                No samples for this store in the window. The legacy server needs
+                the one-line cron from WEBHOOK_MONITOR_HANDOFF.md posting to
+                /api/webhook-monitor/queue-depth.
               </Text>
             )}
           </BlockStack>
@@ -777,7 +867,10 @@ export default function WebhookMonitor() {
                   label="Topic"
                   options={[
                     { label: "All topics", value: "" },
-                    ...data.filters.topics.map((t) => ({ label: topicSlug(t), value: t })),
+                    ...data.filters.topics.map((t) => ({
+                      label: topicSlug(t),
+                      value: t,
+                    })),
                   ]}
                   value={topicFilter}
                   onChange={(v) => setParam("topic", v)}
@@ -788,7 +881,10 @@ export default function WebhookMonitor() {
                   label="Classification"
                   options={[
                     { label: "All classifications", value: "" },
-                    ...data.filters.classes.map((c) => ({ label: c, value: c })),
+                    ...data.filters.classes.map((c) => ({
+                      label: c,
+                      value: c,
+                    })),
                   ]}
                   value={classFilter}
                   onChange={(v) => setParam("class", v)}
