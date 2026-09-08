@@ -46,6 +46,28 @@ export function hasLoyaltyOrderTag(orderTags) {
 
 const MAX_ERRORS = 50;
 
+// adminGraphql only retries on throttling. Connection resets between Render
+// and Shopify ("Http request error, no response available") surface as plain
+// errors, so retry those a few times before giving up on the batch.
+function isNetworkError(err) {
+  const msg = err?.message || String(err);
+  return /no response available|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|fetch failed|network/i.test(
+    msg,
+  );
+}
+
+async function graphqlWithRetry(admin, query, variables) {
+  const MAX = 4;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await adminGraphql(admin, query, variables);
+    } catch (err) {
+      if (!isNetworkError(err) || attempt >= MAX) throw err;
+      await sleep(Math.min(1000 * 2 ** attempt, 8000));
+    }
+  }
+}
+
 // Process one budgeted batch. Returns page counts plus a cursor to resume from
 // (null when the window is exhausted).
 export async function backfillOrderLoyaltyTags(
@@ -70,7 +92,7 @@ export async function backfillOrderLoyaltyTags(
 
   try {
     while (true) {
-      const body = await adminGraphql(admin, ORDERS_QUERY, { q, cursor });
+      const body = await graphqlWithRetry(admin, ORDERS_QUERY, { q, cursor });
       const orders = body.data.orders;
 
       for (const order of orders.nodes) {
@@ -90,7 +112,7 @@ export async function backfillOrderLoyaltyTags(
         matchedOrders.push({ name: order.name, tag });
         if (!apply) continue;
 
-        const upd = await adminGraphql(admin, TAGS_ADD, {
+        const upd = await graphqlWithRetry(admin, TAGS_ADD, {
           id: order.id,
           tags: [tag],
         });
