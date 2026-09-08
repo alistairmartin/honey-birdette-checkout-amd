@@ -136,8 +136,11 @@ function topicSlug(topic) {
   return topic.toLowerCase().replace(/_/g, "/").replace("fulfillment/events", "fulfillment_events").replace("inventory/levels", "inventory_levels");
 }
 
-function adminUrl(shop, resourceType, resourceId) {
+function adminUrl(shop, resourceType, resourceId, orderId) {
   const handle = shop.replace(".myshopify.com", "");
+  if (orderId) {
+    return `https://admin.shopify.com/store/${handle}/orders/${orderId}`;
+  }
   if (resourceType === "order") {
     return `https://admin.shopify.com/store/${handle}/orders/${resourceId}`;
   }
@@ -391,7 +394,7 @@ export default function WebhookMonitor() {
   );
 
   const resourceRows = data.topResources.map((r) => {
-    const href = adminUrl(data.shop, r.resourceType, r.resourceId);
+    const href = adminUrl(data.shop, r.resourceType, r.resourceId, r.orderId);
     const label = r.resourceName || r.resourceId;
     return [
       r.resourceType,
@@ -409,7 +412,7 @@ export default function WebhookMonitor() {
   });
 
   const recentRows = data.recent.map((e) => {
-    const href = adminUrl(data.shop, e.resourceType, e.resourceId);
+    const href = adminUrl(data.shop, e.resourceType, e.resourceId, e.orderId);
     const label = e.resourceName || e.resourceId;
     const lag = e.triggeredAt
       ? (new Date(e.receivedAt) - new Date(e.triggeredAt)) / 1000

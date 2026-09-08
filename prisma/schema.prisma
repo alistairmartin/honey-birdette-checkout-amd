@@ -144,6 +144,9 @@ model WebhookEvent {
   resourceId        String
   // order name (#12345) or fulfillment name; null for customers/inventory
   resourceName      String?
+  // Parent order id for orders, fulfillments and fulfillment events, so the
+  // dashboard can deep-link every row to its order in admin.
+  orderId           String?
   // X-Shopify-Triggered-At: when Shopify emitted it. receivedAt - triggeredAt
   // is the delivery lag.
   triggeredAt       DateTime?
