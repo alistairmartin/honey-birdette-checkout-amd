@@ -17,7 +17,10 @@ export const METAFIELD_TYPE = "single_line_text_field";
 const SHOP_REGION = {
   "honey-birdette-2.myshopify.com": "au",
   "honey-birdette-uk.myshopify.com": "uk",
+  // The US store is referred to by both handles across this repo; map both so
+  // whichever the admin session reports resolves to the US region.
   "honeybirdette-us.myshopify.com": "us",
+  "honey-birdette-usa.myshopify.com": "us",
   "honey-birdette-eu.myshopify.com": "eu",
 };
 
