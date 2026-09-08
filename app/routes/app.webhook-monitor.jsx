@@ -791,9 +791,11 @@ export default function WebhookMonitor() {
               Top repeated resources
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              Resources with the most deliveries in the window. Repeats are rows
-              whose fingerprint matched the previous row for that resource, so
-              nothing a backend cares about changed.
+              The orders, customers and shipments Shopify sent the most messages
+              about. Rows is how many messages arrived. Repeats is how many of
+              them said exactly the same thing as the message before, so the
+              backend learned nothing new from them (usually a courier scan
+              re-sending an order that was already shipped and closed).
             </Text>
             {resourceRows.length ? (
               <DataTable
