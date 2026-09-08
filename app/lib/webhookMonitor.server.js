@@ -36,7 +36,7 @@ export const MONITORED_TOPICS = new Set([
 // changed. `repeatOfPrev` rows are counted as noise too regardless of class.
 export const NOISE_CLASSES = new Set(["tracking_only", "silent"]);
 
-// Raw rows live this long; hourly rollups keep the 7 day view working.
+// Raw rows live this long; hourly rollups keep the 7 to 30 day views working.
 export const RAW_RETENTION_DAYS = 3;
 export const HOURLY_RETENTION_DAYS = 90;
 export const QUEUE_SAMPLE_RETENTION_DAYS = 30;
@@ -567,6 +567,10 @@ export const WINDOWS = {
   "6h": { minutes: 360, bucketMinutes: 5 },
   "24h": { minutes: 1440, bucketMinutes: 15 },
   "7d": { minutes: 10080, bucketMinutes: 60 },
+  // Longer windows come from the hourly rollup (90 day retention), so bucket
+  // sizes must be whole hours.
+  "14d": { minutes: 20160, bucketMinutes: 240 },
+  "30d": { minutes: 43200, bucketMinutes: 720 },
 };
 
 // Every shop that has ever sent a row, plus the known regions, plus whatever

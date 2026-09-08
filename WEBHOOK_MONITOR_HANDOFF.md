@@ -229,7 +229,7 @@ Classification = `decrement` / `increment` / `zero` vs previous row.
 
 Add to `NavMenu` in `app/routes/app.jsx`. Polaris. Loader reads the DB only.
 Shop selector (AU/US/UK/EU, default = embedded shop), window selector
-(15m / 1h / 6h / 24h / 7d), auto-refresh every 30s.
+(15m / 1h / 6h / 24h / 7d / 14d / 30d), auto-refresh every 30s. Legend chips toggle topics on and off; hovering a bar opens a detail popover.
 
 Cards, top to bottom:
 

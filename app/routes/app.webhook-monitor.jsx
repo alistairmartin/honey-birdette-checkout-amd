@@ -36,7 +36,11 @@ const WINDOW_OPTIONS = [
   { label: "Last 6 hours", value: "6h" },
   { label: "Last 24 hours", value: "24h" },
   { label: "Last 7 days", value: "7d" },
+  { label: "Last 14 days", value: "14d" },
+  { label: "Last 30 days", value: "30d" },
 ];
+// Windows long enough that a bare clock time is ambiguous.
+const DATED_WINDOWS = new Set(["24h", "7d", "14d", "30d"]);
 
 // One colour per topic on the timeline. Order matters: the first topics listed
 // get the most distinguishable colours.
@@ -168,14 +172,29 @@ function StackedTimeline({ timeline, windowKey }) {
   const plotW = width - padL - 8;
   const plotH = height - padB - padT;
 
-  const max = Math.max(
-    1,
-    ...series.map((b) => Object.values(b.counts).reduce((a, c) => a + c, 0)),
-  );
+  // Legend doubles as a filter: click a topic to hide it from the stacks and
+  // the totals. Hidden topics are remembered for the tab, not the URL.
+  const [hidden, setHidden] = useState(() => new Set());
+  // Which bar the popover is for, plus where to anchor it (pixel coords
+  // inside the chart wrapper).
+  const [hover, setHover] = useState(null);
+
+  const visibleTopics = topics.filter((t) => !hidden.has(t));
+  const totalOf = (b) => visibleTopics.reduce((a, t) => a + (b.counts[t] || 0), 0);
+
+  const max = Math.max(1, ...series.map(totalOf));
   const barW = plotW / Math.max(1, series.length);
   const yTicks = 4;
   const labelEvery = Math.max(1, Math.ceil(series.length / 8));
-  const withDate = windowKey === "7d" || windowKey === "24h";
+  const withDate = DATED_WINDOWS.has(windowKey);
+
+  const toggleTopic = (t) =>
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t);
+      else next.add(t);
+      return next;
+    });
 
   if (!series.some((b) => Object.keys(b.counts).length)) {
     return (
@@ -187,9 +206,28 @@ function StackedTimeline({ timeline, windowKey }) {
     );
   }
 
+  const onBarEnter = (i) => (evt) => {
+    const wrap = evt.currentTarget.closest("[data-chart-wrap]");
+    if (!wrap) return;
+    const wr = wrap.getBoundingClientRect();
+    const br = evt.currentTarget.getBoundingClientRect();
+    setHover({
+      index: i,
+      x: br.left - wr.left + br.width / 2,
+      y: br.top - wr.top,
+      flip: br.left - wr.left > wr.width * 0.6,
+    });
+  };
+
+  const hovered = hover ? series[hover.index] : null;
+
   return (
     <BlockStack gap="300">
-      <div style={{ overflowX: "auto" }}>
+      <div
+        data-chart-wrap
+        style={{ overflowX: "auto", position: "relative" }}
+        onMouseLeave={() => setHover(null)}
+      >
         <svg
           viewBox={`0 0 ${width} ${height}`}
           width="100%"
@@ -211,18 +249,23 @@ function StackedTimeline({ timeline, windowKey }) {
           })}
           {series.map((b, i) => {
             let yCursor = padT + plotH;
-            const total = Object.values(b.counts).reduce((a, c) => a + c, 0);
             const x = padL + i * barW;
+            const active = hover && hover.index === i;
             return (
-              <g key={b.at}>
-                <title>
-                  {`${fmtTime(b.at, true)} (${bucketMinutes} min): ${total} event(s)\n` +
-                    topics
-                      .filter((t) => b.counts[t])
-                      .map((t) => `${topicSlug(t)}: ${b.counts[t]}`)
-                      .join("\n")}
-                </title>
-                {topics.map((t, ti) => {
+              <g
+                key={b.at}
+                onMouseEnter={onBarEnter(i)}
+                style={{ cursor: "default" }}
+              >
+                {/* Full-height hit area so thin or empty bars are hoverable */}
+                <rect
+                  x={x}
+                  y={padT}
+                  width={Math.max(1, barW)}
+                  height={plotH}
+                  fill={active ? "rgba(0,0,0,0.05)" : "transparent"}
+                />
+                {visibleTopics.map((t) => {
                   const c = b.counts[t] || 0;
                   if (!c) return null;
                   const h = (plotH * c) / max;
@@ -234,7 +277,8 @@ function StackedTimeline({ timeline, windowKey }) {
                       y={yCursor}
                       width={Math.max(1, barW - 1)}
                       height={h}
-                      fill={colourFor(t, ti)}
+                      fill={colourFor(t, topics.indexOf(t))}
+                      opacity={hover && !active ? 0.7 : 1}
                     />
                   );
                 })}
@@ -253,24 +297,127 @@ function StackedTimeline({ timeline, windowKey }) {
             );
           })}
         </svg>
+        {hovered && (
+          <div
+            role="dialog"
+            aria-label="Bucket detail"
+            style={{
+              position: "absolute",
+              top: Math.max(0, hover.y - 8),
+              left: hover.x,
+              transform: hover.flip
+                ? "translate(calc(-100% - 10px), -100%)"
+                : "translate(10px, -100%)",
+              zIndex: 20,
+              pointerEvents: "none",
+              minWidth: 200,
+              maxWidth: 280,
+              background: "var(--p-color-bg-surface, #fff)",
+              color: "var(--p-color-text, #303030)",
+              border: "1px solid var(--p-color-border, #E3E3E3)",
+              borderRadius: 8,
+              boxShadow: "var(--p-shadow-300, 0 4px 12px rgba(0,0,0,0.15))",
+              padding: "10px 12px",
+            }}
+          >
+            <BlockStack gap="150">
+              <Text as="p" variant="bodySm" fontWeight="semibold">
+                {fmtTime(hovered.at, true)} ({bucketMinutes} min)
+              </Text>
+              <BlockStack gap="050">
+                {visibleTopics
+                  .filter((t) => hovered.counts[t])
+                  .map((t) => (
+                    <InlineStack key={t} gap="200" align="space-between" blockAlign="center" wrap={false}>
+                      <InlineStack gap="100" blockAlign="center" wrap={false}>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            width: 10,
+                            height: 10,
+                            borderRadius: 2,
+                            background: colourFor(t, topics.indexOf(t)),
+                            flex: "0 0 auto",
+                          }}
+                        />
+                        <Text as="span" variant="bodySm">
+                          {topicSlug(t)}
+                        </Text>
+                      </InlineStack>
+                      <Text as="span" variant="bodySm" fontWeight="medium">
+                        {fmtInt(hovered.counts[t])}
+                      </Text>
+                    </InlineStack>
+                  ))}
+              </BlockStack>
+              <Divider />
+              <InlineStack gap="200" align="space-between">
+                <Text as="span" variant="bodySm" tone="subdued">
+                  Total
+                </Text>
+                <Text as="span" variant="bodySm" fontWeight="semibold">
+                  {fmtInt(totalOf(hovered))}
+                </Text>
+              </InlineStack>
+            </BlockStack>
+          </div>
+        )}
       </div>
-      <InlineStack gap="300" wrap>
-        {topics.map((t, ti) => (
-          <InlineStack key={t} gap="100" blockAlign="center">
-            <span
+      <InlineStack gap="300" wrap blockAlign="center">
+        {topics.map((t, ti) => {
+          const off = hidden.has(t);
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => toggleTopic(t)}
+              aria-pressed={!off}
+              title={off ? "Show in timeline" : "Hide from timeline"}
               style={{
-                display: "inline-block",
-                width: 12,
-                height: 12,
-                borderRadius: 2,
-                background: colourFor(t, ti),
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "2px 8px",
+                border: "1px solid transparent",
+                borderRadius: 999,
+                background: off ? "transparent" : "var(--p-color-bg-surface-secondary, #F1F1F1)",
+                cursor: "pointer",
+                opacity: off ? 0.45 : 1,
+                font: "inherit",
               }}
-            />
-            <Text as="span" variant="bodySm">
-              {topicSlug(t)}
+            >
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 12,
+                  height: 12,
+                  borderRadius: 2,
+                  background: colourFor(t, ti),
+                }}
+              />
+              <Text as="span" variant="bodySm" textDecorationLine={off ? "line-through" : undefined}>
+                {topicSlug(t)}
+              </Text>
+            </button>
+          );
+        })}
+        {hidden.size > 0 && (
+          <button
+            type="button"
+            onClick={() => setHidden(new Set())}
+            style={{
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              padding: "2px 4px",
+              font: "inherit",
+            }}
+          >
+            <Text as="span" variant="bodySm" tone="subdued">
+              Show all
             </Text>
-          </InlineStack>
-        ))}
+          </button>
+        )}
       </InlineStack>
     </BlockStack>
   );
@@ -418,7 +565,7 @@ export default function WebhookMonitor() {
       ? (new Date(e.receivedAt) - new Date(e.triggeredAt)) / 1000
       : null;
     return [
-      fmtTime(e.receivedAt, data.window === "7d" || data.window === "24h"),
+      fmtTime(e.receivedAt, DATED_WINDOWS.has(data.window)),
       topicSlug(e.topic),
       <Badge key="c" tone={CLASS_TONE[e.classification]}>
         {e.classification}
