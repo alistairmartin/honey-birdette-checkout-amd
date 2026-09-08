@@ -71,8 +71,9 @@ survives request timeouts on large order volumes. Repeat per store.
 
 The **Kibo Checker** page (app nav) finds orders that exist in Shopify but never
 imported into Kibo and shows a likely reason + fix. Detection is a reconciliation
-sweep (list recent Shopify orders, ask Kibo which it has), run hourly by a Render
-cron **and** on demand via the page's "Run sweep now" button.
+sweep (list recent Shopify orders, ask Kibo which it has), run on demand via the
+page's "Run sweep now" button. (The hourly Render cron was removed; the
+`/api/kibo-sweep` endpoint still exists if you want to trigger it externally.)
 
 **Identify-only by default.** The reimport capability is built but disabled
 (`KIBO_REIMPORT_ENABLED` unset/`false`) - the page only surfaces missing orders.
@@ -112,11 +113,7 @@ On the **web** service:
 | Var | Purpose |
 | --- | --- |
 | `KIBO_REGIONS` | JSON map (above) of all 4 regions' Kibo settings |
-| `KIBO_SWEEP_SECRET` | shared secret the cron presents to `/api/kibo-sweep` |
-
-On the **kibo-sweep cron** service: `KIBO_SWEEP_SECRET` (same value) plus
-`APP_URL` (already defaulted in `render.yaml`). The cron sweeps all regions
-present in `KIBO_REGIONS`; no per-shop config needed.
+| `KIBO_SWEEP_SECRET` | shared secret an external caller presents to `/api/kibo-sweep` (optional now that the cron is gone) |
 
 A region is only active once its `KIBO_REGIONS` entry has all six fields - until
 then that store's page shows "Kibo is not configured for <shop>" and

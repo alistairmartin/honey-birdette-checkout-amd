@@ -35,7 +35,7 @@ services:
       # See app/lib/kibo.server.js for the shape. Set in the Render dashboard.
       - key: KIBO_REGIONS
         sync: false
-      # Shared secret the cron job presents to /api/kibo-sweep.
+      # Shared secret an external caller presents to /api/kibo-sweep (optional).
       - key: KIBO_SWEEP_SECRET
         sync: false
       # Identify-only by default. Set to "true" to enable the Reimport action
@@ -47,22 +47,6 @@ services:
       # from the legacy webhook server.
       - key: WEBHOOK_MONITOR_SECRET
         sync: false
-
-  # Hourly reconciliation sweep across ALL configured regions. A separate service
-  # can't share the web disk, so it calls /api/kibo-sweep over HTTP.
-  - type: cron
-    name: kibo-sweep
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    schedule: "0 * * * *"        # top of every hour
-    region: singapore
-    autoDeploy: false
-    dockerCommand: node ./scripts/kibo-sweep-cron.mjs
-    envVars:
-      - key: APP_URL
-        value: https://honey-birdette-checkout-amd.onrender.com
-      - key: KIBO_SWEEP_SECRET
-        sync: false              # must match the web service's value
 
   # Hourly webhook-monitor housekeeping: roll raw WebhookEvent rows up into
   # WebhookHourly and prune (raw 3 days, hourly 90 days, queue samples 30 days).

@@ -1,7 +1,7 @@
 // Render cron entrypoint: POSTs to /api/webhook-monitor/maintenance, which
 // rolls raw webhook rows up into hourly buckets and prunes old rows. Runs as a
 // separate Render service, so it talks to the web service over HTTP (it can't
-// share the web service's persistent disk). Same shape as kibo-sweep-cron.mjs.
+// share the web service's persistent disk). Presents a shared secret over HTTP.
 //
 // Required env: APP_URL, WEBHOOK_MONITOR_SECRET.
 
