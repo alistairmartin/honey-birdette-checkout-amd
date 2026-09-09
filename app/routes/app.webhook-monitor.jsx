@@ -875,7 +875,8 @@ function FullPageOverlay({ title, badge, onClose, children }) {
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 600,
+        // Below Polaris modals (z 518/519) so the Raw popup opens on top.
+        zIndex: 500,
         display: "flex",
         flexDirection: "column",
         background: "var(--p-color-bg-surface, #fff)",
