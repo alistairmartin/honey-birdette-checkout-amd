@@ -722,6 +722,15 @@ function fmtSummaryValue(key, v) {
   return String(v);
 }
 
+// DataTable cells are white-space: nowrap; long tag lists and hashes need to
+// wrap inside a bounded box instead of stretching the column.
+const WRAP_CELL = {
+  maxWidth: 440,
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+  paddingTop: 4,
+};
+
 function SummaryDetails({ event, onRaw }) {
   const entries = Object.entries(event.summary || {});
   const rawLink = onRaw ? (
@@ -763,9 +772,9 @@ function SummaryDetails({ event, onRaw }) {
         </Text>
         {rawLink}
       </summary>
-      <div style={{ paddingTop: 4, maxWidth: 480 }}>
+      <div style={WRAP_CELL}>
         {entries.map(([k, v]) => (
-          <div key={k} style={{ overflowWrap: "anywhere" }}>
+          <div key={k}>
             <Text as="span" variant="bodySm" tone="subdued">
               {SUMMARY_LABELS[k] || k}:{" "}
             </Text>
@@ -1038,13 +1047,15 @@ function BucketDetail({
       );
     } else {
       changed = (
-        <BlockStack gap="0">
+        <div style={{ ...WRAP_CELL, paddingTop: 0 }}>
           {e.changes.map((c) => (
-            <Text key={c} as="span" variant="bodySm">
-              {c}
-            </Text>
+            <div key={c}>
+              <Text as="span" variant="bodySm">
+                {c}
+              </Text>
+            </div>
           ))}
-        </BlockStack>
+        </div>
       );
     }
     return [
