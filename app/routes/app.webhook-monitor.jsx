@@ -23,6 +23,7 @@ import {
   Modal,
   Button,
   TextField,
+  Scrollable,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -721,17 +722,48 @@ function fmtSummaryValue(key, v) {
   return String(v);
 }
 
-function SummaryDetails({ event }) {
+function SummaryDetails({ event, onRaw }) {
   const entries = Object.entries(event.summary || {});
-  if (!entries.length) return null;
+  const rawLink = onRaw ? (
+    <button
+      type="button"
+      onClick={(evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        onRaw(event.id);
+      }}
+      title={
+        event.hasPayload
+          ? "Open the full message as Shopify sent it"
+          : "Body not stored for this message"
+      }
+      style={{
+        border: "none",
+        background: "none",
+        padding: 0,
+        marginLeft: 8,
+        cursor: "pointer",
+        font: "inherit",
+        color: event.hasPayload
+          ? "var(--p-color-text-link, #005BD3)"
+          : "var(--p-color-text-disabled, #B5B5B5)",
+      }}
+    >
+      Raw
+    </button>
+  ) : null;
+  if (!entries.length) {
+    return rawLink ? <span>{rawLink}</span> : null;
+  }
   return (
     <details>
       <summary style={{ cursor: "pointer" }}>
         <Text as="span" variant="bodySm" tone="subdued">
           Data ({fmtInt(event.payloadBytes)} bytes)
         </Text>
+        {rawLink}
       </summary>
-      <div style={{ paddingTop: 4 }}>
+      <div style={{ paddingTop: 4, maxWidth: 480 }}>
         {entries.map(([k, v]) => (
           <div key={k} style={{ overflowWrap: "anywhere" }}>
             <Text as="span" variant="bodySm" tone="subdued">
@@ -808,6 +840,61 @@ const EMPTY_FILTERS = {
   repeats: false,
   q: "",
 };
+
+// Polaris Modal never fills the page on desktop (size="fullScreen" is a
+// phone-only rule), so the bar drill-down uses this fixed overlay covering
+// the whole app frame. Escape closes it. Scrollable provides the sticky
+// manager DataTable's stickyHeader needs.
+function FullPageOverlay({ title, badge, onClose, children }) {
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 600,
+        display: "flex",
+        flexDirection: "column",
+        background: "var(--p-color-bg-surface, #fff)",
+      }}
+    >
+      <div
+        style={{
+          flex: "0 0 auto",
+          padding: "12px 20px",
+          borderBottom: "1px solid var(--p-color-border, #E3E3E3)",
+        }}
+      >
+        <InlineStack align="space-between" blockAlign="center" gap="300">
+          <InlineStack gap="200" blockAlign="center" wrap>
+            <Text as="h2" variant="headingLg">
+              {title}
+            </Text>
+            {badge}
+          </InlineStack>
+          <Button onClick={onClose}>Close</Button>
+        </InlineStack>
+      </div>
+      <Scrollable style={{ flex: "1 1 auto", minHeight: 0 }}>
+        {children}
+      </Scrollable>
+    </div>
+  );
+}
 
 function PayloadModal({ fetcher, onClose }) {
   const data = fetcher.data;
@@ -984,24 +1071,12 @@ function BucketDetail({
             )}
           </span>
         )}
-        <SummaryDetails event={e} />
+        <SummaryDetails event={e} onRaw={openRaw} />
       </BlockStack>,
       changed,
       e.repeatOfPrev ? "yes" : "",
       e.source || "",
       fmtSeconds(lag),
-      <Button
-        key="raw"
-        variant="plain"
-        size="slim"
-        tone={e.hasPayload ? undefined : "critical"}
-        onClick={() => openRaw(e.id)}
-        accessibilityLabel={
-          e.hasPayload ? "View raw message" : "Raw message not stored"
-        }
-      >
-        {e.hasPayload ? "Raw" : "Raw (none)"}
-      </Button>,
     ];
   });
 
@@ -1017,14 +1092,12 @@ function BucketDetail({
 
   return (
     <>
-      <Modal
-        open
-        onClose={onClose}
-        size="fullScreen"
+      <FullPageOverlay
         title={`Messages in bar ${fmtTime(bucket.at, true)}`}
-        secondaryActions={[{ content: "Close", onAction: onClose }]}
+        badge={countBadge}
+        onClose={onClose}
       >
-        <Modal.Section>
+        <Box padding="400" paddingBlockEnd="200">
           <BlockStack gap="300">
             <InlineStack gap="300" blockAlign="end" wrap>
               <Box minWidth="240px">
@@ -1086,7 +1159,6 @@ function BucketDetail({
                   Clear filters
                 </Button>
               )}
-              {countBadge}
             </InlineStack>
             <Text as="p" variant="bodySm" tone="subdued">
               Every message Shopify sent in this slice, oldest first. Resource
@@ -1097,8 +1169,8 @@ function BucketDetail({
               fields, or Raw for the full message as received (kept 3 days).
             </Text>
           </BlockStack>
-        </Modal.Section>
-        <Modal.Section flush>
+        </Box>
+        <div>
           {rows.length ? (
             <DataTable
               columnContentTypes={[
@@ -1110,7 +1182,6 @@ function BucketDetail({
                 "text",
                 "text",
                 "numeric",
-                "text",
               ]}
               headings={[
                 "Received",
@@ -1121,7 +1192,6 @@ function BucketDetail({
                 "Repeat",
                 "Source",
                 "Lag",
-                "Raw",
               ]}
               rows={rows}
               increasedTableDensity
@@ -1138,8 +1208,8 @@ function BucketDetail({
               </Text>
             </Box>
           )}
-        </Modal.Section>
-      </Modal>
+        </div>
+      </FullPageOverlay>
       {rawId && (
         <PayloadModal fetcher={rawFetcher} onClose={() => setRawId(null)} />
       )}
