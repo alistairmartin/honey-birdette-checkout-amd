@@ -47,46 +47,86 @@ const WINDOW_OPTIONS = [
 // Windows long enough that a bare clock time is ambiguous.
 const DATED_WINDOWS = new Set(["12h", "24h", "7d", "14d", "30d"]);
 
-// One colour per topic on the timeline. Order matters: the first topics listed
-// get the most distinguishable colours.
-const TOPIC_COLOURS = {
-  ORDERS_UPDATED: "#2C6ECB",
-  ORDERS_CREATE: "#008060",
-  ORDERS_CANCELLED: "#D72C0D",
-  CUSTOMERS_UPDATE: "#E3A008",
-  CUSTOMERS_CREATE: "#B98900",
-  FULFILLMENTS_CREATE: "#8E44AD",
-  FULFILLMENTS_UPDATE: "#C084FC",
-  FULFILLMENT_EVENTS_CREATE: "#5C6AC4",
-  INVENTORY_LEVELS_UPDATE: "#6D7175",
-  INVENTORY_ITEMS_UPDATE: "#A7AAAD",
-  ORDERS_PAID: "#00A47C",
-  ORDERS_FULFILLED: "#1F5199",
-  ORDERS_PARTIALLY_FULFILLED: "#4B8BE0",
-  ORDERS_EDITED: "#F49342",
-  ORDERS_DELETE: "#8B1A10",
-  REFUNDS_CREATE: "#E0B3B0",
-  CUSTOMERS_DELETE: "#7A5C00",
-  PRODUCTS_CREATE: "#00A0AC",
-  PRODUCTS_UPDATE: "#47C1BF",
-  PRODUCTS_DELETE: "#006E73",
-  RETURNS_REQUEST: "#B95000",
-  RETURNS_APPROVE: "#D97C21",
-  RETURNS_DECLINE: "#6B3A00",
-  RETURNS_CANCEL: "#8A5A2B",
-  RETURNS_CLOSE: "#C48A4B",
-  RETURNS_REOPEN: "#E3A56B",
-  RETURNS_UPDATE: "#F2C28B",
-  DRAFT_ORDERS_CREATE: "#5A6B7A",
-  DRAFT_ORDERS_UPDATE: "#8899AA",
-  DRAFT_ORDERS_DELETE: "#3C4750",
+// One hue per resource type, shades within it. The legend groups topics by
+// type (LEGEND_GROUPS), so a stacked bar reads "blue block is orders" at a
+// glance and the tooltip resolves which order topic. Shades step from dark
+// to light in legend (alphabetical) order.
+const GROUP_HUES = {
+  ORDERS: 218, // blue
+  REFUNDS: 4, // red
+  RETURNS: 28, // orange
+  DRAFT_ORDERS: 210, // slate (low saturation, see below)
+  FULFILLMENT: 275, // purple
+  CUSTOMERS: 42, // gold
+  PRODUCTS: 178, // teal
+  INVENTORY: 0, // grey (zero saturation)
 };
+const GROUP_SATURATION = { DRAFT_ORDERS: 18, INVENTORY: 0 };
+
+function groupKey(topic) {
+  if (topic.startsWith("DRAFT_ORDERS_")) return "DRAFT_ORDERS";
+  if (topic.startsWith("FULFILLMENT")) return "FULFILLMENT";
+  return topic.split("_")[0];
+}
+
+// Build the palette once from a sorted topic list so shades are stable.
+function buildPalette(topics) {
+  const byGroup = new Map();
+  for (const t of [...topics].sort()) {
+    const g = groupKey(t);
+    if (!byGroup.has(g)) byGroup.set(g, []);
+    byGroup.get(g).push(t);
+  }
+  const palette = {};
+  for (const [g, list] of byGroup) {
+    const hue = GROUP_HUES[g] ?? 300;
+    const sat = GROUP_SATURATION[g] ?? 62;
+    const n = list.length;
+    list.forEach((t, i) => {
+      // Lightness from 30% (dark) to 72% (light); a single topic sits mid.
+      const l = n === 1 ? 48 : 30 + (42 * i) / (n - 1);
+      palette[t] = `hsl(${hue} ${sat}% ${l.toFixed(0)}%)`;
+    });
+  }
+  return palette;
+}
+
+const PALETTE = buildPalette([
+  "ORDERS_CREATE",
+  "ORDERS_UPDATED",
+  "ORDERS_CANCELLED",
+  "ORDERS_PAID",
+  "ORDERS_FULFILLED",
+  "ORDERS_PARTIALLY_FULFILLED",
+  "ORDERS_EDITED",
+  "ORDERS_DELETE",
+  "REFUNDS_CREATE",
+  "RETURNS_REQUEST",
+  "RETURNS_APPROVE",
+  "RETURNS_DECLINE",
+  "RETURNS_CANCEL",
+  "RETURNS_CLOSE",
+  "RETURNS_REOPEN",
+  "RETURNS_UPDATE",
+  "DRAFT_ORDERS_CREATE",
+  "DRAFT_ORDERS_UPDATE",
+  "DRAFT_ORDERS_DELETE",
+  "FULFILLMENTS_CREATE",
+  "FULFILLMENTS_UPDATE",
+  "FULFILLMENT_EVENTS_CREATE",
+  "CUSTOMERS_CREATE",
+  "CUSTOMERS_UPDATE",
+  "CUSTOMERS_DELETE",
+  "PRODUCTS_CREATE",
+  "PRODUCTS_UPDATE",
+  "PRODUCTS_DELETE",
+  "INVENTORY_LEVELS_UPDATE",
+  "INVENTORY_ITEMS_UPDATE",
+]);
 const FALLBACK_COLOURS = [
-  "#00A0AC",
-  "#F49342",
-  "#9C6ADE",
-  "#47C1BF",
-  "#DE3618",
+  "hsl(300 50% 40%)",
+  "hsl(300 50% 55%)",
+  "hsl(300 50% 70%)",
 ];
 
 // Legend rows, one per resource type, in this order.
@@ -240,9 +280,7 @@ function adminUrl(shop, resourceType, resourceId, orderId) {
 }
 
 function colourFor(topic, index) {
-  return (
-    TOPIC_COLOURS[topic] || FALLBACK_COLOURS[index % FALLBACK_COLOURS.length]
-  );
+  return PALETTE[topic] || FALLBACK_COLOURS[index % FALLBACK_COLOURS.length];
 }
 
 // ---------------------------------------------------------------------------
