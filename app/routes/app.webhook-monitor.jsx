@@ -89,6 +89,23 @@ const FALLBACK_COLOURS = [
   "#DE3618",
 ];
 
+// Legend rows, one per resource type, in this order.
+const LEGEND_GROUPS = [
+  { label: "Orders", match: (t) => t.startsWith("ORDERS_") },
+  { label: "Refunds", match: (t) => t.startsWith("REFUNDS_") },
+  { label: "Returns", match: (t) => t.startsWith("RETURNS_") },
+  { label: "Draft orders", match: (t) => t.startsWith("DRAFT_ORDERS_") },
+  { label: "Fulfillments", match: (t) => t.startsWith("FULFILLMENT") },
+  { label: "Customers", match: (t) => t.startsWith("CUSTOMERS_") },
+  { label: "Products", match: (t) => t.startsWith("PRODUCTS_") },
+  { label: "Inventory", match: (t) => t.startsWith("INVENTORY_") },
+  {
+    label: "Other",
+    match: (t) =>
+      !/^(ORDERS|REFUNDS|RETURNS|DRAFT_ORDERS|FULFILLMENT|CUSTOMERS|PRODUCTS|INVENTORY)/.test(t),
+  },
+];
+
 const CLASS_TONE = {
   new_order: "success",
   created: "success",
@@ -446,68 +463,83 @@ function StackedTimeline({ timeline, windowKey, hidden, toggleTopic, showAll }) 
           </div>
         )}
       </div>
-      <InlineStack gap="300" wrap blockAlign="center">
-        {topics.map((t, ti) => {
-          const off = hidden.has(t);
+      <BlockStack gap="150">
+        {LEGEND_GROUPS.map(({ label, match }) => {
+          const group = topics.filter(match);
+          if (!group.length) return null;
           return (
-            <button
-              key={t}
-              type="button"
-              onClick={() => toggleTopic(t)}
-              aria-pressed={!off}
-              title={off ? "Show in timeline" : "Hide from timeline"}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "2px 8px",
-                border: "1px solid transparent",
-                borderRadius: 999,
-                background: off
-                  ? "transparent"
-                  : "var(--p-color-bg-surface-secondary, #F1F1F1)",
-                cursor: "pointer",
-                opacity: off ? 0.45 : 1,
-                font: "inherit",
-              }}
-            >
-              <span
-                style={{
-                  display: "inline-block",
-                  width: 12,
-                  height: 12,
-                  borderRadius: 2,
-                  background: colourFor(t, ti),
-                }}
-              />
-              <Text
-                as="span"
-                variant="bodySm"
-                textDecorationLine={off ? "line-through" : undefined}
-              >
-                {topicSlug(t)}
-              </Text>
-            </button>
+            <InlineStack key={label} gap="200" wrap blockAlign="center">
+              <span style={{ minWidth: 96, display: "inline-block" }}>
+                <Text as="span" variant="bodySm" tone="subdued" fontWeight="medium">
+                  {label}
+                </Text>
+              </span>
+              {group.map((t) => {
+                const off = hidden.has(t);
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => toggleTopic(t)}
+                    aria-pressed={!off}
+                    title={off ? "Show in timeline" : "Hide from timeline"}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "2px 8px",
+                      border: "1px solid transparent",
+                      borderRadius: 999,
+                      background: off
+                        ? "transparent"
+                        : "var(--p-color-bg-surface-secondary, #F1F1F1)",
+                      cursor: "pointer",
+                      opacity: off ? 0.45 : 1,
+                      font: "inherit",
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: 12,
+                        height: 12,
+                        borderRadius: 2,
+                        background: colourFor(t, topics.indexOf(t)),
+                      }}
+                    />
+                    <Text
+                      as="span"
+                      variant="bodySm"
+                      textDecorationLine={off ? "line-through" : undefined}
+                    >
+                      {topicSlug(t)}
+                    </Text>
+                  </button>
+                );
+              })}
+            </InlineStack>
           );
         })}
         {hidden.size > 0 && (
-          <button
-            type="button"
-            onClick={showAll}
-            style={{
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              padding: "2px 4px",
-              font: "inherit",
-            }}
-          >
-            <Text as="span" variant="bodySm" tone="subdued">
-              Show all
-            </Text>
-          </button>
+          <InlineStack>
+            <button
+              type="button"
+              onClick={showAll}
+              style={{
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                padding: "2px 4px",
+                font: "inherit",
+              }}
+            >
+              <Text as="span" variant="bodySm" tone="subdued">
+                Show all
+              </Text>
+            </button>
+          </InlineStack>
         )}
-      </InlineStack>
+      </BlockStack>
     </BlockStack>
   );
 }
