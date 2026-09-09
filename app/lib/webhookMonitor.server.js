@@ -1058,6 +1058,14 @@ export async function readDashboard({
 
   const allClasses = [...new Set(raw.map((r) => r.classification))].sort();
 
+  // Every monitored topic appears in the legend and filters even with zero
+  // events in the window, so the set of options never shifts between loads.
+  for (const t of MONITORED_TOPICS) {
+    topics.add(t);
+    topicStats(t);
+  }
+  const allTopics = [...topics].sort();
+
   return {
     shop,
     window,
@@ -1074,12 +1082,14 @@ export async function readDashboard({
       medianLagSeconds: median(lags),
       lagSamples: lags.length,
     },
-    timeline: { bucketMinutes: win.bucketMinutes, series, topics: [...topics].sort() },
-    byTopic: [...byTopic.values()].sort((a, b) => b.count - a.count),
+    timeline: { bucketMinutes: win.bucketMinutes, series, topics: allTopics },
+    byTopic: [...byTopic.values()].sort(
+      (a, b) => b.count - a.count || a.topic.localeCompare(b.topic),
+    ),
     byTopicClass: [...byTopicClass.values()].sort((a, b) => b.count - a.count),
     topResources,
     recent,
     queue,
-    filters: { topics: [...topics].sort(), classes: allClasses },
+    filters: { topics: allTopics, classes: allClasses },
   };
 }
