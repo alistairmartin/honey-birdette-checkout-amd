@@ -12,7 +12,7 @@ dev_store_url = "amd-checkout-2024.myshopify.com"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products, write_customers, customer_read_customers, customer_write_customers, write_discounts, write_orders, write_metaobjects, write_cart_transforms, write_metaobject_definitions, write_delivery_customizations, read_themes, write_themes, read_files, write_files, write_inventory, read_locations, write_publications, write_translations, write_price_rules, read_fulfillments"
+scopes = "write_products, write_customers, customer_read_customers, customer_write_customers, write_discounts, write_orders, write_metaobjects, write_cart_transforms, write_metaobject_definitions, write_delivery_customizations, read_themes, write_themes, read_files, write_files, write_inventory, read_locations, write_publications, write_translations, write_price_rules, read_fulfillments, read_returns, read_draft_orders"
 
 [auth]
 redirect_urls = [
@@ -34,10 +34,17 @@ api_version = "2026-01"
   [[webhooks.subscriptions]]
   topics = [
     "orders/create", "orders/updated", "orders/cancelled",
+    "orders/paid", "orders/fulfilled", "orders/partially_fulfilled",
+    "orders/edited", "orders/delete",
+    "refunds/create",
     "fulfillments/create", "fulfillments/update",
     "fulfillment_events/create",
-    "customers/create", "customers/update",
-    "inventory_levels/update",
+    "customers/create", "customers/update", "customers/delete",
+    "products/create", "products/update", "products/delete",
+    "inventory_levels/update", "inventory_items/update",
+    "returns/request", "returns/approve", "returns/decline", "returns/cancel",
+    "returns/close", "returns/reopen", "returns/update",
+    "draft_orders/create", "draft_orders/update", "draft_orders/delete",
   ]
   uri = "/webhooks"
 

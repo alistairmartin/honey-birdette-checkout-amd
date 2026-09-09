@@ -24,6 +24,27 @@ export const MONITORED_TOPICS = new Set([
   "ORDERS_CREATE",
   "ORDERS_UPDATED",
   "ORDERS_CANCELLED",
+  "ORDERS_PAID",
+  "ORDERS_FULFILLED",
+  "ORDERS_PARTIALLY_FULFILLED",
+  "ORDERS_EDITED",
+  "ORDERS_DELETE",
+  "REFUNDS_CREATE",
+  "CUSTOMERS_DELETE",
+  "PRODUCTS_CREATE",
+  "PRODUCTS_UPDATE",
+  "PRODUCTS_DELETE",
+  "INVENTORY_ITEMS_UPDATE",
+  "RETURNS_REQUEST",
+  "RETURNS_APPROVE",
+  "RETURNS_DECLINE",
+  "RETURNS_CANCEL",
+  "RETURNS_CLOSE",
+  "RETURNS_REOPEN",
+  "RETURNS_UPDATE",
+  "DRAFT_ORDERS_CREATE",
+  "DRAFT_ORDERS_UPDATE",
+  "DRAFT_ORDERS_DELETE",
   "FULFILLMENTS_CREATE",
   "FULFILLMENTS_UPDATE",
   "FULFILLMENT_EVENTS_CREATE",
@@ -158,6 +179,10 @@ function hasRefundAfterClose(p) {
 export function classifyOrder(topic, p, prevSummary) {
   if (topic === "ORDERS_CREATE") return "new_order";
   if (topic === "ORDERS_CANCELLED") return "cancelled";
+  if (topic === "ORDERS_PAID") return "paid";
+  if (topic === "ORDERS_FULFILLED") return "fulfilled";
+  if (topic === "ORDERS_PARTIALLY_FULFILLED") return "partially_fulfilled";
+  if (topic === "ORDERS_DELETE") return "deleted";
 
   const sinceCreate = secondsBetween(p?.created_at, p?.updated_at);
   if (sinceCreate !== null && Math.abs(sinceCreate) <= 60) return "new_order";
@@ -211,6 +236,7 @@ export function fingerprintCustomer(p) {
 
 export function classifyCustomer(topic, p, prevSummary) {
   if (topic === "CUSTOMERS_CREATE") return "created";
+  if (topic === "CUSTOMERS_DELETE") return "deleted";
 
   const sinceCreate = secondsBetween(p?.created_at, p?.updated_at);
   if (sinceCreate !== null && Math.abs(sinceCreate) <= 60) return "created";
@@ -277,6 +303,126 @@ export function classifyInventory(p, prevSummary) {
 }
 
 // ---------------------------------------------------------------------------
+// Products, inventory items, refunds
+// ---------------------------------------------------------------------------
+
+// Products: the catalogue fields a backend syncs. Stock counts are hashed
+// separately so a stock-only bump can be told apart from a real edit.
+export function summarizeProduct(p) {
+  const variants = Array.isArray(p?.variants) ? p.variants : [];
+  const catalogue = variants
+    .map((v) => `${v?.id}:${v?.sku ?? ""}:${v?.price ?? ""}:${v?.compare_at_price ?? ""}`)
+    .join("|");
+  const stock = variants.map((v) => `${v?.id}:${v?.inventory_quantity ?? ""}`).join("|");
+  return {
+    status: p?.status ?? null,
+    tags: tagList(p?.tags).sort().join(","),
+    variants: variants.length,
+    catalogue_hash: sha1(catalogue),
+    stock_hash: sha1(stock),
+    title_hash: p?.title ? sha1(p.title) : "",
+    body_hash: p?.body_html ? sha1(p.body_html) : "",
+    images: Array.isArray(p?.images) ? p.images.length : 0,
+  };
+}
+
+export function classifyProduct(topic, p, prevSummary) {
+  if (topic === "PRODUCTS_CREATE") return "created";
+  if (topic === "PRODUCTS_DELETE") return "deleted";
+  const now = summarizeProduct(p);
+  if (!prevSummary || prevSummary.catalogue_hash === undefined) return "other";
+  const changed = Object.keys(now).filter((k) => now[k] !== prevSummary[k]);
+  if (!changed.length) return "silent";
+  if (changed.every((k) => k === "stock_hash")) return "stock_only";
+  if (changed.includes("status")) return "status";
+  if (changed.includes("catalogue_hash") || changed.includes("variants")) {
+    return "variants_or_price";
+  }
+  if (changed.every((k) => k === "tags")) return "tags";
+  return "content";
+}
+
+export function summarizeInventoryItem(p) {
+  return {
+    sku_hash: p?.sku ? sha1(p.sku) : "",
+    tracked: p?.tracked ?? null,
+    cost: p?.cost ?? null,
+    requires_shipping: p?.requires_shipping ?? null,
+  };
+}
+
+export function classifyInventoryItem(p, prevSummary) {
+  const now = summarizeInventoryItem(p);
+  if (!prevSummary || prevSummary.sku_hash === undefined) return "other";
+  const changed = Object.keys(now).filter((k) => now[k] !== prevSummary[k]);
+  if (!changed.length) return "silent";
+  if (changed.every((k) => k === "cost")) return "cost";
+  return "changed";
+}
+
+// Returns: payload carries `order.admin_graphql_api_id` (a gid) rather than a
+// numeric order_id on most topics; handle both.
+function numericIdFromGid(gid) {
+  const m = String(gid ?? "").match(/\/(\d+)$/);
+  return m ? m[1] : null;
+}
+
+export function summarizeReturn(p) {
+  const lines = Array.isArray(p?.return_line_items) ? p.return_line_items : [];
+  return {
+    status: p?.status ?? null,
+    line_items: lines.length,
+    quantity: lines.reduce((sum, l) => sum + (Number(l?.quantity) || 0), 0),
+  };
+}
+
+export function returnOrderId(p) {
+  if (p?.order_id) return String(p.order_id);
+  return numericIdFromGid(p?.order?.admin_graphql_api_id ?? p?.order?.id);
+}
+
+export function summarizeDraftOrder(p) {
+  const lines = Array.isArray(p?.line_items) ? p.line_items : [];
+  return {
+    status: p?.status ?? null,
+    order_id: p?.order_id ?? null,
+    line_items: lines.length,
+    total_price: p?.total_price ?? null,
+    tags: tagList(p?.tags).sort().join(","),
+    invoice_sent: Boolean(p?.invoice_sent_at),
+  };
+}
+
+export function classifyDraftOrder(topic, p, prevSummary) {
+  if (topic === "DRAFT_ORDERS_CREATE") return "created";
+  if (topic === "DRAFT_ORDERS_DELETE") return "deleted";
+  const now = summarizeDraftOrder(p);
+  if (now.status === "completed" || now.order_id) return "completed";
+  if (!prevSummary || prevSummary.line_items === undefined) return "other";
+  const changed = Object.keys(now).filter((k) => now[k] !== prevSummary[k]);
+  if (!changed.length) return "silent";
+  if (changed.includes("invoice_sent")) return "invoice_sent";
+  if (changed.includes("line_items") || changed.includes("total_price")) {
+    return "items_changed";
+  }
+  if (changed.every((k) => k === "tags")) return "tags";
+  return "other";
+}
+
+export function summarizeRefund(p) {
+  const lines = Array.isArray(p?.refund_line_items) ? p.refund_line_items : [];
+  const transactions = Array.isArray(p?.transactions) ? p.transactions : [];
+  return {
+    order_id: p?.order_id ?? null,
+    line_items: lines.length,
+    restock: lines.some((l) => l?.restock_type && l.restock_type !== "no_restock"),
+    amount: transactions
+      .reduce((sum, t) => sum + (Number(t?.amount) || 0), 0)
+      .toFixed(2),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Source guess
 // ---------------------------------------------------------------------------
 
@@ -303,6 +449,83 @@ export function guessSource(resourceType, p) {
 // ---------------------------------------------------------------------------
 
 function describe(topic, p, prevSummary) {
+  if (topic === "ORDERS_EDITED") {
+    // Payload is { order_edit: { id, order_id, app_id, created_at, ... } }.
+    const edit = p?.order_edit ?? p;
+    const orderId = edit?.order_id ? String(edit.order_id) : null;
+    const summary = { edit_id: edit?.id ?? null, app_id: edit?.app_id ?? null };
+    return {
+      resourceType: "order",
+      resourceId: orderId ?? "",
+      resourceName: orderId ? `order ${orderId}` : null,
+      orderId,
+      classification: "edited",
+      summary,
+      resourceUpdatedAt: toDate(edit?.created_at),
+    };
+  }
+  if (topic === "REFUNDS_CREATE") {
+    const summary = summarizeRefund(p);
+    const orderId = p?.order_id ? String(p.order_id) : null;
+    return {
+      resourceType: "refund",
+      resourceId: String(p?.id ?? ""),
+      resourceName: orderId ? `order ${orderId}` : null,
+      orderId,
+      classification: summary.restock ? "refund_restock" : "refund",
+      summary,
+      resourceUpdatedAt: toDate(p?.created_at),
+    };
+  }
+  if (topic.startsWith("RETURNS_")) {
+    const summary = summarizeReturn(p);
+    const orderId = returnOrderId(p);
+    const action = topic.replace("RETURNS_", "").toLowerCase();
+    return {
+      resourceType: "return",
+      resourceId: String(p?.id ?? numericIdFromGid(p?.admin_graphql_api_id) ?? ""),
+      resourceName: p?.name ?? (orderId ? `order ${orderId}` : null),
+      orderId,
+      // e.g. request, approve, close. The return's own status is in summary.
+      classification: action,
+      summary,
+      resourceUpdatedAt: toDate(p?.updated_at),
+    };
+  }
+  if (topic.startsWith("DRAFT_ORDERS_")) {
+    const summary = summarizeDraftOrder(p);
+    return {
+      resourceType: "draft_order",
+      resourceId: String(p?.id ?? ""),
+      resourceName: p?.name ?? null,
+      orderId: p?.order_id ? String(p.order_id) : null,
+      classification: classifyDraftOrder(topic, p, prevSummary),
+      summary,
+      resourceUpdatedAt: toDate(p?.updated_at),
+    };
+  }
+  if (topic.startsWith("PRODUCTS_")) {
+    const summary = summarizeProduct(p);
+    return {
+      resourceType: "product",
+      resourceId: String(p?.id ?? ""),
+      resourceName: p?.handle ?? null,
+      classification: classifyProduct(topic, p, prevSummary),
+      summary,
+      resourceUpdatedAt: toDate(p?.updated_at),
+    };
+  }
+  if (topic === "INVENTORY_ITEMS_UPDATE") {
+    const summary = summarizeInventoryItem(p);
+    return {
+      resourceType: "inventory_item",
+      resourceId: String(p?.id ?? ""),
+      resourceName: null,
+      classification: classifyInventoryItem(p, prevSummary),
+      summary,
+      resourceUpdatedAt: toDate(p?.updated_at),
+    };
+  }
   if (topic.startsWith("ORDERS_")) {
     const summary = summarizeOrder(p);
     return {
@@ -367,6 +590,28 @@ function describe(topic, p, prevSummary) {
 // Resource id from the payload without a prior DB lookup, so the previous row
 // can be fetched before classification.
 function resourceKey(topic, p) {
+  if (topic === "ORDERS_EDITED") {
+    const edit = p?.order_edit ?? p;
+    return { resourceType: "order", resourceId: String(edit?.order_id ?? "") };
+  }
+  if (topic === "REFUNDS_CREATE") {
+    return { resourceType: "refund", resourceId: String(p?.id ?? "") };
+  }
+  if (topic.startsWith("PRODUCTS_")) {
+    return { resourceType: "product", resourceId: String(p?.id ?? "") };
+  }
+  if (topic.startsWith("RETURNS_")) {
+    return {
+      resourceType: "return",
+      resourceId: String(p?.id ?? numericIdFromGid(p?.admin_graphql_api_id) ?? ""),
+    };
+  }
+  if (topic.startsWith("DRAFT_ORDERS_")) {
+    return { resourceType: "draft_order", resourceId: String(p?.id ?? "") };
+  }
+  if (topic === "INVENTORY_ITEMS_UPDATE") {
+    return { resourceType: "inventory_item", resourceId: String(p?.id ?? "") };
+  }
   if (topic === "INVENTORY_LEVELS_UPDATE") {
     return {
       resourceType: "inventory_level",

@@ -59,6 +59,27 @@ const TOPIC_COLOURS = {
   FULFILLMENTS_UPDATE: "#C084FC",
   FULFILLMENT_EVENTS_CREATE: "#5C6AC4",
   INVENTORY_LEVELS_UPDATE: "#6D7175",
+  INVENTORY_ITEMS_UPDATE: "#A7AAAD",
+  ORDERS_PAID: "#00A47C",
+  ORDERS_FULFILLED: "#1F5199",
+  ORDERS_PARTIALLY_FULFILLED: "#4B8BE0",
+  ORDERS_EDITED: "#F49342",
+  ORDERS_DELETE: "#8B1A10",
+  REFUNDS_CREATE: "#E0B3B0",
+  CUSTOMERS_DELETE: "#7A5C00",
+  PRODUCTS_CREATE: "#00A0AC",
+  PRODUCTS_UPDATE: "#47C1BF",
+  PRODUCTS_DELETE: "#006E73",
+  RETURNS_REQUEST: "#B95000",
+  RETURNS_APPROVE: "#D97C21",
+  RETURNS_DECLINE: "#6B3A00",
+  RETURNS_CANCEL: "#8A5A2B",
+  RETURNS_CLOSE: "#C48A4B",
+  RETURNS_REOPEN: "#E3A56B",
+  RETURNS_UPDATE: "#F2C28B",
+  DRAFT_ORDERS_CREATE: "#5A6B7A",
+  DRAFT_ORDERS_UPDATE: "#8899AA",
+  DRAFT_ORDERS_DELETE: "#3C4750",
 };
 const FALLBACK_COLOURS = [
   "#00A0AC",
@@ -84,6 +105,27 @@ const CLASS_TONE = {
   increment: "info",
   zero: "warning",
   same: "attention",
+  paid: "success",
+  partially_fulfilled: "info",
+  edited: "warning",
+  deleted: "critical",
+  refund_restock: "warning",
+  stock_only: "attention",
+  status: "info",
+  variants_or_price: "info",
+  content: undefined,
+  cost: undefined,
+  changed: "info",
+  request: "warning",
+  approve: "info",
+  decline: "critical",
+  cancel: "critical",
+  close: "success",
+  reopen: "warning",
+  update: undefined,
+  completed: "success",
+  invoice_sent: "info",
+  items_changed: "info",
   other: undefined,
 };
 
@@ -154,7 +196,10 @@ function topicSlug(topic) {
     .toLowerCase()
     .replace(/_/g, "/")
     .replace("fulfillment/events", "fulfillment_events")
-    .replace("inventory/levels", "inventory_levels");
+    .replace("inventory/levels", "inventory_levels")
+    .replace("inventory/items", "inventory_items")
+    .replace("partially/fulfilled", "partially_fulfilled")
+    .replace("draft/orders", "draft_orders");
 }
 
 function adminUrl(shop, resourceType, resourceId, orderId) {
@@ -167,6 +212,12 @@ function adminUrl(shop, resourceType, resourceId, orderId) {
   }
   if (resourceType === "customer") {
     return `https://admin.shopify.com/store/${handle}/customers/${resourceId}`;
+  }
+  if (resourceType === "product") {
+    return `https://admin.shopify.com/store/${handle}/products/${resourceId}`;
+  }
+  if (resourceType === "draft_order") {
+    return `https://admin.shopify.com/store/${handle}/draft_orders/${resourceId}`;
   }
   return null;
 }
