@@ -230,6 +230,12 @@ Classification = `decrement` / `increment` / `zero` vs previous row.
 Add to `NavMenu` in `app/routes/app.jsx`. Polaris. Loader reads the DB only.
 Shop selector (AU/US/UK/EU, default = embedded shop), window selector
 (15m / 1h / 6h / 24h / 7d / 14d / 30d), auto-refresh every 30s. Legend chips toggle topics on and off; hovering a bar opens a detail popover.
+Clicking a bar (or one colour in it) opens a "Messages in bar" card listing
+every raw row in that bucket: resource with admin link, class, source, lag,
+and what moved in the tracked summary fields since the previous message for
+the same resource (server-side diff in `readBucketEvents`, served by
+`app/routes/app.webhook-monitor.bucket.jsx`). Raw rows only, so bars older
+than 3 days list nothing.
 
 Cards, top to bottom:
 

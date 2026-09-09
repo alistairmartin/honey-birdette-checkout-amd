@@ -1093,3 +1093,123 @@ export async function readDashboard({
     filters: { topics: allTopics, classes: allClasses },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Bucket drill-down: every raw row inside one timeline bar, with the stored
+// summary and what moved since the previous message for the same resource.
+// Raw rows only, so buckets older than RAW_RETENTION_DAYS come back empty.
+// ---------------------------------------------------------------------------
+
+export const BUCKET_ROW_CAP = 1000;
+
+// Human-readable "a -> b" for one summary key.
+function describeChange(key, before, after) {
+  const fmt = (v) => {
+    if (v === null || v === undefined || v === "") return "none";
+    if (key === "tags")
+      return String(v).split(",").filter(Boolean).join(", ") || "none";
+    if (/_hash$/.test(key)) return String(v).slice(0, 8);
+    return String(v);
+  };
+  return `${key}: ${fmt(before)} -> ${fmt(after)}`;
+}
+
+export async function readBucketEvents({
+  shop,
+  at,
+  bucketMinutes,
+  topic = "",
+}) {
+  const start = toDate(at);
+  const minutes = Number(bucketMinutes);
+  if (!start || !minutes || Number.isNaN(minutes)) {
+    return { events: [], total: 0, capped: false };
+  }
+  const end = new Date(start.getTime() + minutes * 60e3);
+
+  const where = {
+    shop,
+    receivedAt: { gte: start, lt: end },
+    ...(topic ? { topic } : {}),
+  };
+  const [total, rows] = await Promise.all([
+    prisma.webhookEvent.count({ where }),
+    prisma.webhookEvent.findMany({
+      where,
+      orderBy: { receivedAt: "asc" },
+      take: BUCKET_ROW_CAP,
+      select: {
+        id: true,
+        topic: true,
+        classification: true,
+        resourceType: true,
+        resourceId: true,
+        resourceName: true,
+        orderId: true,
+        receivedAt: true,
+        triggeredAt: true,
+        resourceUpdatedAt: true,
+        repeatOfPrev: true,
+        source: true,
+        payloadBytes: true,
+        apiVersion: true,
+        summaryJson: true,
+      },
+    }),
+  ]);
+
+  // Previous summary per resource: the latest row before the bucket for each
+  // resource seen in it, then walk the bucket in order so later rows diff
+  // against earlier ones in the same bucket.
+  const keys = new Map();
+  for (const r of rows) {
+    keys.set(`${r.resourceType}|${r.resourceId}`, {
+      resourceType: r.resourceType,
+      resourceId: r.resourceId,
+    });
+  }
+  const prevByKey = new Map();
+  const keyList = [...keys.values()];
+  for (let i = 0; i < keyList.length; i += 200) {
+    const chunk = keyList.slice(i, i + 200);
+    const prevRows = await prisma.webhookEvent.findMany({
+      where: { shop, receivedAt: { lt: start }, OR: chunk },
+      orderBy: { receivedAt: "desc" },
+      distinct: ["resourceType", "resourceId"],
+      select: {
+        resourceType: true,
+        resourceId: true,
+        receivedAt: true,
+        summaryJson: true,
+      },
+    });
+    for (const p of prevRows) {
+      prevByKey.set(`${p.resourceType}|${p.resourceId}`, {
+        receivedAt: p.receivedAt,
+        summary: parseSummary(p),
+      });
+    }
+  }
+
+  const events = rows.map((r) => {
+    const key = `${r.resourceType}|${r.resourceId}`;
+    const summary = parseSummary(r);
+    const prev = prevByKey.get(key) || null;
+    const changes = prev
+      ? Object.keys(summary)
+          .filter((k) => summary[k] !== prev.summary[k])
+          .map((k) => describeChange(k, prev.summary[k], summary[k]))
+      : [];
+    prevByKey.set(key, { receivedAt: r.receivedAt, summary });
+    const { summaryJson, ...rest } = r;
+    return {
+      ...rest,
+      summary,
+      previousAt: prev ? prev.receivedAt : null,
+      firstSeen: !prev,
+      changes,
+    };
+  });
+
+  return { events, total, capped: total > rows.length, start, end };
+}

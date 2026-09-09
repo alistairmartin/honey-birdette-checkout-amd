@@ -1,5 +1,6 @@
 import { json } from "@remix-run/node";
 import {
+  useFetcher,
   useLoaderData,
   useRevalidator,
   useSearchParams,
@@ -19,6 +20,7 @@ import {
   Link as PolarisLink,
   Checkbox,
   Divider,
+  Button,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -287,7 +289,15 @@ function colourFor(topic, index) {
 // Charts (inline SVG, no extra bundle)
 // ---------------------------------------------------------------------------
 
-function StackedTimeline({ timeline, windowKey, hidden, toggleTopic, showAll }) {
+function StackedTimeline({
+  timeline,
+  windowKey,
+  hidden,
+  toggleTopic,
+  showAll,
+  selectedAt,
+  onSelect,
+}) {
   const { series, topics, bucketMinutes } = timeline;
   const width = 960;
   const height = 220;
@@ -382,11 +392,13 @@ function StackedTimeline({ timeline, windowKey, hidden, toggleTopic, showAll }) 
               let yCursor = padT + plotH;
               const x = padL + i * barW;
               const active = hover && hover.index === i;
+              const selected = selectedAt === b.at;
               return (
                 <g
                   key={b.at}
                   onMouseEnter={onBarEnter(i)}
-                  style={{ cursor: "default" }}
+                  onClick={() => onSelect(b.at, "")}
+                  style={{ cursor: "pointer" }}
                 >
                   {/* Full-height hit area so thin or empty bars are hoverable */}
                   <rect
@@ -394,7 +406,15 @@ function StackedTimeline({ timeline, windowKey, hidden, toggleTopic, showAll }) 
                     y={padT}
                     width={Math.max(1, barW)}
                     height={plotH}
-                    fill={active ? "rgba(0,0,0,0.05)" : "transparent"}
+                    fill={
+                      selected
+                        ? "rgba(0,91,211,0.10)"
+                        : active
+                          ? "rgba(0,0,0,0.05)"
+                          : "transparent"
+                    }
+                    stroke={selected ? "#005BD3" : "none"}
+                    strokeWidth={selected ? 1.5 : 0}
                   />
                   {visibleTopics.map((t) => {
                     const c = b.counts[t] || 0;
@@ -410,6 +430,10 @@ function StackedTimeline({ timeline, windowKey, hidden, toggleTopic, showAll }) 
                         height={h}
                         fill={colourFor(t, topics.indexOf(t))}
                         opacity={hover && !active ? 0.7 : 1}
+                        onClick={(evt) => {
+                          evt.stopPropagation();
+                          onSelect(b.at, t);
+                        }}
                       />
                     );
                   })}
@@ -497,6 +521,9 @@ function StackedTimeline({ timeline, windowKey, hidden, toggleTopic, showAll }) 
                   {fmtInt(totalOf(hovered))}
                 </Text>
               </InlineStack>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Click to list every message in this bar.
+              </Text>
             </BlockStack>
           </div>
         )}
@@ -645,6 +672,235 @@ function QueueLine({ samples }) {
         </text>
       </svg>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Bucket detail: every message inside one clicked timeline bar, with the
+// resource it was about, a link to it in admin, and what moved in the tracked
+// fields since the previous message for that resource. Raw rows only, so bars
+// older than 3 days come back empty.
+// ---------------------------------------------------------------------------
+
+const SUMMARY_LABELS = {
+  financial_status: "Payment",
+  fulfillment_status: "Fulfilment",
+  closed_at: "Closed",
+  cancelled_at: "Cancelled",
+  tags: "Tags",
+  note_hash: "Note (hash)",
+  refunds: "Refunds",
+  fulfillments: "Shipments",
+  total_price: "Total",
+  orders_count: "Orders",
+  total_spent: "Spent",
+  state: "Account",
+  addresses: "Addresses",
+  email_hash: "Email (hash)",
+  phone_hash: "Phone (hash)",
+  email_consent: "Email consent",
+  sms_consent: "SMS consent",
+  status: "Status",
+  shipment_status: "Shipment",
+  tracking_company: "Carrier",
+  tracking_numbers: "Tracking numbers",
+  fulfillment_id: "Fulfilment id",
+  order_id: "Order id",
+  inventory_item_id: "Inventory item",
+  location_id: "Location",
+  available: "Available",
+};
+
+function fmtSummaryValue(key, v) {
+  if (v === null || v === undefined || v === "") return "none";
+  if (/_hash$/.test(key)) return `${String(v).slice(0, 8)}…`;
+  if (key === "tags") {
+    return String(v).split(",").filter(Boolean).join(", ") || "none";
+  }
+  return String(v);
+}
+
+function SummaryDetails({ event }) {
+  const entries = Object.entries(event.summary || {});
+  if (!entries.length) return null;
+  return (
+    <details>
+      <summary style={{ cursor: "pointer" }}>
+        <Text as="span" variant="bodySm" tone="subdued">
+          Data ({fmtInt(event.payloadBytes)} bytes)
+        </Text>
+      </summary>
+      <div style={{ paddingTop: 4 }}>
+        {entries.map(([k, v]) => (
+          <div key={k} style={{ whiteSpace: "nowrap" }}>
+            <Text as="span" variant="bodySm" tone="subdued">
+              {SUMMARY_LABELS[k] || k}:{" "}
+            </Text>
+            <Text as="span" variant="bodySm">
+              {fmtSummaryValue(k, v)}
+            </Text>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function BucketDetail({
+  shop,
+  windowKey,
+  bucket,
+  counts,
+  topics,
+  fetcher,
+  onTopic,
+  onClose,
+}) {
+  const data = fetcher.data;
+  const loading = fetcher.state !== "idle";
+  const withDate = DATED_WINDOWS.has(windowKey);
+  const topicOptions = [
+    { label: "All topics", value: "" },
+    ...topics
+      .filter((t) => counts[t])
+      .map((t) => ({
+        label: `${topicSlug(t)} (${fmtInt(counts[t])})`,
+        value: t,
+      })),
+  ];
+
+  const rows = (data?.events || []).map((e) => {
+    const href = adminUrl(shop, e.resourceType, e.resourceId, e.orderId);
+    const label = e.resourceName || e.resourceId;
+    const lag = e.triggeredAt
+      ? (new Date(e.receivedAt) - new Date(e.triggeredAt)) / 1000
+      : null;
+    let changed;
+    if (e.firstSeen) {
+      changed = (
+        <Text as="span" variant="bodySm" tone="subdued">
+          first message seen for this {e.resourceType.replace(/_/g, " ")}
+        </Text>
+      );
+    } else if (!e.changes.length) {
+      changed = (
+        <Text as="span" variant="bodySm" tone="subdued">
+          nothing in the tracked fields (last message{" "}
+          {fmtTime(e.previousAt, withDate)})
+        </Text>
+      );
+    } else {
+      changed = (
+        <BlockStack gap="0">
+          {e.changes.map((c) => (
+            <Text key={c} as="span" variant="bodySm">
+              {c}
+            </Text>
+          ))}
+        </BlockStack>
+      );
+    }
+    return [
+      fmtTime(e.receivedAt, withDate),
+      topicSlug(e.topic),
+      <Badge key="c" tone={CLASS_TONE[e.classification]}>
+        {e.classification}
+      </Badge>,
+      <BlockStack key="r" gap="0">
+        <span>
+          <Text as="span" variant="bodySm" tone="subdued">
+            {e.resourceType.replace(/_/g, " ")}{" "}
+          </Text>
+          {href ? (
+            <PolarisLink url={href} target="_blank" removeUnderline>
+              {label}
+            </PolarisLink>
+          ) : (
+            label
+          )}
+        </span>
+        <SummaryDetails event={e} />
+      </BlockStack>,
+      changed,
+      e.repeatOfPrev ? "yes" : "",
+      e.source || "",
+      fmtSeconds(lag),
+    ];
+  });
+
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <InlineStack gap="300" blockAlign="center" align="space-between" wrap>
+          <InlineStack gap="200" blockAlign="center" wrap>
+            <Text as="h2" variant="headingMd">
+              Messages in bar {fmtTime(bucket.at, true)}
+            </Text>
+            {data && !loading && (
+              <Badge tone={data.capped ? "warning" : undefined}>
+                {data.capped
+                  ? `showing ${fmtInt(data.events.length)} of ${fmtInt(data.total)}`
+                  : `${fmtInt(data.total)} messages`}
+              </Badge>
+            )}
+            {loading && <Badge>loading</Badge>}
+          </InlineStack>
+          <Button onClick={onClose} variant="plain">
+            Close
+          </Button>
+        </InlineStack>
+        <Text as="p" variant="bodySm" tone="subdued">
+          Every message Shopify sent in this slice, oldest first. Resource is
+          who or what the message was about, linked to admin. What changed
+          compares the fields we track (statuses, tags, counts, hashed contact
+          fields) against the previous message for the same resource, so a
+          customer update that shows nothing changed was most likely a
+          metafield or loyalty write. Open Data under a resource for the
+          tracked fields as received. No names, emails or addresses are stored.
+        </Text>
+        <Box maxWidth="360px">
+          <Select
+            label="Topic"
+            options={topicOptions}
+            value={bucket.topic}
+            onChange={onTopic}
+          />
+        </Box>
+        <Divider />
+        {rows.length ? (
+          <DataTable
+            columnContentTypes={[
+              "text",
+              "text",
+              "text",
+              "text",
+              "text",
+              "text",
+              "text",
+              "numeric",
+            ]}
+            headings={[
+              "Received",
+              "Topic",
+              "Class",
+              "Resource",
+              "What changed",
+              "Repeat",
+              "Source",
+              "Lag",
+            ]}
+            rows={rows}
+            increasedTableDensity
+          />
+        ) : (
+          <Text as="p" tone="subdued">
+            {loading
+              ? "Loading…"
+              : "No raw rows for this bar. Raw rows are kept for 3 days; older bars only have hourly totals."}
+          </Text>
+        )}
+      </BlockStack>
+    </Card>
   );
 }
 
@@ -826,6 +1082,23 @@ export default function WebhookMonitor() {
   // Legend doubles as a filter: click a topic to hide it from the timeline
   // and from the "Selected topics" card. Remembered for the tab, not the URL.
   const [hidden, setHidden] = useState(() => new Set());
+  // Clicked timeline bar: { at, topic }. Loaded on demand via the bucket
+  // resource route so the page loader stays light.
+  const [bucket, setBucket] = useState(null);
+  const bucketFetcher = useFetcher();
+  const loadBucket = (at, topic) => {
+    const q = new URLSearchParams({
+      shop: data.shop,
+      at,
+      minutes: String(data.timeline.bucketMinutes),
+      ...(topic ? { topic } : {}),
+    });
+    bucketFetcher.load(`/app/webhook-monitor/bucket?${q}`);
+  };
+  const selectBucket = (at, topic) => {
+    setBucket({ at, topic });
+    loadBucket(at, topic);
+  };
   const toggleTopic = (t) =>
     setHidden((prev) => {
       const next = new Set(prev);
@@ -841,6 +1114,10 @@ export default function WebhookMonitor() {
     }, 30000);
     return () => clearInterval(id);
   }, [autoRefresh, revalidator]);
+
+  useEffect(() => {
+    setBucket(null);
+  }, [data.shop, data.window]);
 
   const setParam = (key, value) => {
     const next = new URLSearchParams(params);
@@ -1030,7 +1307,8 @@ export default function WebhookMonitor() {
               How many messages arrived in each slice of time, coloured by
               type. Tall spikes are bursts, such as a courier posting a batch
               of tracking scans or a stock sync. Click a colour in the legend
-              to hide that type; hover a bar for the breakdown.
+              to hide that type; hover a bar for the breakdown; click a bar
+              (or one colour in it) to list every message it contains.
             </Text>
             <StackedTimeline
               timeline={data.timeline}
@@ -1038,9 +1316,27 @@ export default function WebhookMonitor() {
               hidden={hidden}
               toggleTopic={toggleTopic}
               showAll={() => setHidden(new Set())}
+              selectedAt={bucket?.at || null}
+              onSelect={selectBucket}
             />
           </BlockStack>
         </Card>
+
+        {bucket && (
+          <BucketDetail
+            shop={data.shop}
+            windowKey={data.window}
+            bucket={bucket}
+            counts={
+              data.timeline.series.find((b) => b.at === bucket.at)?.counts ||
+              {}
+            }
+            topics={data.timeline.topics}
+            fetcher={bucketFetcher}
+            onTopic={(t) => selectBucket(bucket.at, t)}
+            onClose={() => setBucket(null)}
+          />
+        )}
 
         <SelectedTopics
           byTopic={data.byTopic}
