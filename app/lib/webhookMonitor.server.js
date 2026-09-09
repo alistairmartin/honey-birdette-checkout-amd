@@ -896,11 +896,28 @@ export async function readDashboard({
   const timeline = new Map();
   const topics = new Set();
 
+  // Per-topic totals so the page can show stats for whichever topics are
+  // selected in the timeline legend without another round trip. Lag samples
+  // are kept as a 0.1s histogram per topic so a combined median across any
+  // selection can be computed client-side from small data.
+  const byTopic = new Map();
+  const topicStats = (topic) => {
+    let t = byTopic.get(topic);
+    if (!t) {
+      t = { topic, count: 0, noise: 0, repeats: 0, lagHist: {}, lagSamples: 0 };
+      byTopic.set(topic, t);
+    }
+    return t;
+  };
+
   const addCount = (topic, classification, count, repeats, at) => {
     events += count;
-    noise += NOISE_CLASSES.has(classification)
-      ? count
-      : Math.min(repeats, count);
+    const n = NOISE_CLASSES.has(classification) ? count : Math.min(repeats, count);
+    noise += n;
+    const ts = topicStats(topic);
+    ts.count += count;
+    ts.noise += n;
+    ts.repeats += repeats;
     topics.add(topic);
     const key = `${topic}|${classification}`;
     const tc = byTopicClass.get(key) || {
@@ -937,7 +954,13 @@ export async function readDashboard({
   }
   for (const r of raw) {
     if (r.triggeredAt) {
-      lags.push((r.receivedAt.getTime() - r.triggeredAt.getTime()) / 1000);
+      const lag = (r.receivedAt.getTime() - r.triggeredAt.getTime()) / 1000;
+      lags.push(lag);
+      const ts = topicStats(r.topic);
+      // 0.1s bins, capped at 1 hour so the histogram stays small.
+      const bin = Math.min(36000, Math.round(lag * 10));
+      ts.lagHist[bin] = (ts.lagHist[bin] || 0) + 1;
+      ts.lagSamples += 1;
     }
   }
 
@@ -1038,6 +1061,7 @@ export async function readDashboard({
   return {
     shop,
     window,
+    windowMinutes: win.minutes,
     from,
     now,
     usingHourly: useHourly,
@@ -1051,6 +1075,7 @@ export async function readDashboard({
       lagSamples: lags.length,
     },
     timeline: { bucketMinutes: win.bucketMinutes, series, topics: [...topics].sort() },
+    byTopic: [...byTopic.values()].sort((a, b) => b.count - a.count),
     byTopicClass: [...byTopicClass.values()].sort((a, b) => b.count - a.count),
     topResources,
     recent,

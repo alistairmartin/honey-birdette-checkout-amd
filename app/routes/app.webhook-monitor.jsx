@@ -232,7 +232,7 @@ function colourFor(topic, index) {
 // Charts (inline SVG, no extra bundle)
 // ---------------------------------------------------------------------------
 
-function StackedTimeline({ timeline, windowKey }) {
+function StackedTimeline({ timeline, windowKey, hidden, toggleTopic, showAll }) {
   const { series, topics, bucketMinutes } = timeline;
   const width = 960;
   const height = 220;
@@ -242,9 +242,6 @@ function StackedTimeline({ timeline, windowKey }) {
   const plotW = width - padL - 8;
   const plotH = height - padB - padT;
 
-  // Legend doubles as a filter: click a topic to hide it from the stacks and
-  // the totals. Hidden topics are remembered for the tab, not the URL.
-  const [hidden, setHidden] = useState(() => new Set());
   // Which bar the popover is for, plus where to anchor it (pixel coords
   // inside the chart wrapper).
   const [hover, setHover] = useState(null);
@@ -258,14 +255,6 @@ function StackedTimeline({ timeline, windowKey }) {
   const yTicks = 4;
   const labelEvery = Math.max(1, Math.ceil(series.length / 8));
   const withDate = DATED_WINDOWS.has(windowKey);
-
-  const toggleTopic = (t) =>
-    setHidden((prev) => {
-      const next = new Set(prev);
-      if (next.has(t)) next.delete(t);
-      else next.add(t);
-      return next;
-    });
 
   if (!series.some((b) => Object.keys(b.counts).length)) {
     return (
@@ -504,7 +493,7 @@ function StackedTimeline({ timeline, windowKey }) {
         {hidden.size > 0 && (
           <button
             type="button"
-            onClick={() => setHidden(new Set())}
+            onClick={showAll}
             style={{
               border: "none",
               background: "none",
@@ -590,6 +579,152 @@ function QueueLine({ samples }) {
 }
 
 // ---------------------------------------------------------------------------
+// Selected topics card: totals for whichever topics are switched on in the
+// timeline legend, combined and per topic.
+// ---------------------------------------------------------------------------
+
+// Median from merged 0.1s histograms ({bin: count}).
+function medianFromHists(hists) {
+  const merged = new Map();
+  let total = 0;
+  for (const h of hists) {
+    for (const [bin, c] of Object.entries(h)) {
+      merged.set(Number(bin), (merged.get(Number(bin)) || 0) + c);
+      total += c;
+    }
+  }
+  if (!total) return { median: null, samples: 0 };
+  const bins = [...merged.keys()].sort((a, b) => a - b);
+  const half = total / 2;
+  let seen = 0;
+  for (const bin of bins) {
+    seen += merged.get(bin);
+    if (seen >= half) return { median: bin / 10, samples: total };
+  }
+  return { median: bins[bins.length - 1] / 10, samples: total };
+}
+
+function SelectedTopics({ byTopic, hidden, windowMinutes, totalEvents }) {
+  const selected = byTopic.filter((t) => !hidden.has(t.topic));
+  const all = selected.length === byTopic.length;
+
+  const events = selected.reduce((a, t) => a + t.count, 0);
+  const noise = selected.reduce((a, t) => a + t.noise, 0);
+  const repeats = selected.reduce((a, t) => a + t.repeats, 0);
+  const lag = medianFromHists(selected.map((t) => t.lagHist));
+
+  const rows = selected.map((t) => {
+    const l = medianFromHists([t.lagHist]);
+    return [
+      <InlineStack key="t" gap="100" blockAlign="center" wrap={false}>
+        <span
+          style={{
+            display: "inline-block",
+            width: 10,
+            height: 10,
+            borderRadius: 2,
+            background: colourFor(t.topic, byTopic.indexOf(t)),
+          }}
+        />
+        <span>{topicSlug(t.topic)}</span>
+      </InlineStack>,
+      fmtInt(t.count),
+      totalEvents ? `${((t.count / totalEvents) * 100).toFixed(1)}%` : "0%",
+      windowMinutes ? (t.count / windowMinutes).toFixed(2) : "0",
+      `${t.count ? ((t.noise / t.count) * 100).toFixed(0) : 0}%`,
+      fmtInt(t.repeats),
+      fmtSeconds(l.median),
+    ];
+  });
+
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <InlineStack gap="200" blockAlign="center">
+          <Text as="h2" variant="headingMd">
+            Selected topics
+          </Text>
+          <Badge tone={all ? undefined : "info"}>
+            {all
+              ? `All ${byTopic.length} topics`
+              : `${selected.length} of ${byTopic.length} topics`}
+          </Badge>
+        </InlineStack>
+        <Text as="p" variant="bodySm" tone="subdued">
+          The same numbers as the totals card, but only for the topics switched
+          on in the timeline legend above. Click legend colours to change the
+          selection. Share of window is against every message in the window.
+        </Text>
+        {selected.length ? (
+          <>
+            <InlineStack gap="800" wrap>
+              <BigNumber
+                label="Events"
+                value={fmtInt(events)}
+                hint={
+                  totalEvents
+                    ? `${((events / totalEvents) * 100).toFixed(0)}% of window`
+                    : undefined
+                }
+              />
+              <BigNumber
+                label="Events / min"
+                value={
+                  windowMinutes
+                    ? (events / windowMinutes).toFixed(events / windowMinutes < 10 ? 2 : 1)
+                    : "0"
+                }
+              />
+              <BigNumber
+                label="Flagged noise"
+                value={`${events ? ((noise / events) * 100).toFixed(0) : 0}%`}
+                hint={`${fmtInt(noise)} tracking-only, silent or repeat`}
+              />
+              <BigNumber
+                label="Repeats"
+                value={fmtInt(repeats)}
+                hint="identical to the previous message"
+              />
+              <BigNumber
+                label="Median delivery lag"
+                value={fmtSeconds(lag.median)}
+                hint={lag.samples ? `${fmtInt(lag.samples)} samples` : "no samples"}
+              />
+            </InlineStack>
+            <DataTable
+              columnContentTypes={[
+                "text",
+                "numeric",
+                "numeric",
+                "numeric",
+                "numeric",
+                "numeric",
+                "numeric",
+              ]}
+              headings={[
+                "Topic",
+                "Events",
+                "Share of window",
+                "Per min",
+                "Noise",
+                "Repeats",
+                "Median lag",
+              ]}
+              rows={rows}
+              increasedTableDensity
+            />
+          </>
+        ) : (
+          <Text as="p" tone="subdued">
+            Every topic is hidden. Click a colour in the legend to select one.
+          </Text>
+        )}
+      </BlockStack>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -618,6 +753,16 @@ export default function WebhookMonitor() {
   const [params, setParams] = useSearchParams();
   const revalidator = useRevalidator();
   const [autoRefresh, setAutoRefresh] = useState(true);
+  // Legend doubles as a filter: click a topic to hide it from the timeline
+  // and from the "Selected topics" card. Remembered for the tab, not the URL.
+  const [hidden, setHidden] = useState(() => new Set());
+  const toggleTopic = (t) =>
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t);
+      else next.add(t);
+      return next;
+    });
 
   useEffect(() => {
     if (!autoRefresh) return undefined;
@@ -817,9 +962,22 @@ export default function WebhookMonitor() {
               of tracking scans or a stock sync. Click a colour in the legend
               to hide that type; hover a bar for the breakdown.
             </Text>
-            <StackedTimeline timeline={data.timeline} windowKey={data.window} />
+            <StackedTimeline
+              timeline={data.timeline}
+              windowKey={data.window}
+              hidden={hidden}
+              toggleTopic={toggleTopic}
+              showAll={() => setHidden(new Set())}
+            />
           </BlockStack>
         </Card>
+
+        <SelectedTopics
+          byTopic={data.byTopic}
+          hidden={hidden}
+          windowMinutes={data.windowMinutes}
+          totalEvents={data.totals.events}
+        />
 
         <Card>
           <BlockStack gap="300">
