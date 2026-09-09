@@ -990,18 +990,18 @@ function BucketDetail({
       e.repeatOfPrev ? "yes" : "",
       e.source || "",
       fmtSeconds(lag),
-      e.hasPayload ? (
-        <Button
-          key="raw"
-          variant="plain"
-          size="slim"
-          onClick={() => openRaw(e.id)}
-        >
-          Raw
-        </Button>
-      ) : (
-        ""
-      ),
+      <Button
+        key="raw"
+        variant="plain"
+        size="slim"
+        tone={e.hasPayload ? undefined : "critical"}
+        onClick={() => openRaw(e.id)}
+        accessibilityLabel={
+          e.hasPayload ? "View raw message" : "Raw message not stored"
+        }
+      >
+        {e.hasPayload ? "Raw" : "Raw (none)"}
+      </Button>,
     ];
   });
 
@@ -1020,7 +1020,7 @@ function BucketDetail({
       <Modal
         open
         onClose={onClose}
-        size="large"
+        size="fullScreen"
         title={`Messages in bar ${fmtTime(bucket.at, true)}`}
         secondaryActions={[{ content: "Close", onAction: onClose }]}
       >
@@ -1121,7 +1121,7 @@ function BucketDetail({
                 "Repeat",
                 "Source",
                 "Lag",
-                "",
+                "Raw",
               ]}
               rows={rows}
               increasedTableDensity
