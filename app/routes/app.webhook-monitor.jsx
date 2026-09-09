@@ -1057,45 +1057,47 @@ export default function WebhookMonitor() {
           </BlockStack>
         </Card>
 
-        <Card>
-          <BlockStack gap="300">
-            <InlineStack gap="300" blockAlign="center">
-              <Text as="h2" variant="headingMd">
-                Legacy queue depth
-              </Text>
-              {queue?.rising && (
-                <Badge tone="critical">Rising for 15 min</Badge>
+        {queue && (
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack gap="300" blockAlign="center">
+                <Text as="h2" variant="headingMd">
+                  Legacy queue depth
+                </Text>
+                {queue?.rising && (
+                  <Badge tone="critical">Rising for 15 min</Badge>
+                )}
+                {queue?.stale && <Badge tone="warning">Feed stale</Badge>}
+              </InlineStack>
+              {queue ? (
+                <BlockStack gap="300">
+                  <InlineStack gap="800" wrap>
+                    <BigNumber
+                      label="Files queued now"
+                      value={fmtInt(queue.current)}
+                    />
+                    <BigNumber
+                      label="Oldest file age"
+                      value={fmtSeconds(queue.oldestAge)}
+                    />
+                    <BigNumber
+                      label="Last sample"
+                      value={fmtTime(queue.sampledAt)}
+                      hint={`${fmtInt(queue.samples.length)} samples in window`}
+                    />
+                  </InlineStack>
+                  <QueueLine samples={queue.samples} />
+                </BlockStack>
+              ) : (
+                <Text as="p" tone="subdued">
+                  No samples for this store in the window. The legacy server needs
+                  the one-line cron from WEBHOOK_MONITOR_HANDOFF.md posting to
+                  /api/webhook-monitor/queue-depth.
+                </Text>
               )}
-              {queue?.stale && <Badge tone="warning">Feed stale</Badge>}
-            </InlineStack>
-            {queue ? (
-              <BlockStack gap="300">
-                <InlineStack gap="800" wrap>
-                  <BigNumber
-                    label="Files queued now"
-                    value={fmtInt(queue.current)}
-                  />
-                  <BigNumber
-                    label="Oldest file age"
-                    value={fmtSeconds(queue.oldestAge)}
-                  />
-                  <BigNumber
-                    label="Last sample"
-                    value={fmtTime(queue.sampledAt)}
-                    hint={`${fmtInt(queue.samples.length)} samples in window`}
-                  />
-                </InlineStack>
-                <QueueLine samples={queue.samples} />
-              </BlockStack>
-            ) : (
-              <Text as="p" tone="subdued">
-                No samples for this store in the window. The legacy server needs
-                the one-line cron from WEBHOOK_MONITOR_HANDOFF.md posting to
-                /api/webhook-monitor/queue-depth.
-              </Text>
-            )}
-          </BlockStack>
-        </Card>
+            </BlockStack>
+          </Card>
+        )}
 
         <Card>
           <BlockStack gap="300">
