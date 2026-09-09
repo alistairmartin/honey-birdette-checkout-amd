@@ -18,7 +18,7 @@ services:
     disk:
       name: sqlite-data
       mountPath: /data       # DATABASE_URL points here so sessions survive restarts
-      sizeGB: 1
+      sizeGB: 5           # 30 days of raw webhook rows across 4 regions is ~2 GB
     envVars:
       - key: SHOPIFY_API_KEY
         value: 1ff77f37375f9a6603f22ecd67e5e832  # public client_id, safe to commit
@@ -49,7 +49,7 @@ services:
         sync: false
 
   # Hourly webhook-monitor housekeeping: roll raw WebhookEvent rows up into
-  # WebhookHourly and prune (raw 3 days, hourly 90 days, queue samples 30 days).
+  # WebhookHourly and prune (raw 30 days, hourly 90 days, queue samples 30 days).
   - type: cron
     name: webhook-monitor-maintenance
     runtime: docker

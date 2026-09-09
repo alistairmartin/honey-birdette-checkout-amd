@@ -175,9 +175,12 @@ model WebhookHourly {
 }
 ```
 
-Retention: raw `WebhookEvent` rows pruned after 3 days, `WebhookHourly` kept
-90 days. Busy nights are ~20k rows/day/region, so 4 regions x 3 days fits
-the 1GB Render disk with room. Prune inside the existing hourly Kibo sweep
+Retention: raw `WebhookEvent` rows pruned after 30 days, `WebhookHourly` kept
+90 days. Measured 844 bytes per raw row including indexes; busy nights are
+~20k rows/day/region, so 4 regions x 30 days is ~2 GB on the 5 GB Render
+disk. The dashboard loader and the rollup cron only ever read the last
+`RAW_WINDOW_DAYS` (3) of raw rows; longer windows use the rollup for totals.
+SQLite does not shrink after prune, so the file plateaus at peak size. Prune inside the existing hourly Kibo sweep
 cron or a new cron in `render.yaml`.
 
 ### 4. Classification (the whole point)
@@ -235,7 +238,12 @@ every raw row in that bucket: resource with admin link, class, source, lag,
 and what moved in the tracked summary fields since the previous message for
 the same resource (server-side diff in `readBucketEvents`, served by
 `app/routes/app.webhook-monitor.bucket.jsx`). Raw rows only, so bars older
-than 3 days list nothing.
+than 30 days list nothing. The modal filters by topic, class, resource type,
+source, repeats-only and a resource search, and each row has a Raw button
+that opens the stored body (`WebhookPayload`, gzip, 3 day retention, served
+by `app/routes/app.webhook-monitor.payload.jsx`). That table is the one place
+the monitor stores PII. Inventory rows resolve product / variant / location
+names live via `app/lib/webhookMonitorResolve.server.js` (cached 6 h).
 
 Cards, top to bottom:
 

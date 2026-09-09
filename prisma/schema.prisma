@@ -200,3 +200,18 @@ model WebhookHourly {
   @@unique([shop, topic, classification, hour])
   @@index([shop, hour])
 }
+
+// Raw webhook bodies, gzip compressed, kept PAYLOAD_RETENTION_DAYS (3) so the
+// monitor's bar drill-down can show a message exactly as Shopify sent it.
+// This is the one place the monitor stores PII; the prune keeps it short.
+model WebhookPayload {
+  // Matches WebhookEvent.webhookId
+  webhookId  String   @id
+  shop       String
+  receivedAt DateTime @default(now())
+  // uncompressed size
+  bytes      Int
+  body       Bytes
+
+  @@index([receivedAt])
+}

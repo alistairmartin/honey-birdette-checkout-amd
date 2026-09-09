@@ -5,7 +5,7 @@ import { pruneOld, rollupHours } from "../lib/webhookMonitor.server";
 // `webhook-monitor-maintenance` (scripts/webhook-monitor-cron.mjs):
 //
 //   1. roll raw WebhookEvent rows up into WebhookHourly (idempotent upsert)
-//   2. prune raw rows older than 3 days, hourly rollups older than 90 days,
+//   2. prune raw rows older than 30 days, raw bodies older than 3 days, hourly rollups older than 90 days,
 //      queue samples older than 30 days
 //
 // Guarded by the same shared secret as the queue-depth feed.

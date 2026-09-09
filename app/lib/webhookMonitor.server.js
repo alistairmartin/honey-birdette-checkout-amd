@@ -12,6 +12,7 @@
 // compared, and only ids, statuses, tags, counts and hashes are written.
 
 import { createHash } from "node:crypto";
+import { gzipSync, gunzipSync } from "node:zlib";
 import prisma from "../db.server";
 
 // ---------------------------------------------------------------------------
@@ -57,8 +58,16 @@ export const MONITORED_TOPICS = new Set([
 // changed. `repeatOfPrev` rows are counted as noise too regardless of class.
 export const NOISE_CLASSES = new Set(["tracking_only", "silent"]);
 
-// Raw rows live this long; hourly rollups keep the 7 to 30 day views working.
-export const RAW_RETENTION_DAYS = 3;
+// Raw rows live this long (about 2 GB for 4 regions on a busy month, see
+// WEBHOOK_MONITOR_HANDOFF.md). The hourly rollup keeps windows over
+// RAW_WINDOW_DAYS cheap: the dashboard and the rollup cron only ever read
+// RAW_WINDOW_DAYS of raw rows at a time; the bar drill-down and recent events
+// read by bucket or by limit, so they can reach the full retention.
+export const RAW_RETENTION_DAYS = 30;
+export const RAW_WINDOW_DAYS = 3;
+// Raw bodies (gzipped, PII included) live this long so the drill-down can show
+// a message as received. Roughly 2 KB each compressed.
+export const PAYLOAD_RETENTION_DAYS = 3;
 export const HOURLY_RETENTION_DAYS = 90;
 export const QUEUE_SAMPLE_RETENTION_DAYS = 30;
 
@@ -697,6 +706,22 @@ export async function recordWebhookEvent({
         apiVersion: headers.apiVersion,
       },
     });
+    // Raw body alongside, compressed. Best effort: a failure here must not
+    // lose the event row or make Shopify retry.
+    try {
+      const text = JSON.stringify(p);
+      await prisma.webhookPayload.create({
+        data: {
+          webhookId,
+          shop,
+          receivedAt: row.receivedAt,
+          bytes: Buffer.byteLength(text),
+          body: gzipSync(text),
+        },
+      });
+    } catch (err) {
+      console.error("[webhook-monitor] payload store failed", err?.message);
+    }
     return { recorded: true, row };
   } catch (err) {
     if (err?.code === "P2002") {
@@ -704,6 +729,26 @@ export async function recordWebhookEvent({
     }
     throw err;
   }
+}
+
+// The stored raw body for one event, parsed. Null when pruned or never stored.
+export async function readPayload({ shop, eventId }) {
+  const event = await prisma.webhookEvent.findFirst({
+    where: { id: eventId, shop },
+    select: { webhookId: true, topic: true, receivedAt: true },
+  });
+  if (!event) return null;
+  const stored = await prisma.webhookPayload.findUnique({
+    where: { webhookId: event.webhookId },
+  });
+  if (!stored) return { event, payload: null };
+  let payload = null;
+  try {
+    payload = JSON.parse(gunzipSync(stored.body).toString("utf8"));
+  } catch (err) {
+    console.error("[webhook-monitor] payload read failed", err?.message);
+  }
+  return { event, payload, bytes: stored.bytes };
 }
 
 // ---------------------------------------------------------------------------
@@ -733,11 +778,12 @@ function floorHour(date) {
   return d;
 }
 
-// Re-aggregates every completed hour still covered by raw rows. Upsert makes
-// it idempotent, so running it more often than hourly is harmless.
+// Re-aggregates every completed hour in the last RAW_WINDOW_DAYS. Rows are
+// stamped receivedAt = now on arrival, so older hours cannot change. Upsert
+// makes it idempotent, so running it more often than hourly is harmless.
 export async function rollupHours({ now = new Date() } = {}) {
   const currentHour = floorHour(now);
-  const from = new Date(currentHour.getTime() - RAW_RETENTION_DAYS * 86400e3);
+  const from = new Date(currentHour.getTime() - RAW_WINDOW_DAYS * 86400e3);
 
   const rows = await prisma.webhookEvent.findMany({
     where: { receivedAt: { gte: from, lt: currentHour } },
@@ -792,14 +838,25 @@ export async function pruneOld({ now = new Date() } = {}) {
   const queueCutoff = new Date(
     now.getTime() - QUEUE_SAMPLE_RETENTION_DAYS * 86400e3,
   );
-  const [raw, hourly, queue] = await Promise.all([
+  const payloadCutoff = new Date(
+    now.getTime() - PAYLOAD_RETENTION_DAYS * 86400e3,
+  );
+  const [raw, payloads, hourly, queue] = await Promise.all([
     prisma.webhookEvent.deleteMany({ where: { receivedAt: { lt: rawCutoff } } }),
+    prisma.webhookPayload.deleteMany({
+      where: { receivedAt: { lt: payloadCutoff } },
+    }),
     prisma.webhookHourly.deleteMany({ where: { hour: { lt: hourlyCutoff } } }),
     prisma.webhookQueueSample.deleteMany({
       where: { sampledAt: { lt: queueCutoff } },
     }),
   ]);
-  return { raw: raw.count, hourly: hourly.count, queue: queue.count };
+  return {
+    raw: raw.count,
+    hourly: hourly.count,
+    queue: queue.count,
+    payloads: payloads.count,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -861,11 +918,17 @@ export async function readDashboard({
 }) {
   const win = WINDOWS[window] || WINDOWS["1h"];
   const from = new Date(now.getTime() - win.minutes * 60e3);
-  // Raw rows only cover RAW_RETENTION_DAYS; longer windows lean on the rollup.
-  const useHourly = win.minutes > RAW_RETENTION_DAYS * 1440;
+  // Windows over RAW_WINDOW_DAYS take totals and the timeline from the hourly
+  // rollup and only read the last RAW_WINDOW_DAYS of raw rows (current hour
+  // counts, delivery lag, top resources), so a 30 day view never loads a
+  // month of raw rows.
+  const useHourly = win.minutes > RAW_WINDOW_DAYS * 1440;
+  const rawFrom = useHourly
+    ? new Date(now.getTime() - RAW_WINDOW_DAYS * 86400e3)
+    : from;
 
   const raw = await prisma.webhookEvent.findMany({
-    where: { shop, receivedAt: { gte: from } },
+    where: { shop, receivedAt: { gte: rawFrom } },
     select: {
       topic: true,
       classification: true,
@@ -1073,6 +1136,8 @@ export async function readDashboard({
     from,
     now,
     usingHourly: useHourly,
+    rawWindowDays: RAW_WINDOW_DAYS,
+    rawRetentionDays: RAW_RETENTION_DAYS,
     truncated: raw.length >= 100000,
     totals: {
       events,
@@ -1108,7 +1173,6 @@ function describeChange(key, before, after) {
     if (v === null || v === undefined || v === "") return "none";
     if (key === "tags")
       return String(v).split(",").filter(Boolean).join(", ") || "none";
-    if (/_hash$/.test(key)) return String(v).slice(0, 8);
     return String(v);
   };
   return `${key}: ${fmt(before)} -> ${fmt(after)}`;
@@ -1119,19 +1183,56 @@ export async function readBucketEvents({
   at,
   bucketMinutes,
   topic = "",
+  classification = "",
+  resourceType = "",
+  source = "",
+  repeatsOnly = false,
+  search = "",
 }) {
   const start = toDate(at);
   const minutes = Number(bucketMinutes);
   if (!start || !minutes || Number.isNaN(minutes)) {
-    return { events: [], total: 0, capped: false };
+    return { events: [], total: 0, capped: false, options: {} };
   }
   const end = new Date(start.getTime() + minutes * 60e3);
 
+  const q = String(search || "").trim();
   const where = {
     shop,
     receivedAt: { gte: start, lt: end },
     ...(topic ? { topic } : {}),
+    ...(classification ? { classification } : {}),
+    ...(resourceType ? { resourceType } : {}),
+    ...(source ? { source } : {}),
+    ...(repeatsOnly ? { repeatOfPrev: true } : {}),
+    ...(q
+      ? {
+          OR: [
+            { resourceName: { contains: q } },
+            { resourceId: { contains: q } },
+            { orderId: { contains: q } },
+          ],
+        }
+      : {}),
   };
+  // Filter options come from the whole bucket (topic applied, nothing else)
+  // so narrowing one filter never empties the others.
+  const optionRows = await prisma.webhookEvent.findMany({
+    where: {
+      shop,
+      receivedAt: { gte: start, lt: end },
+      ...(topic ? { topic } : {}),
+    },
+    select: { classification: true, resourceType: true, source: true },
+    distinct: ["classification", "resourceType", "source"],
+    take: 5000,
+  });
+  const options = {
+    classes: [...new Set(optionRows.map((r) => r.classification))].sort(),
+    resourceTypes: [...new Set(optionRows.map((r) => r.resourceType))].sort(),
+    sources: [...new Set(optionRows.map((r) => r.source).filter(Boolean))].sort(),
+  };
+
   const [total, rows] = await Promise.all([
     prisma.webhookEvent.count({ where }),
     prisma.webhookEvent.findMany({
@@ -1154,9 +1255,20 @@ export async function readBucketEvents({
         payloadBytes: true,
         apiVersion: true,
         summaryJson: true,
+        webhookId: true,
       },
     }),
   ]);
+
+  // Which of these still have a stored raw body (3 day retention).
+  const withPayload = new Set(
+    (
+      await prisma.webhookPayload.findMany({
+        where: { webhookId: { in: rows.map((r) => r.webhookId) } },
+        select: { webhookId: true },
+      })
+    ).map((p) => p.webhookId),
+  );
 
   // Previous summary per resource: the latest row before the bucket for each
   // resource seen in it, then walk the bucket in order so later rows diff
@@ -1201,15 +1313,16 @@ export async function readBucketEvents({
           .map((k) => describeChange(k, prev.summary[k], summary[k]))
       : [];
     prevByKey.set(key, { receivedAt: r.receivedAt, summary });
-    const { summaryJson, ...rest } = r;
+    const { summaryJson, webhookId, ...rest } = r;
     return {
       ...rest,
       summary,
       previousAt: prev ? prev.receivedAt : null,
       firstSeen: !prev,
       changes,
+      hasPayload: withPayload.has(webhookId),
     };
   });
 
-  return { events, total, capped: total > rows.length, start, end };
+  return { events, total, capped: total > rows.length, start, end, options };
 }

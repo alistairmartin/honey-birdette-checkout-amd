@@ -5,7 +5,7 @@ import {
   useRevalidator,
   useSearchParams,
 } from "@remix-run/react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Page,
   Card,
@@ -20,7 +20,9 @@ import {
   Link as PolarisLink,
   Checkbox,
   Divider,
+  Modal,
   Button,
+  TextField,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -679,7 +681,7 @@ function QueueLine({ samples }) {
 // Bucket detail: every message inside one clicked timeline bar, with the
 // resource it was about, a link to it in admin, and what moved in the tracked
 // fields since the previous message for that resource. Raw rows only, so bars
-// older than 3 days come back empty.
+// older than the raw retention (30 days) come back empty.
 // ---------------------------------------------------------------------------
 
 const SUMMARY_LABELS = {
@@ -713,7 +715,6 @@ const SUMMARY_LABELS = {
 
 function fmtSummaryValue(key, v) {
   if (v === null || v === undefined || v === "") return "none";
-  if (/_hash$/.test(key)) return `${String(v).slice(0, 8)}…`;
   if (key === "tags") {
     return String(v).split(",").filter(Boolean).join(", ") || "none";
   }
@@ -732,7 +733,7 @@ function SummaryDetails({ event }) {
       </summary>
       <div style={{ paddingTop: 4 }}>
         {entries.map(([k, v]) => (
-          <div key={k} style={{ whiteSpace: "nowrap" }}>
+          <div key={k} style={{ overflowWrap: "anywhere" }}>
             <Text as="span" variant="bodySm" tone="subdued">
               {SUMMARY_LABELS[k] || k}:{" "}
             </Text>
@@ -746,19 +747,168 @@ function SummaryDetails({ event }) {
   );
 }
 
+// Resource cell for inventory rows: product / variant name linked to the
+// variant page, plus the location name, when the bucket route resolved them.
+function InventoryResource({ shop, event, refs }) {
+  const handle = shop.replace(".myshopify.com", "");
+  const [itemId, locationId] =
+    event.resourceType === "inventory_level"
+      ? String(event.resourceId).split(":")
+      : [String(event.resourceId), null];
+  const item = refs?.inventoryItems?.[itemId];
+  const location = locationId ? refs?.locations?.[locationId] : null;
+  if (!item) {
+    return (
+      <span>
+        <Text as="span" variant="bodySm" tone="subdued">
+          {event.resourceType.replace(/_/g, " ")}{" "}
+        </Text>
+        {event.resourceId}
+        {locationId && location ? (
+          <Text as="span" variant="bodySm" tone="subdued">
+            {" "}
+            at {location}
+          </Text>
+        ) : null}
+      </span>
+    );
+  }
+  const href =
+    item.productId && item.variantId
+      ? `https://admin.shopify.com/store/${handle}/products/${item.productId}/variants/${item.variantId}`
+      : item.productId
+        ? `https://admin.shopify.com/store/${handle}/products/${item.productId}`
+        : null;
+  const label = item.displayName || item.productTitle || itemId;
+  return (
+    <BlockStack gap="0">
+      <span>
+        {href ? (
+          <PolarisLink url={href} target="_blank" removeUnderline>
+            {label}
+          </PolarisLink>
+        ) : (
+          label
+        )}
+      </span>
+      <Text as="span" variant="bodySm" tone="subdued">
+        {[item.sku ? `SKU ${item.sku}` : null, location ? `at ${location}` : null]
+          .filter(Boolean)
+          .join(" · ") || `item ${itemId}`}
+      </Text>
+    </BlockStack>
+  );
+}
+
+const EMPTY_FILTERS = {
+  topic: "",
+  class: "",
+  type: "",
+  source: "",
+  repeats: false,
+  q: "",
+};
+
+function PayloadModal({ fetcher, onClose }) {
+  const data = fetcher.data;
+  const loading = fetcher.state !== "idle";
+  const text = data?.payload ? JSON.stringify(data.payload, null, 2) : "";
+  const title = data?.event
+    ? `${topicSlug(data.event.topic)} received ${fmtTime(data.event.receivedAt, true)}`
+    : "Raw message";
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="large"
+      title={title}
+      secondaryActions={[{ content: "Close", onAction: onClose }]}
+    >
+      <Modal.Section>
+        {loading ? (
+          <Text as="p" tone="subdued">
+            Loading…
+          </Text>
+        ) : text ? (
+          <BlockStack gap="200">
+            <Text as="p" variant="bodySm" tone="subdued">
+              The body exactly as Shopify sent it ({fmtInt(data.bytes)} bytes).
+              Raw bodies are kept for 3 days.
+            </Text>
+            <pre
+              style={{
+                margin: 0,
+                padding: 12,
+                maxHeight: "70vh",
+                overflow: "auto",
+                fontSize: 12,
+                lineHeight: 1.45,
+                background: "var(--p-color-bg-surface-secondary, #F7F7F7)",
+                borderRadius: 8,
+                whiteSpace: "pre",
+              }}
+            >
+              {text}
+            </pre>
+          </BlockStack>
+        ) : (
+          <Text as="p" tone="subdued">
+            No raw body stored for this message. Bodies are kept for 3 days,
+            and only for messages received after this feature was deployed.
+          </Text>
+        )}
+      </Modal.Section>
+    </Modal>
+  );
+}
+
 function BucketDetail({
   shop,
   windowKey,
+  retentionDays,
   bucket,
   counts,
   topics,
   fetcher,
-  onTopic,
+  onFilters,
   onClose,
 }) {
   const data = fetcher.data;
   const loading = fetcher.state !== "idle";
   const withDate = DATED_WINDOWS.has(windowKey);
+  const f = bucket.filters;
+
+  // Keep the last loaded filter options while a reload is in flight so the
+  // selects do not flicker empty.
+  const [options, setOptions] = useState({
+    classes: [],
+    resourceTypes: [],
+    sources: [],
+  });
+  useEffect(() => {
+    if (data?.options) setOptions(data.options);
+  }, [data]);
+
+  // Search applies after a short pause in typing.
+  const [q, setQ] = useState(f.q);
+  useEffect(() => {
+    setQ(f.q);
+  }, [f.q]);
+  useEffect(() => {
+    if (q === f.q) return undefined;
+    const id = setTimeout(() => onFilters({ q }), 350);
+    return () => clearTimeout(id);
+  }, [q, f.q, onFilters]);
+
+  const [rawId, setRawId] = useState(null);
+  const rawFetcher = useFetcher();
+  const openRaw = (id) => {
+    setRawId(id);
+    rawFetcher.load(
+      `/app/webhook-monitor/payload?${new URLSearchParams({ shop, id })}`,
+    );
+  };
+
   const topicOptions = [
     { label: "All topics", value: "" },
     ...topics
@@ -768,6 +918,16 @@ function BucketDetail({
         value: t,
       })),
   ];
+  const withAll = (label, values, current) => [
+    { label, value: "" },
+    ...values.map((v) => ({ label: v, value: v })),
+    // Keep the current value selectable even if the options moved on.
+    ...(current && !values.includes(current)
+      ? [{ label: current, value: current }]
+      : []),
+  ];
+  const activeCount = [f.class, f.type, f.source, f.q].filter(Boolean).length +
+    (f.repeats ? 1 : 0);
 
   const rows = (data?.events || []).map((e) => {
     const href = adminUrl(shop, e.resourceType, e.resourceId, e.orderId);
@@ -807,100 +967,183 @@ function BucketDetail({
         {e.classification}
       </Badge>,
       <BlockStack key="r" gap="0">
-        <span>
-          <Text as="span" variant="bodySm" tone="subdued">
-            {e.resourceType.replace(/_/g, " ")}{" "}
-          </Text>
-          {href ? (
-            <PolarisLink url={href} target="_blank" removeUnderline>
-              {label}
-            </PolarisLink>
-          ) : (
-            label
-          )}
-        </span>
+        {e.resourceType === "inventory_level" ||
+        e.resourceType === "inventory_item" ? (
+          <InventoryResource shop={shop} event={e} refs={data?.refs} />
+        ) : (
+          <span>
+            <Text as="span" variant="bodySm" tone="subdued">
+              {e.resourceType.replace(/_/g, " ")}{" "}
+            </Text>
+            {href ? (
+              <PolarisLink url={href} target="_blank" removeUnderline>
+                {label}
+              </PolarisLink>
+            ) : (
+              label
+            )}
+          </span>
+        )}
         <SummaryDetails event={e} />
       </BlockStack>,
       changed,
       e.repeatOfPrev ? "yes" : "",
       e.source || "",
       fmtSeconds(lag),
+      e.hasPayload ? (
+        <Button
+          key="raw"
+          variant="plain"
+          size="slim"
+          onClick={() => openRaw(e.id)}
+        >
+          Raw
+        </Button>
+      ) : (
+        ""
+      ),
     ];
   });
 
+  const countBadge = loading ? (
+    <Badge>loading</Badge>
+  ) : data ? (
+    <Badge tone={data.capped ? "warning" : undefined}>
+      {data.capped
+        ? `showing ${fmtInt(data.events.length)} of ${fmtInt(data.total)}`
+        : `${fmtInt(data.total)} messages`}
+    </Badge>
+  ) : null;
+
   return (
-    <Card>
-      <BlockStack gap="300">
-        <InlineStack gap="300" blockAlign="center" align="space-between" wrap>
-          <InlineStack gap="200" blockAlign="center" wrap>
-            <Text as="h2" variant="headingMd">
-              Messages in bar {fmtTime(bucket.at, true)}
+    <>
+      <Modal
+        open
+        onClose={onClose}
+        size="large"
+        title={`Messages in bar ${fmtTime(bucket.at, true)}`}
+        secondaryActions={[{ content: "Close", onAction: onClose }]}
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            <InlineStack gap="300" blockAlign="end" wrap>
+              <Box minWidth="240px">
+                <Select
+                  label="Topic"
+                  options={topicOptions}
+                  value={f.topic}
+                  onChange={(v) =>
+                    onFilters({ topic: v, class: "", type: "", source: "" })
+                  }
+                />
+              </Box>
+              <Box minWidth="180px">
+                <Select
+                  label="Class"
+                  options={withAll("All classes", options.classes, f.class)}
+                  value={f.class}
+                  onChange={(v) => onFilters({ class: v })}
+                />
+              </Box>
+              <Box minWidth="180px">
+                <Select
+                  label="Type"
+                  options={withAll("All types", options.resourceTypes, f.type)}
+                  value={f.type}
+                  onChange={(v) => onFilters({ type: v })}
+                />
+              </Box>
+              <Box minWidth="160px">
+                <Select
+                  label="Source"
+                  options={withAll("All sources", options.sources, f.source)}
+                  value={f.source}
+                  onChange={(v) => onFilters({ source: v })}
+                />
+              </Box>
+              <Box minWidth="220px">
+                <TextField
+                  label="Resource"
+                  labelHidden={false}
+                  placeholder="#AU1072284 or an id"
+                  value={q}
+                  onChange={setQ}
+                  clearButton
+                  onClearButtonClick={() => setQ("")}
+                  autoComplete="off"
+                />
+              </Box>
+              <Checkbox
+                label="Repeats only"
+                checked={f.repeats}
+                onChange={(v) => onFilters({ repeats: v })}
+              />
+              {activeCount > 0 && (
+                <Button
+                  variant="plain"
+                  onClick={() => onFilters({ ...EMPTY_FILTERS, topic: f.topic })}
+                >
+                  Clear filters
+                </Button>
+              )}
+              {countBadge}
+            </InlineStack>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Every message Shopify sent in this slice, oldest first. Resource
+              links to admin. What changed compares the tracked fields
+              (statuses, tags, counts, hashed contact fields) against the
+              previous message for the same resource; nothing changed usually
+              means a metafield or loyalty write. Open Data for the tracked
+              fields, or Raw for the full message as received (kept 3 days).
             </Text>
-            {data && !loading && (
-              <Badge tone={data.capped ? "warning" : undefined}>
-                {data.capped
-                  ? `showing ${fmtInt(data.events.length)} of ${fmtInt(data.total)}`
-                  : `${fmtInt(data.total)} messages`}
-              </Badge>
-            )}
-            {loading && <Badge>loading</Badge>}
-          </InlineStack>
-          <Button onClick={onClose} variant="plain">
-            Close
-          </Button>
-        </InlineStack>
-        <Text as="p" variant="bodySm" tone="subdued">
-          Every message Shopify sent in this slice, oldest first. Resource is
-          who or what the message was about, linked to admin. What changed
-          compares the fields we track (statuses, tags, counts, hashed contact
-          fields) against the previous message for the same resource, so a
-          customer update that shows nothing changed was most likely a
-          metafield or loyalty write. Open Data under a resource for the
-          tracked fields as received. No names, emails or addresses are stored.
-        </Text>
-        <Box maxWidth="360px">
-          <Select
-            label="Topic"
-            options={topicOptions}
-            value={bucket.topic}
-            onChange={onTopic}
-          />
-        </Box>
-        <Divider />
-        {rows.length ? (
-          <DataTable
-            columnContentTypes={[
-              "text",
-              "text",
-              "text",
-              "text",
-              "text",
-              "text",
-              "text",
-              "numeric",
-            ]}
-            headings={[
-              "Received",
-              "Topic",
-              "Class",
-              "Resource",
-              "What changed",
-              "Repeat",
-              "Source",
-              "Lag",
-            ]}
-            rows={rows}
-            increasedTableDensity
-          />
-        ) : (
-          <Text as="p" tone="subdued">
-            {loading
-              ? "Loading…"
-              : "No raw rows for this bar. Raw rows are kept for 3 days; older bars only have hourly totals."}
-          </Text>
-        )}
-      </BlockStack>
-    </Card>
+          </BlockStack>
+        </Modal.Section>
+        <Modal.Section flush>
+          {rows.length ? (
+            <DataTable
+              columnContentTypes={[
+                "text",
+                "text",
+                "text",
+                "text",
+                "text",
+                "text",
+                "text",
+                "numeric",
+                "text",
+              ]}
+              headings={[
+                "Received",
+                "Topic",
+                "Class",
+                "Resource",
+                "What changed",
+                "Repeat",
+                "Source",
+                "Lag",
+                "",
+              ]}
+              rows={rows}
+              increasedTableDensity
+              stickyHeader
+            />
+          ) : (
+            <Box padding="400">
+              <Text as="p" tone="subdued">
+                {loading
+                  ? "Loading…"
+                  : activeCount > 0
+                    ? "No messages match these filters."
+                    : `No raw rows for this bar. Raw rows are kept for ${retentionDays} days; older bars only have hourly totals.`}
+              </Text>
+            </Box>
+          )}
+        </Modal.Section>
+      </Modal>
+      {rawId && (
+        <PayloadModal fetcher={rawFetcher} onClose={() => setRawId(null)} />
+      )}
+    </>
   );
 }
 
@@ -1086,19 +1329,37 @@ export default function WebhookMonitor() {
   // resource route so the page loader stays light.
   const [bucket, setBucket] = useState(null);
   const bucketFetcher = useFetcher();
-  const loadBucket = (at, topic) => {
+  const loadBucket = (at, filters) => {
     const q = new URLSearchParams({
       shop: data.shop,
       at,
       minutes: String(data.timeline.bucketMinutes),
-      ...(topic ? { topic } : {}),
     });
+    if (filters.topic) q.set("topic", filters.topic);
+    if (filters.class) q.set("class", filters.class);
+    if (filters.type) q.set("type", filters.type);
+    if (filters.source) q.set("source", filters.source);
+    if (filters.repeats) q.set("repeats", "1");
+    if (filters.q) q.set("q", filters.q);
     bucketFetcher.load(`/app/webhook-monitor/bucket?${q}`);
   };
   const selectBucket = (at, topic) => {
-    setBucket({ at, topic });
-    loadBucket(at, topic);
+    const filters = { ...EMPTY_FILTERS, topic };
+    setBucket({ at, filters });
+    loadBucket(at, filters);
   };
+  const updateBucketFilters = useCallback(
+    (patch) => {
+      setBucket((prev) => {
+        if (!prev) return prev;
+        const filters = { ...prev.filters, ...patch };
+        loadBucket(prev.at, filters);
+        return { ...prev, filters };
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.shop, data.timeline.bucketMinutes],
+  );
   const toggleTopic = (t) =>
     setHidden((prev) => {
       const next = new Set(prev);
@@ -1118,6 +1379,22 @@ export default function WebhookMonitor() {
   useEffect(() => {
     setBucket(null);
   }, [data.shop, data.window]);
+
+  // Every time on the page is formatted in the viewer's browser zone. Say
+  // which one, after hydration so server and client markup agree.
+  const [tzLabel, setTzLabel] = useState("");
+  useEffect(() => {
+    try {
+      const parts = new Intl.DateTimeFormat("en-AU", {
+        timeZoneName: "short",
+      }).formatToParts(new Date());
+      const name = parts.find((x) => x.type === "timeZoneName")?.value;
+      const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      setTzLabel(name ? `${name} (${zone})` : zone);
+    } catch {
+      setTzLabel("");
+    }
+  }, []);
 
   const setParam = (key, value) => {
     const next = new URLSearchParams(params);
@@ -1232,6 +1509,7 @@ export default function WebhookMonitor() {
               <Text as="span" variant="bodySm" tone="subdued">
                 Updated {fmtTime(data.now)}
                 {revalidator.state !== "idle" ? " (refreshing)" : ""}
+                {tzLabel ? `. Times shown in ${tzLabel}, your browser's zone` : ""}
               </Text>
             </InlineStack>
           </BlockStack>
@@ -1250,9 +1528,11 @@ export default function WebhookMonitor() {
         {data.usingHourly && (
           <Banner tone="info">
             <Text as="p">
-              Windows over 3 days use the hourly rollup for totals and the
-              timeline. Delivery lag, top resources and recent events only cover
-              the last 3 days of raw rows.
+              Windows over {data.rawWindowDays} days take totals and the
+              timeline from the hourly rollup. Delivery lag and top resources
+              cover the last {data.rawWindowDays} days only. Recent events and
+              the bar drill-down cover the whole window ({data.rawRetentionDays}{" "}
+              days of raw rows are kept).
             </Text>
           </Banner>
         )}
@@ -1326,6 +1606,7 @@ export default function WebhookMonitor() {
           <BucketDetail
             shop={data.shop}
             windowKey={data.window}
+            retentionDays={data.rawRetentionDays}
             bucket={bucket}
             counts={
               data.timeline.series.find((b) => b.at === bucket.at)?.counts ||
@@ -1333,7 +1614,7 @@ export default function WebhookMonitor() {
             }
             topics={data.timeline.topics}
             fetcher={bucketFetcher}
-            onTopic={(t) => selectBucket(bucket.at, t)}
+            onFilters={updateBucketFilters}
             onClose={() => setBucket(null)}
           />
         )}
