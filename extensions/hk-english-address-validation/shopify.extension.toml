@@ -1,0 +1,17 @@
+api_version = "2026-01"
+
+[[extensions]]
+name = "t:name"
+handle = "hk-english-address-validation"
+uid = "c72ff43b-031b-81c4-2b79-59273a4c2371155773a7"
+type = "function"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "cart.validations.generate.run"
+  input_query = "src/cart_validations_generate_run.graphql"
+  export = "cart-validations-generate-run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

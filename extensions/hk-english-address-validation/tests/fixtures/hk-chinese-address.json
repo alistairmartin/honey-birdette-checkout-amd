@@ -1,0 +1,35 @@
+{
+  "payload": {
+    "export": "cart-validations-generate-run",
+    "target": "cart.validations.generate.run",
+    "input": {
+      "cart": {
+        "deliveryGroups": [
+          {
+            "deliveryAddress": {
+              "countryCode": "HK",
+              "firstName": "Wing",
+              "lastName": "Chan",
+              "company": null,
+              "address1": "中環皇后大道中1號",
+              "address2": null,
+              "city": "香港"
+            }
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "validationAdd": {
+            "errors": [
+              { "message": "Please enter this in English so our courier can deliver your order. 請以英文填寫，以便快遞派送。", "target": "$.cart.deliveryGroups[0].deliveryAddress.address1" },
+              { "message": "Please enter this in English so our courier can deliver your order. 請以英文填寫，以便快遞派送。", "target": "$.cart.deliveryGroups[0].deliveryAddress.city" }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

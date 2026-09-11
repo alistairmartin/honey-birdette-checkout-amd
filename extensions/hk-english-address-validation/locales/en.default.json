@@ -1,0 +1,4 @@
+{
+  "name": "HK English address validation",
+  "description": "Blocks Hong Kong checkouts whose shipping address contains Chinese characters and asks for English"
+}
