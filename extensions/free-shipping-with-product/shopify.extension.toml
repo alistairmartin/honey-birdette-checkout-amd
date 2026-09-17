@@ -1,0 +1,20 @@
+api_version = "2026-01"
+
+[[extensions]]
+name = "t:name"
+handle = "free-shipping-with-product"
+uid = "d6911734-da65-7e0e-c939-a4045280a46084bb8e00"
+type = "function"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "cart.delivery-options.discounts.generate.run"
+  input_query = "src/cart_delivery_options_discounts_generate_run.graphql"
+  export = "cart-delivery-options-discounts-generate-run"
+
+  [extensions.ui]
+  handle = "free-shipping-with-product-ui"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

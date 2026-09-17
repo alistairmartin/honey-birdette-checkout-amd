@@ -1,0 +1,19 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "hk-postcode-default"
+handle = "hk-postcode-default"
+uid = "ad23e551-f30d-0ab7-0711-dc1aff830b208973a36b"
+type = "ui_extension"
+
+# Hong Kong has no postcodes and Shopify's HK address form has no postcode
+# field, but the warehouse rejects orders with an empty postcode. This renders
+# nothing; it silently sets zip to the placeholder when the shipping country
+# is HK. Placed after the address form so it runs as soon as the buyer picks
+# a country.
+[[extensions.targeting]]
+module = "./src/Checkout.jsx"
+target = "purchase.checkout.delivery-address.render-after"
+
+[extensions.capabilities]
+api_access = false

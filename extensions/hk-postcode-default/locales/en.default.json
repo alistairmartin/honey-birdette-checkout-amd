@@ -1,0 +1,4 @@
+{
+  "name": "HK postcode default",
+  "description": "Sets a placeholder postcode of 00001 on Hong Kong shipping addresses so the warehouse can process them"
+}

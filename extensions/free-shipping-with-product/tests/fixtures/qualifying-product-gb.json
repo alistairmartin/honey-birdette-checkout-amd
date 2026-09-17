@@ -1,0 +1,17 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-discounts-generate-run",
+    "target": "cart.delivery-options.discounts.generate.run",
+    "input": {
+      "cart": {
+        "lines": [{"quantity":1,"merchandise":{"__typename":"ProductVariant","id":"gid://shopify/ProductVariant/1","product":{"id":"gid://shopify/Product/15957068120446"}}}],
+        "deliveryGroups": [{"id":"gid://shopify/CartDeliveryGroup/1","deliveryAddress":{"countryCode":"GB"},"deliveryOptions":[{"handle":"express","title":"Express Delivery"},{"handle":"free-express","title":"FREE Express Delivery"},{"handle":"zonos","title":"Zonos Shipping Rates (via app)"}]}]
+      },
+      "discount": {
+        "discountClasses": ["SHIPPING"],
+        "metafield": {"value": "{\"productIds\":[\"gid://shopify/Product/15957068120446\"],\"shippingTitles\":[\"Express Delivery\",\"UK Express Delivery (1-2 Days)\"],\"includeCountries\":[],\"excludeCountries\":[\"CH\"],\"message\":\"FREE Express Delivery\"}"}
+      }
+    },
+    "output": {"operations":[{"deliveryDiscountsAdd":{"candidates":[{"message":"FREE Express Delivery","targets":[{"deliveryOption":{"handle":"express"}}],"value":{"percentage":{"value":100.0}}}],"selectionStrategy":"ALL"}}]}
+  }
+}
