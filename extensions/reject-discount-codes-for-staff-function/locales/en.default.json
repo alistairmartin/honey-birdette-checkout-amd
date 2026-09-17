@@ -1,4 +1,4 @@
 {
-  "name": "reject-discount-codes-for-staff-function",
-  "description": "reject-discount-codes-for-staff-function"
+  "name": "Reject Discount Codes for Staff",
+  "description": "Rejects discount codes at checkout for customers tagged as staff."
 }
