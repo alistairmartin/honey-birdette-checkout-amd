@@ -23,6 +23,7 @@ import {
   Layout,
   Modal,
   Page,
+  Select,
   Text,
   TextField,
 } from "@shopify/polaris";
@@ -245,6 +246,43 @@ const editedOn = (iso) =>
       }).format(new Date(iso))
     : "";
 
+// Date range presets for the "Edited" filter. Each preset resolves to a
+// number of days back from now; "custom" uses the from/to fields instead.
+const DATE_RANGE_OPTIONS = [
+  { label: "Any time", value: "any" },
+  { label: "Last 24 hours", value: "1" },
+  { label: "Last 7 days", value: "7" },
+  { label: "Last 30 days", value: "30" },
+  { label: "Last 90 days", value: "90" },
+  { label: "Custom range", value: "custom" },
+];
+
+// Resolves the selected preset (or custom from/to) to a [start, end] pair of
+// epoch ms. Either bound may be null, meaning open-ended. Custom "to" covers
+// the whole of that day, so picking today includes edits made this afternoon.
+const resolveDateRange = (preset, from, to) => {
+  if (preset === "any") return null;
+  if (preset === "custom") {
+    const start = from ? new Date(`${from}T00:00:00`).getTime() : null;
+    const end = to ? new Date(`${to}T23:59:59.999`).getTime() : null;
+    if (start === null && end === null) return null;
+    return [start, end];
+  }
+  const days = Number(preset);
+  return [Date.now() - days * 24 * 60 * 60 * 1000, null];
+};
+
+const inDateRange = (iso, range) => {
+  if (!range) return true;
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return false;
+  const [start, end] = range;
+  if (start !== null && t < start) return false;
+  if (end !== null && t > end) return false;
+  return true;
+};
+
 // How many themes each store shows before you ask for more.
 const PAGE_SIZE = 6;
 
@@ -259,6 +297,9 @@ export default function ThemeManagerPage() {
   // Selected theme GIDs, across all stores - this is the deploy-file list.
   const [selected, setSelected] = useState([]);
   const [search, setSearch] = useState("");
+  const [datePreset, setDatePreset] = useState("any");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [copied, setCopied] = useState(false);
   // { shop, theme, mode: "duplicate" | "rename" | "publish" | "delete" }
   const [dialog, setDialog] = useState(null);
@@ -390,7 +431,15 @@ export default function ThemeManagerPage() {
     }
   };
 
+  const dateRange = useMemo(
+    () => resolveDateRange(datePreset, dateFrom, dateTo),
+    [datePreset, dateFrom, dateTo],
+  );
+  // True when either the text search or the date range is narrowing the list.
+  const filterActive = Boolean(search.trim()) || dateRange !== null;
+
   const matches = (theme) => {
+    if (!inDateRange(theme.updatedAt, dateRange)) return false;
     const q = search.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -399,11 +448,11 @@ export default function ThemeManagerPage() {
     );
   };
 
-  // Every search starts each store back at the first 6 matches. Without this, a
-  // store you'd expanded to 100 would dump 100 matches on you.
+  // Every filter change starts each store back at the first 6 matches. Without
+  // this, a store you'd expanded to 100 would dump 100 matches on you.
   useEffect(() => {
     setVisibleCount({});
-  }, [search]);
+  }, [search, datePreset, dateFrom, dateTo]);
 
   // Totals for the search summary line.
   const { totalMatches, storesWithMatches } = useMemo(() => {
@@ -416,7 +465,7 @@ export default function ThemeManagerPage() {
     }
     return { totalMatches: total, storesWithMatches: stores };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialStores, storeThemes, search]);
+  }, [initialStores, storeThemes, search, dateRange]);
 
   return (
     <Page fullWidth>
@@ -446,8 +495,8 @@ export default function ThemeManagerPage() {
           </Layout.Section>
         )}
 
-        {/* Search sits above everything: it narrows every store at once, and
-            each store falls back to showing the first 6 matches. */}
+        {/* Search and date range sit above everything: they narrow every store
+            at once, and each store falls back to showing the first 6 matches. */}
         <Layout.Section>
           <Card>
             <BlockStack gap="200">
@@ -460,7 +509,47 @@ export default function ThemeManagerPage() {
                 clearButton
                 onClearButtonClick={() => setSearch("")}
               />
-              {search.trim() && (
+              <InlineStack gap="300" blockAlign="end" wrap>
+                <Box minWidth="180px">
+                  <Select
+                    label="Edited"
+                    options={DATE_RANGE_OPTIONS}
+                    value={datePreset}
+                    onChange={setDatePreset}
+                  />
+                </Box>
+                {datePreset === "custom" && (
+                  <>
+                    <TextField
+                      label="From"
+                      type="date"
+                      value={dateFrom}
+                      onChange={setDateFrom}
+                      autoComplete="off"
+                    />
+                    <TextField
+                      label="To"
+                      type="date"
+                      value={dateTo}
+                      onChange={setDateTo}
+                      autoComplete="off"
+                    />
+                  </>
+                )}
+                {(datePreset !== "any" || dateFrom || dateTo) && (
+                  <Button
+                    variant="tertiary"
+                    onClick={() => {
+                      setDatePreset("any");
+                      setDateFrom("");
+                      setDateTo("");
+                    }}
+                  >
+                    Clear dates
+                  </Button>
+                )}
+              </InlineStack>
+              {filterActive && (
                 <Text as="span" variant="bodySm" tone="subdued">
                   {`${totalMatches} matching theme${totalMatches === 1 ? "" : "s"} across ${storesWithMatches} store${storesWithMatches === 1 ? "" : "s"}`}
                 </Text>
@@ -562,7 +651,7 @@ export default function ThemeManagerPage() {
                         {store.isEmbedded && <Badge>This store</Badge>}
                       </InlineStack>
                       <Text as="span" variant="bodySm" tone="subdued">
-                        {search.trim()
+                        {filterActive
                           ? `${store.shop} - ${matching.length} of ${allThemes.length} themes match`
                           : `${store.shop} - ${allThemes.length} themes`}
                       </Text>
