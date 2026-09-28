@@ -1,19 +1,22 @@
-import React, {useEffect, useState} from "react";
+import "@shopify/ui-extensions/preact";
+import {render} from "preact";
+import {useEffect, useState} from "preact/hooks";
 import {
-  BlockStack,
-  Button,
-  Image,
-  Text,
-  View,
-  reactExtension,
   useAuthenticatedAccountCustomer,
   useSettings,
-} from "@shopify/ui-extensions-react/customer-account";
+} from "@shopify/ui-extensions/customer-account/preact";
 
-export default reactExtension(
-  "customer-account.profile.block.render",
-  () => <HoneyClubExclusives />
-);
+// The target is bound in shopify.extension.toml
+// (customer-account.profile.block.render -> this module).
+export default function extension() {
+  render(<HoneyClubExclusives />, document.body);
+}
+
+// Container width (px) at which the desktop image replaces the mobile one.
+// The legacy Style helper switched at the "medium" viewport breakpoint; web
+// components use container queries, so this is measured on the block's own
+// container instead of the viewport.
+const DESKTOP_MIN_INLINE_SIZE = 700;
 
 // Fallbacks so the block still renders in dev if settings aren't configured.
 // Replace these placeholders with real values in the extension's admin settings.
@@ -131,19 +134,11 @@ function HoneyClubExclusives() {
     return null;
   }
 
-  // Responsive source: swap to the desktop asset at >= medium viewport.
-  const imageSource =
+  // Responsive source: swap to the desktop asset on wide containers.
+  const responsive = Boolean(
     defaultSource && desktopSource && defaultSource !== desktopSource
-      ? {
-          default: defaultSource,
-          conditionals: [
-            {
-              conditions: {viewportInlineSize: {min: "medium"}},
-              value: desktopSource,
-            },
-          ],
-        }
-      : defaultSource || desktopSource;
+  );
+  const singleSource = defaultSource || desktopSource;
 
   const heading = unlocked ? headingUnlocked : headingLocked;
   const message = unlocked ? messageUnlocked : messageLocked;
@@ -151,24 +146,41 @@ function HoneyClubExclusives() {
   const ctaUrl = unlocked ? ctaUnlockedUrl : ctaLockedUrl;
 
   return (
-    <View padding="base" cornerRadius="base" background="subdued">
-      <BlockStack spacing="base" inlineAlignment="center">
-        <Image source={imageSource} accessibilityDescription="Honey Club Exclusives" />
-        <BlockStack spacing="tight" inlineAlignment="center">
-          <Text size="large" emphasis="bold">
-            {heading}
-          </Text>
-          {/* While tags resolve, show neutral copy to avoid flashing a CTA. */}
-          <Text appearance={loading ? "subdued" : "base"}>
-            {loading ? "Loading your Honey Club perks…" : message}
-          </Text>
-        </BlockStack>
-        {!loading && ctaUrl ? (
-          <Button to={ctaUrl} kind="primary">
-            {ctaText}
-          </Button>
-        ) : null}
-      </BlockStack>
-    </View>
+    <s-query-container>
+      <s-box padding="base" borderRadius="base" background="subdued">
+        <s-stack gap="base" alignItems="center">
+          {responsive ? (
+            <>
+              <s-box
+                inlineSize="100%"
+                display={`@container (inline-size > ${DESKTOP_MIN_INLINE_SIZE}px) none, auto`}
+              >
+                <s-image src={defaultSource} alt="Honey Club Exclusives" />
+              </s-box>
+              <s-box
+                inlineSize="100%"
+                display={`@container (inline-size > ${DESKTOP_MIN_INLINE_SIZE}px) auto, none`}
+              >
+                <s-image src={desktopSource} alt="Honey Club Exclusives" />
+              </s-box>
+            </>
+          ) : (
+            <s-image src={singleSource} alt="Honey Club Exclusives" />
+          )}
+          <s-stack gap="small-200" alignItems="center">
+            <s-heading>{heading}</s-heading>
+            {/* While tags resolve, show neutral copy to avoid flashing a CTA. */}
+            <s-text color={loading ? "subdued" : "base"}>
+              {loading ? "Loading your Honey Club perks…" : message}
+            </s-text>
+          </s-stack>
+          {!loading && ctaUrl ? (
+            <s-button href={ctaUrl} variant="primary">
+              {ctaText}
+            </s-button>
+          ) : null}
+        </s-stack>
+      </s-box>
+    </s-query-container>
   );
 }

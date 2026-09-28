@@ -1,21 +1,9 @@
-import React, {useEffect, useMemo, useRef, useState} from "react";
+import '@shopify/ui-extensions/preact';
+import {render} from 'preact';
+import type {ComponentChildren} from 'preact';
+import {useEffect, useMemo, useRef, useState} from 'preact/hooks';
 import {
-  reactExtension,
-  Banner,
-  Badge,
-  BlockStack,
-  Divider,
-  Heading,
-  Text,
-  Button,
-  InlineStack,
-  InlineLayout,
-  Image,
-  View,
-  Progress,
-  useApi,
   useAttributes,
-  useApplyCartLinesChange,
   useBuyerJourneyIntercept,
   useCheckoutSettings,
   useExtensionEditor,
@@ -24,10 +12,11 @@ import {
   useCustomer,
   useEmail,
   useSettings,
+  useShippingAddress,
   useTranslate,
   useLocalizationMarket,
   useDiscountAllocations,
-} from "@shopify/ui-extensions-react/checkout";
+} from '@shopify/ui-extensions/checkout/preact';
 
 // GWP: configs are no longer pasted into an extension setting. Instead the
 // "Gift With Purchase" admin page saves each config and pushes the full set
@@ -58,7 +47,9 @@ import {
 //   "banner_message_region": "Sorry, we are only shipping this gift to {{ allowed }}."
 // }
 
-export default reactExtension("purchase.checkout.block.render", () => <Extension />);
+export default function extension() {
+  render(<Extension />, document.body);
+}
 
 // Honey Birdette runs in seven currencies. Per-config min_spend_* thresholds and
 // the active-currency detection below are all keyed on this set.
@@ -123,7 +114,7 @@ function parseTimeZoneFromMetafield(raw: unknown): string {
 // enabled config. Each GiftOffer owns its own hooks, cart sync, and checkout
 // intercept, so multiple gifts run side by side without interfering.
 function Extension() {
-  const { query, extension } = useApi();
+  const extension = shopify.extension;
   // Hide the whole GWP block on draft-order checkouts (e.g. a merchant-created
   // invoice). Draft orders have un-editable cart lines/discounts, so the gift
   // auto-add and its buyer-journey block can't work; showing the offer would
@@ -169,7 +160,7 @@ function Extension() {
     let cancelled = false;
     (async () => {
       try {
-        const res: any = await query(CONFIG_QUERY);
+        const res: any = await shopify.query(CONFIG_QUERY);
         if (cancelled) return;
         const raw = res?.data?.shop?.metafield?.value;
         setConfigs(parseConfigsFromMetafield(raw));
@@ -183,7 +174,7 @@ function Extension() {
     return () => {
       cancelled = true;
     };
-  }, [query]);
+  }, []);
 
   if (!loaded) return null;
   if (isDraftOrder || isHoneyListCheckout) return null;
@@ -208,26 +199,26 @@ function Extension() {
   if (activeConfigs.length === 0) {
     if (liveConfigsHidden && Boolean(show_testing_information)) {
       return (
-        <Banner status="warning" title="Gift With Purchase: live offers hidden">
-          <Text size="small">
+        <s-banner tone="warning" heading="Gift With Purchase: live offers hidden">
+          <s-text type="small">
             The block setting "Hide Live Configs?" is on, so every live-mode offer is
             suppressed. Turn it off in the checkout editor before publishing.
-          </Text>
-        </Banner>
+          </s-text>
+        </s-banner>
       );
     }
     return null;
   }
 
   return (
-    <BlockStack>
+    <s-stack gap="base">
       {liveConfigsHidden && Boolean(show_testing_information) ? (
-        <Banner status="warning" title="Gift With Purchase: live offers hidden">
-          <Text size="small">
+        <s-banner tone="warning" heading="Gift With Purchase: live offers hidden">
+          <s-text type="small">
             The block setting "Hide Live Configs?" is on. Only test-mode offers are
             rendering. Turn it off in the checkout editor before publishing.
-          </Text>
-        </Banner>
+          </s-text>
+        </s-banner>
       ) : null}
       {activeConfigs.map((cfg, i) => (
         <GiftOffer
@@ -236,7 +227,7 @@ function Extension() {
           storeTimeZone={storeTimeZone}
         />
       ))}
-    </BlockStack>
+    </s-stack>
   );
 }
 
@@ -245,26 +236,26 @@ function Extension() {
 
 // One "Label   value" line. Labels share a fixed column so the values line up
 // into a readable second column instead of wrapping mid-sentence.
-function DebugRow({label, value}: {label: string; value: React.ReactNode}) {
+function DebugRow({label, value}: {label: string; value: ComponentChildren}) {
   return (
-    <InlineLayout columns={["45%", "fill"]} spacing="tight">
-      <Text size="small" appearance="subdued">
+    <s-grid gridTemplateColumns="45% 1fr" gap="small-200">
+      <s-text type="small" color="subdued">
         {label}
-      </Text>
-      <Text size="small">{value}</Text>
-    </InlineLayout>
+      </s-text>
+      <s-text type="small">{value}</s-text>
+    </s-grid>
   );
 }
 
 // A titled group of DebugRows.
-function DebugGroup({title, children}: {title: string; children: React.ReactNode}) {
+function DebugGroup({title, children}: {title: string; children: ComponentChildren}) {
   return (
-    <BlockStack spacing="none">
-      <Text size="small" emphasis="bold">
-        {title}
-      </Text>
+    <s-stack gap="none">
+      <s-text type="strong">
+        <s-text type="small">{title}</s-text>
+      </s-text>
       {children}
-    </BlockStack>
+    </s-stack>
   );
 }
 
@@ -452,14 +443,14 @@ function normalizeTagList(raw: string | undefined | null): string[] {
     .filter(Boolean);
 }
 
-// Native checkout progress bar. `Progress` takes a 0..max value (max defaults
+// Native checkout progress bar. `s-progress` takes a 0..max value (max defaults
 // to 1), so we feed it the completion fraction. The accessibility label keeps
 // the percentage available to screen readers now that the visual bar no longer
 // prints "34%" as text.
 function ProgressBar({percent}: {percent: number}) {
   const pct = Math.max(0, Math.min(100, Math.round(percent)));
   return (
-    <Progress
+    <s-progress
       value={pct}
       max={100}
       accessibilityLabel={`${pct}% of the way to your free gift`}
@@ -476,9 +467,9 @@ function ProgressBar({percent}: {percent: number}) {
 // native Badge component, left-aligned so it hugs its content.
 function OfferBadge({children}: {children: string}) {
   return (
-    <InlineStack inlineAlignment="start">
-      <Badge>{children}</Badge>
-    </InlineStack>
+    <s-stack direction="inline" gap="base" justifyContent="start">
+      <s-badge>{children}</s-badge>
+    </s-stack>
   );
 }
 
@@ -493,25 +484,23 @@ function Section({
 }: {
   title?: string;
   subtitle?: string;
-  children: React.ReactNode;
+  children: ComponentChildren;
 }) {
   return (
-    <BlockStack spacing="tight">
+    <s-stack gap="small-200">
       {title || subtitle ? (
-        <BlockStack spacing="tight">
-          {title ? <Heading>{title.toUpperCase()}</Heading> : null}
-          {subtitle ? <Text appearance="subdued">{subtitle}</Text> : null}
-        </BlockStack>
+        <s-stack gap="small-200">
+          {title ? <s-heading>{title.toUpperCase()}</s-heading> : null}
+          {subtitle ? <s-text color="subdued">{subtitle}</s-text> : null}
+        </s-stack>
       ) : null}
       {children}
-    </BlockStack>
+    </s-stack>
   );
 }
 
 function GiftOffer({config: rawConfig, storeTimeZone}: {config: any; storeTimeZone?: string}) {
   const t = useTranslate();
-  const {extension} = useApi();
-  const applyCartLinesChange = useApplyCartLinesChange();
   const lines = useCartLines();
 
   // Get cart-level discount allocations (for order discounts)
@@ -535,18 +524,27 @@ function GiftOffer({config: rawConfig, storeTimeZone}: {config: any; storeTimeZo
   const customerErrorMessage =
     customerError instanceof Error ? customerError.message : customerError ? String(customerError) : "";
 
-  const {shippingAddress, query} = useApi();
+  // Reactive shipping address (replaces the `shippingAddress` subscribable that
+  // used to come from useApi()).
+  const shippingAddress = useShippingAddress();
 
   // Config comes from the shop metafield (one object per gift), passed in by the
   // parent. Banner visibility is per-config; only the debug toggle is global.
   const {show_testing_information} = useSettings();
 
-  // Pull localization from Standard API (currency, language, country)
-  const { localization: apiLocalization } = useApi();
-
-  // Localization hooks: use Market (handle/id) for overrides; use API localization for currency
+  // Localization hooks: use Market (handle/id) for overrides.
   const market = useLocalizationMarket();
-  const detectedCurrencyIso = (apiLocalization?.currency?.isoCode || "").toUpperCase();
+  // MIGRATION NOTE (2026-04): the React version read
+  // `useApi().localization.currency.isoCode`. `localization.currency` was a
+  // subscribable there (the value lived on `.current`), so that expression was
+  // always undefined and the detected currency was always "". Every live config
+  // has therefore been running on `min_spend_currency` (falling back to AUD),
+  // never on the buyer's checkout currency. That behaviour is preserved here on
+  // purpose: switching to the real checkout currency would change which
+  // min_spend_* threshold and which pricing context each offer uses. To adopt
+  // the buyer's currency, set this to `checkoutCurrencyIso.toUpperCase()`.
+  const checkoutCurrencyIso = String(shopify.localization?.currency?.value?.isoCode || "");
+  const detectedCurrencyIso = "";
 
   // Normalize Market ID (Shopify returns a GID e.g. gid://shopify/Market/4720590982)
   const marketIdRaw = String(market?.id || "");
@@ -808,7 +806,7 @@ function renderTemplate(tpl: string, vars: Record<string, string>) {
 
         for (const candidate of candidates) {
           try {
-            const res: any = await query(qStr, { variables: { id: candidate } });
+            const res: any = await shopify.query(qStr, { variables: { id: candidate } });
             const node = res?.data?.node;
 
             if (node?.__typename === "ProductVariant" && node?.id) {
@@ -870,7 +868,7 @@ function renderTemplate(tpl: string, vars: Record<string, string>) {
     return () => {
       cancelled = true;
     };
-  }, [query, JSON.stringify(optionIds), activeCurrency]);
+  }, [JSON.stringify(optionIds), activeCurrency]);
 
   // For a single option, pin the selection to it. For multi, honour the
   // customer's pick, defaulting to whichever option is already in the cart
@@ -945,7 +943,7 @@ function renderTemplate(tpl: string, vars: Record<string, string>) {
       for (let attempt = 0; attempt < 2; attempt++) {
         if (cancelled) return;
         try {
-          const res: any = await query(queryStr, { variables: { ids: variantIds } });
+          const res: any = await shopify.query(queryStr, { variables: { ids: variantIds } });
           if (cancelled) return;
           setTagData(res?.data ?? null);
           setTagsError(null);
@@ -970,7 +968,7 @@ function renderTemplate(tpl: string, vars: Record<string, string>) {
     return () => {
       cancelled = true;
     };
-  }, [query, JSON.stringify(variantIds), activeCurrency]);
+  }, [JSON.stringify(variantIds), activeCurrency]);
 
   // Utility: is gift currently in cart
   const isGiftInCart = useMemo(() => {
@@ -997,7 +995,7 @@ async function removeGiftIfPresent() {
   });
   if (giftLines.length === 0) return;
   for (const gl of giftLines) {
-    const result = await applyCartLinesChange({
+    const result = await shopify.applyCartLinesChange({
       type: "updateCartLine",
       id: gl.id,
       quantity: 0,
@@ -1061,7 +1059,7 @@ async function removeGiftIfPresent() {
     typedEmail = undefined;
   }
 
-  const {sessionToken} = useApi();
+  const sessionToken = shopify.sessionToken;
   const APP_BACKEND_URL = "https://honey-birdette-checkout-amd.onrender.com/api/checkout/redemption-check";
 
   const [remoteHasRedeemed, setRemoteHasRedeemed] = useState<boolean | null>(null);
@@ -1227,10 +1225,10 @@ async function removeGiftIfPresent() {
     if (allowedCountries.all) return true;
     // No restrictions at all -> treat as allowed.
     if (allowedIso2.length === 0 && allowedCountryNames.length === 0 && !allowedCountries.wantsEU) return true;
-    const code = (shippingAddress?.current?.countryCode || shippingAddress?.countryCode || "").toUpperCase();
+    const code = (shippingAddress?.countryCode || "").toUpperCase();
     if (code && allowedIso2.includes(code)) return true;
     // If we didn't have a mapping, also try matching names case-insensitively.
-    const name = (shippingAddress?.current?.country || shippingAddress?.country || "").toLowerCase();
+    const name = String((shippingAddress as any)?.country || "").toLowerCase();
     if (name && allowedCountryNames.map((n) => n.toLowerCase()).includes(name)) return true;
     // "EU" qualifies when the shopper is on the EU market.
     if (allowedCountries.wantsEU && marketIdNumeric === EU_MARKET_ID) return true;
@@ -1656,7 +1654,7 @@ const messageText = config.banner_message_before
     let lastMessage: string | undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const result = await applyCartLinesChange(payload);
+        const result = await shopify.applyCartLinesChange(payload);
         if ((result as any)?.type === "error") {
           lastMessage = (result as any)?.message ?? "Failed to add gift";
           if (attempt === 0) {
@@ -1711,7 +1709,7 @@ const messageText = config.banner_message_before
       // Remove any previously-picked option (swap to the new choice).
       for (const l of lines) {
         if (optionVariantGids.has(l.merchandise.id) && l.merchandise.id !== opt.variantGid) {
-          const removed = await applyCartLinesChange({
+          const removed = await shopify.applyCartLinesChange({
             type: "updateCartLine",
             id: l.id,
             quantity: 0,
@@ -1997,16 +1995,21 @@ const messageText = config.banner_message_before
     return null;
 
   // Small product thumbnail shown alongside the gift copy at every step.
+  // The legacy Image rendered at its intrinsic aspect ratio inside a
+  // max-width View. `s-image` always needs an aspect ratio (default 1/1) and
+  // defaults to objectFit "contain", so the whole product image stays visible
+  // inside a square frame of the same width.
   const giftThumb = (url: string | null | undefined, size = 64) =>
     url ? (
-      <View maxInlineSize={size}>
-        <Image
-          source={url}
-          accessibilityDescription={giftTitle || "Free gift"}
+      <s-box inlineSize={`${size}px`} maxInlineSize={`${size}px`}>
+        <s-image
+          src={url}
+          alt={giftTitle || "Free gift"}
+          inlineSize="fill"
           border="base"
-          cornerRadius="base"
+          borderRadius="base"
         />
-      </View>
+      </s-box>
     ) : null;
 
   // Honey Club-style offer card: a single bordered row with the gift preview
@@ -2023,10 +2026,10 @@ const messageText = config.banner_message_before
     bordered = true,
   }: {
     image?: string | null;
-    title?: React.ReactNode;
-    subtitle?: React.ReactNode;
-    price?: React.ReactNode;
-    button?: React.ReactNode;
+    title?: ComponentChildren;
+    subtitle?: ComponentChildren;
+    price?: ComponentChildren;
+    button?: ComponentChildren;
     imageSize?: number;
     // When false, render the row without its own border/padding. Used inside the
     // success Banner, which already supplies a bordered container - the extra
@@ -2035,65 +2038,73 @@ const messageText = config.banner_message_before
   }) => {
     // Lay the row out as columns so the button is pushed flush to the right
     // edge (no empty gap beside it): [thumb?] [content fills] [button?].
-    const columns: ("auto" | "fill")[] = [];
-    const cells: React.ReactNode[] = [];
+    const columns: ("auto" | "1fr")[] = [];
+    const cells: ComponentChildren[] = [];
     if (image) {
       columns.push("auto");
-      cells.push(<View key="thumb">{giftThumb(image, imageSize)}</View>);
+      cells.push(<s-box key="thumb">{giftThumb(image, imageSize)}</s-box>);
     }
-    columns.push("fill");
+    columns.push("1fr");
     cells.push(
-      <BlockStack key="content" spacing="none">
+      <s-stack key="content" gap="none">
         {title ? (
-          <Heading>{typeof title === "string" ? title.toUpperCase() : title}</Heading>
+          <s-heading>{typeof title === "string" ? title.toUpperCase() : title}</s-heading>
         ) : null}
-        {subtitle ? <Text appearance="subdued">{subtitle}</Text> : null}
+        {subtitle ? <s-text color="subdued">{subtitle}</s-text> : null}
         {price || null}
-      </BlockStack>,
+      </s-stack>,
     );
     if (button) {
       columns.push("auto");
-      cells.push(<View key="action">{button}</View>);
+      cells.push(<s-box key="action">{button}</s-box>);
     }
-    return (
-      <View
-        {...(bordered ? { border: "base", cornerRadius: "base", padding: "base" } : {})}
-      >
-        <InlineLayout columns={columns} spacing="base" blockAlignment="center">
-          {cells}
-        </InlineLayout>
-      </View>
+    const row = (
+      <s-grid gridTemplateColumns={columns.join(" ")} gap="base" alignItems="center">
+        {cells}
+      </s-grid>
+    );
+    return bordered ? (
+      <s-box border="base" borderRadius="base" padding="base">
+        {row}
+      </s-box>
+    ) : (
+      <s-box>{row}</s-box>
     );
   };
 
   // Discounted gift pricing. The customer pays the configured % off the product
   // price; we show that post-discount price prominently with the full price
-  // beside it as the compare-at reference. (Checkout Text has no strikethrough,
-  // so the original renders subdued rather than struck through.)
+  // beside it as the compare-at reference. The original price uses the
+  // "redundant" text type (the replacement for the legacy "deletion" role).
   const giftPrice = (
     opt?: {priceAmount?: number | null; priceCurrency?: string | null} | null,
-  ): React.ReactNode => {
+  ): ComponentChildren => {
     if (!opt || opt.priceAmount == null) return null;
     const currency = opt.priceCurrency || activeCurrency;
     const pct = Math.max(0, Math.min(100, Number(config.discount_percentage ?? 100)));
     const discounted = opt.priceAmount * (1 - pct / 100);
     return (
-      <InlineStack spacing="tight" blockAlignment="center">
-        <Text emphasis="bold">
+      <s-stack direction="inline" gap="small-200" alignItems="center">
+        <s-text type="strong">
           {discounted <= 0 ? "FREE" : formatMoney(discounted, currency)}
-        </Text>
+        </s-text>
         {pct > 0 ? (
-          <Text appearance="subdued" accessibilityRole="deletion">
+          <s-text color="subdued" type="redundant">
             {formatMoney(opt.priceAmount, currency)}
-          </Text>
+          </s-text>
         ) : null}
-      </InlineStack>
+      </s-stack>
     );
   };
 
   // Render a small debug/status UI
   return (
-    <BlockStack {...(config.show_testing_information ? { border: "dotted", padding: "tight" } : {})}>
+    <s-stack
+      gap="base"
+      {...(config.show_testing_information
+        ? { border: "base base dotted" as const, padding: "small-200" as const }
+        : {})}
+    >
 
 
       {/* Offer progress banner (shows until the gift is unlocked). A label pill
@@ -2106,23 +2117,23 @@ const messageText = config.banner_message_before
       {showProgressBanner ? (
         <Section title={bannerTitleBefore} subtitle={config.banner_subtitle}>
           {config.label ? <OfferBadge>{config.label}</OfferBadge> : null}
-          <BlockStack spacing="tight">
+          <s-stack gap="small-200">
             {config.trigger_type !== "buy_x_get_y" ? (
               <ProgressBar
                 percent={usesMinSpend ? progressPercent : (qualification.qualifies ? 100 : 0)}
               />
             ) : null}
             {usesMinSpend && remaining > 0 ? (
-              <Text size="small" appearance="subdued">
+              <s-text type="small" color="subdued">
                 Spend {formatMoney(remaining, activeCurrency)} more
-              </Text>
+              </s-text>
             ) : null}
             {config.trigger_type === "buy_x_and_min_spend" && !hasTaggedLine ? (
-              <Text size="small" appearance="subdued">
+              <s-text type="small" color="subdued">
                 {config.banner_buy_x_hint || "Add a qualifying product to unlock this offer"}
-              </Text>
+              </s-text>
             ) : null}
-          </BlockStack>
+          </s-stack>
           <OfferCard
             image={resolvedOptions[0]?.image}
             title={resolvedOptions[0]?.title || giftTitle || "Your free gift"}
@@ -2130,9 +2141,9 @@ const messageText = config.banner_message_before
             price={giftPrice(resolvedOptions[0])}
             button={
               config.button_url ? (
-                <Button to={String(config.button_url)} kind="primary" target="new">
+                <s-button href={String(config.button_url)} variant="primary" target="_blank">
                   {config.button_text || "Go to collection"}
-                </Button>
+                </s-button>
               ) : undefined
             }
           />
@@ -2142,9 +2153,9 @@ const messageText = config.banner_message_before
       {/* Existing status banner from logic (success / warning / critical).
           Success uses its own toggle so it can show even when other banners are hidden. */}
       {showStatusBanner && banner ? (
-        <Banner
-          status={banner.status}
-          title={
+        <s-banner
+          tone={banner.status}
+          heading={
             banner.code === 'sold_out' ? renderTemplate(config.banner_title_sold_out || 'Sold out', titleVars) :
             banner.status === 'success' ? bannerTitleAdded :
             banner.status === 'warning' ? bannerTitleRegion :
@@ -2169,26 +2180,26 @@ const messageText = config.banner_message_before
           ) : (
             banner.message || null
           )}
-        </Banner>
+        </s-banner>
       ) : null}
 
       {/* Manual fallback: when the customer qualifies but the gift hasn't
           auto-added (errored, or stuck for several seconds), give them a
           button to add it themselves so they can still complete checkout. */}
       {showManualAddButton ? (
-        <Banner status="warning" title="Add your free gift">
+        <s-banner tone="warning" heading="Add your free gift">
           <OfferCard
             image={selectedOption?.image}
             title={giftTitle || "Your free gift"}
             subtitle={`We couldn't add your free ${giftTitle || "gift"} automatically. Tap the button to add it now.`}
             price={giftPrice(selectedOption)}
             button={
-              <Button kind="primary" onPress={addGiftManually} loading={manualAdding}>
+              <s-button variant="primary" onClick={addGiftManually} loading={manualAdding}>
                 {(manualAdding ? "Adding…" : "Add").toUpperCase()}
-              </Button>
+              </s-button>
             }
           />
-        </Banner>
+        </s-banner>
       ) : null}
 
       {/* Single manual gift: an optional button to add the earned gift. The
@@ -2213,14 +2224,14 @@ const messageText = config.banner_message_before
             }
             price={giftPrice(selectedOption)}
             button={
-              <Button
-                kind="primary"
+              <s-button
+                variant="primary"
                 loading={manualAdding}
                 disabled={giftAvailable === false}
-                onPress={() => effectiveSelectedId && selectGiftOption(effectiveSelectedId)}
+                onClick={() => effectiveSelectedId && selectGiftOption(effectiveSelectedId)}
               >
                 {(manualAdding ? "Adding…" : "Add").toUpperCase()}
-              </Button>
+              </s-button>
             }
           />
         </Section>
@@ -2232,11 +2243,11 @@ const messageText = config.banner_message_before
       {showMultiChooser ? (
         <Section title={anyGiftOptionInCart ? bannerTitleAdded : "Choose your free gift"} subtitle={config.banner_subtitle}>
           {config.label ? <OfferBadge>{config.label}</OfferBadge> : null}
-          <Text>
+          <s-text>
             {anyGiftOptionInCart
               ? "Tap another option to switch your free gift."
               : "You've earned a free gift. Choose one:"}
-          </Text>
+          </s-text>
           {resolvedOptions.map((opt) => {
               if (!opt.variantGid) return null;
               const inCart = lines.some((l) => l.merchandise.id === opt.variantGid);
@@ -2250,18 +2261,18 @@ const messageText = config.banner_message_before
                   title={opt.title || "Gift"}
                   subtitle={
                     soldOut ? (
-                      <Text appearance="critical">Sold out</Text>
+                      <s-text tone="critical">Sold out</s-text>
                     ) : giftIsFree ? (
                       "Free item included"
                     ) : undefined
                   }
                   price={soldOut ? undefined : giftPrice(opt)}
                   button={
-                    <Button
-                      kind={isSelected ? "secondary" : "primary"}
+                    <s-button
+                      variant={isSelected ? "secondary" : "primary"}
                       disabled={soldOut || isSelected}
                       loading={pending}
-                      onPress={() => selectGiftOption(opt.productId)}
+                      onClick={() => selectGiftOption(opt.productId)}
                     >
                       {(isSelected
                         ? "Selected"
@@ -2269,7 +2280,7 @@ const messageText = config.banner_message_before
                           ? "Choose this instead"
                           : "Select"
                       ).toUpperCase()}
-                    </Button>
+                    </s-button>
                   }
                 />
               );
@@ -2278,19 +2289,21 @@ const messageText = config.banner_message_before
       ) : null}
 
     {config.show_testing_information ? (
-      <BlockStack spacing="tight">
-        <Divider />
-        <InlineStack spacing="tight" blockAlignment="center">
-          <Text size="small" emphasis="bold">
-            GWP diagnostics{config.admin_title ? ` - ${renderTemplate(config.admin_title, titleVars)}` : ""}
-          </Text>
-          <Button kind="plain" onPress={() => setDebugOpen((v) => !v)}>
+      <s-stack gap="small-200">
+        <s-divider />
+        <s-stack direction="inline" gap="small-200" alignItems="center">
+          <s-text type="strong">
+            <s-text type="small">
+              GWP diagnostics{config.admin_title ? ` - ${renderTemplate(config.admin_title, titleVars)}` : ""}
+            </s-text>
+          </s-text>
+          <s-link onClick={() => setDebugOpen((v) => !v)}>
             {debugOpen ? "Hide" : "Show"}
-          </Button>
-        </InlineStack>
+          </s-link>
+        </s-stack>
 
         {debugOpen ? (
-          <BlockStack spacing="base">
+          <s-stack gap="base">
             {/* Verdict first: the single question every debugging session starts
                 with, then each half of the trigger that produced it. */}
             <DebugGroup title="Verdict">
@@ -2395,7 +2408,7 @@ const messageText = config.banner_message_before
               <DebugRow label="Market" value={`${market?.handle || "-"} (${String(market?.id || "-")})`} />
               <DebugRow
                 label="Currency"
-                value={`active ${activeCurrency} | checkout ${apiLocalization?.currency?.isoCode || "-"} | detected ${detectedCurrencyIso || "-"}`}
+                value={`active ${activeCurrency} | checkout ${checkoutCurrencyIso || "-"} | detected ${detectedCurrencyIso || "-"}`}
               />
               <DebugRow label="Ships to allowed country" value={yn(shippingOk)} />
               <DebugRow label="Cart lines" value={String(lines.length)} />
@@ -2404,10 +2417,10 @@ const messageText = config.banner_message_before
                 value={tagsLoading ? "loading…" : tagsError ? `FAILED: ${String(tagsError?.message || tagsError)}` : "ok"}
               />
             </DebugGroup>
-          </BlockStack>
+          </s-stack>
         ) : null}
-      </BlockStack>
+      </s-stack>
     ) : null}
-    </BlockStack>
+    </s-stack>
   );
 }

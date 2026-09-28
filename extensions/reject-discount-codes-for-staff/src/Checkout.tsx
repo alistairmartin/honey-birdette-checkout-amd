@@ -1,18 +1,15 @@
-import React, { useEffect, useState } from "react";
+import "@shopify/ui-extensions/preact";
+import { render } from "preact";
+import { useEffect, useState } from "preact/hooks";
 import {
-  reactExtension,
   useDiscountCodes,
   useAppliedGiftCards,
   useBuyerJourneyIntercept,
-  Banner,
-  BlockStack,
-  TextBlock,
-  View,
-  Text,
-  useTranslate,
-} from "@shopify/ui-extensions-react/checkout";
+} from "@shopify/ui-extensions/checkout/preact";
 
-export default reactExtension("purchase.checkout.block.render", () => <App />);
+export default function extension() {
+  render(<App />, document.body);
+}
 
 function App() {
   const discountCodes = useDiscountCodes();
@@ -23,8 +20,7 @@ function App() {
 
   // Track whether checkout should be blocked
   const [shouldBlock, setShouldBlock] = useState(true);
-
-  console.log('discountcodes!'); 
+  console.log('discountcodes!');
   console.log(discountCodes);
 
   useEffect(() => {
@@ -37,6 +33,7 @@ function App() {
     appliedGiftCards?.some((card) => {
       const lastChars = card.lastCharacters?.trim().toLowerCase();
       console.log("Gift card lastCharacters (lowercased):", lastChars);
+
       return blockedEnds.some((ending) => {
         const lowerEnding = ending.trim().toLowerCase();
         console.log(`Comparing "${lastChars}" to "${lowerEnding}"`);
@@ -90,16 +87,10 @@ function App() {
 
   // Render a critical banner if we are blocking checkout
   return shouldBlock ? (
-    <Banner title="Cannot Use Staff Gift Cards with Discount Codes" status="critical">
-      <BlockStack spacing="base">
-        <View>
-          <TextBlock>
-            <Text>
-              Sorry Honey, you can't use discount codes with staff Gift Cards. Please remove either the discount code or the gift card. 
-            </Text>
-          </TextBlock>
-        </View>
-      </BlockStack>
-    </Banner>
+    <s-banner heading="Cannot Use Staff Gift Cards with Discount Codes" tone="critical">
+      <s-paragraph>
+        Sorry Honey, you can't use discount codes with staff Gift Cards. Please remove either the discount code or the gift card.
+      </s-paragraph>
+    </s-banner>
   ) : null;
 }

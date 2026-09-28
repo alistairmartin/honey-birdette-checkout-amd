@@ -1,83 +1,85 @@
-import {
-  reactExtension,
-  Banner,
-  BlockStack,
-  BlockSpacer,
-  useTranslate,
-  useSettings,
-  Text,
-  TextBlock,
-} from "@shopify/ui-extensions-react/checkout";
-import { useState, useEffect } from "react";
+import "@shopify/ui-extensions/preact";
+import { render } from "preact";
+import { useState, useEffect } from "preact/hooks";
+import { useSettings } from "@shopify/ui-extensions/checkout/preact";
 
-export default reactExtension("purchase.checkout.block.render", () => (
-  <Extension />
-));
+type BannerTone = "info" | "success" | "warning" | "critical";
+
+export default function extension() {
+  render(<Extension />, document.body);
+}
 
 function Extension() {
-  const translate = useTranslate();
-  const { countdown, titleBefore, descriptionBefore, statusBefore, collapsibleBefore, titleAfter, descriptionAfter, statusAfter, collapsibleAfter } = useSettings();
-  const countdownDate = countdown ? new Date(countdown) : new Date("2025-01-01T12:30:00");
-  const titleBeforeSetting = titleBefore ? titleBefore : "Sale Will End In...";
-  const descriptionBeforeSetting = descriptionBefore ? descriptionBefore : "Make sure to checkout before the countdown finishes.";
-  const statusBeforeSetting = statusBefore ? statusBefore : "warning";
-  const collapsibleBeforeSetting = collapsibleBefore ? collapsibleBefore : false;
-  const [timeLeft, setTimeLeft] = useState(calculateTimeLeft(countdownDate));
+  const {
+    countdown,
+    titleBefore,
+    descriptionBefore,
+    statusBefore,
+    collapsibleBefore,
+    titleAfter,
+    descriptionAfter,
+    statusAfter,
+  } = useSettings();
+
+  const countdownDate = countdown
+    ? new Date(String(countdown))
+    : new Date("2025-01-01T12:30:00");
+  const countdownTime = countdownDate.getTime();
+  const titleBeforeSetting = titleBefore ? String(titleBefore) : "Sale Will End In...";
+  const descriptionBeforeSetting = descriptionBefore
+    ? descriptionBefore
+    : "Make sure to checkout before the countdown finishes.";
+  const statusBeforeSetting = (statusBefore ? statusBefore : "warning") as BannerTone;
+  const collapsibleBeforeSetting = collapsibleBefore ? true : false;
+
+  const [timeLeft, setTimeLeft] = useState(calculateTimeLeft(countdownTime));
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setTimeLeft(calculateTimeLeft(countdownDate));
+      setTimeLeft(calculateTimeLeft(countdownTime));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [countdownDate]);
+  }, [countdownTime]);
 
   if (timeLeft.total <= 0) {
     return (
-
-      <Banner title={titleAfter} status={statusAfter}>
+      <s-banner
+        heading={titleAfter ? String(titleAfter) : undefined}
+        // The legacy Banner defaulted to "info" when no status was set.
+        tone={(statusAfter ? statusAfter : "info") as BannerTone}
+      >
         {descriptionAfter}
-      </Banner>
+      </s-banner>
     );
   }
 
-  // {translate("time-remaining", {
-  //   target: (
-  //     <Text emphasis="bold" size="medium">
-  //       {timeLeft.days}d {timeLeft.hours}h {timeLeft.minutes}m {timeLeft.seconds}s
-  //     </Text>
-  //   ),
-  // })}
-
   return (
-    <BlockStack>
-      <Banner title={titleBeforeSetting} status={statusBeforeSetting} collapsible={collapsibleBeforeSetting}>
-        <BlockSpacer spacing="base" />  
-            <Text emphasis="bold" size="medium">
-              {timeLeft.days}d {timeLeft.hours}h {timeLeft.minutes}m {timeLeft.seconds}s
-            </Text>
-      <BlockSpacer spacing="base" />  
-      <TextBlock appearance="subdued" emphasis="italic">
-      {descriptionBeforeSetting}
-      </TextBlock>
-      </Banner>
-
-
-    </BlockStack>
+    <s-banner
+      heading={titleBeforeSetting}
+      tone={statusBeforeSetting}
+      collapsible={collapsibleBeforeSetting}
+    >
+      <s-stack direction="block" gap="base" paddingBlockStart="base">
+        <s-text type="strong">
+          {timeLeft.days}d {timeLeft.hours}h {timeLeft.minutes}m {timeLeft.seconds}s
+        </s-text>
+        <s-paragraph color="subdued">
+          <s-text type="offset">{descriptionBeforeSetting}</s-text>
+        </s-paragraph>
+      </s-stack>
+    </s-banner>
   );
 }
 
-function calculateTimeLeft(targetDate) {
-  const now = new Date();
-  const difference = targetDate - now;
+function calculateTimeLeft(targetTime: number) {
+  const difference = targetTime - Date.now();
 
-  let timeLeft = {
+  return {
     total: difference,
     days: Math.floor(difference / (1000 * 60 * 60 * 24)),
     hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
     minutes: Math.floor((difference / 1000 / 60) % 60),
     seconds: Math.floor((difference / 1000) % 60),
   };
-
-  return timeLeft;
 }

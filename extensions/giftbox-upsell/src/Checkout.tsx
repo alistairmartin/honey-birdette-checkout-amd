@@ -1,36 +1,25 @@
-import React, { useEffect, useState } from "react";
+import "@shopify/ui-extensions/preact";
+import { render } from "preact";
+import { useEffect, useState } from "preact/hooks";
 import {
-  reactExtension,
-  Divider,
-  ProductThumbnail,
-  Banner,
-  Heading,
-  Button,
-  InlineLayout,
-  BlockStack,
-  Text,
-  Image,
-  View,
-  TextBlock,
-  SkeletonText,
-  SkeletonImage,
   useCartLines,
-  useApplyCartLinesChange,
-  useApi,
   useSettings,
   useTranslate,
-  Style,
-  Icon,
   useShop,
   useShippingAddress, // Import the useShippingAddress hook
-} from "@shopify/ui-extensions-react/checkout";
+} from "@shopify/ui-extensions/checkout/preact";
+
+// Container width (px) above which the wide layout is used. Replaces the legacy
+// Style.when({ viewportInlineSize: { min: 'small' } }) viewport breakpoint.
+const WIDE = "(inline-size > 450px)";
 
 // Set up the entry point for the extension
-export default reactExtension("purchase.checkout.block.render", () => <App />);
+export default function extension() {
+  render(<App />, document.body);
+}
 
 function App() {
-  const { query, i18n } = useApi();
-  const applyCartLinesChange = useApplyCartLinesChange();
+  const { query, i18n } = shopify;
   const { myshopifyDomain } = useShop(); // Get the shop domain
   const shippingAddress = useShippingAddress(); // Get the shipping address
   const [variant, setVariant] = useState(null);
@@ -41,7 +30,7 @@ function App() {
   const [productsHaveNoGiftTag, setProductsHaveNoGiftTag] = useState(false);
 
   const lines = useCartLines();
-  const { product } = useSettings();
+  const { product } = useSettings() as { product?: string };
   const variantId = product ?? "gid://shopify/ProductVariant/41816694947955";
 
   useEffect(() => {
@@ -66,7 +55,7 @@ function App() {
     const productIds = lines.map(line => line.merchandise.product.id);
     const fetchProductTags = async () => {
           try {
-            const response = await query(
+            const response = await query<any>(
               `query ($productIds: [ID!]!) {
                   nodes(ids: $productIds) {
                       ... on Product {
@@ -179,7 +168,7 @@ function App() {
 
   async function handleAddToCart(variantId) {
     setAdding(true);
-    const result = await applyCartLinesChange({
+    const result = await shopify.applyCartLinesChange({
       type: "addCartLine",
       merchandiseId: variantId,
       quantity: 1,
@@ -198,7 +187,7 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await query(
+      const response = await query<any>(
         `query ($variantId: ID!) {
           node(id: $variantId) {
             ... on ProductVariant {
@@ -275,50 +264,53 @@ function App() {
 function LoadingSkeleton() {
   const translate = useTranslate();
   return (
-    <BlockStack spacing="tight" background="subdued" borderWidth="medium" padding="base">
-      <InlineLayout
-        spacing="base"
-        padding={["tight", "none", "base", "none"]}
-        columns={["fill"]}
-        blockAlignment="center"
-      >
-        <BlockStack spacing="none">
-          <InlineLayout
-            padding={["none", "none", "tight", "none"]}
-            spacing="base"
-            columns={["auto", "fill"]}
-            blockAlignment="start"
-          >
-            <Icon source="gift" />
-            <Heading level={2}>{translate('title')}</Heading>
-          </InlineLayout>
-          <TextBlock>
-            <Text>{translate('description')}</Text> <Text emphasis="bold">...</Text>
-          </TextBlock>
-        </BlockStack>
-      </InlineLayout>
-
-      <BlockStack spacing="loose">
-        <InlineLayout
-          padding={["none", "none", "tight", "none"]}
-          spacing="base"
-          columns={Style.default(['30%', '70%']).when({ viewportInlineSize: { min: 'small' } }, ['20%', '40%'])}
-          blockAlignment="center"
+    <s-query-container>
+      <s-stack gap="small-200" background="subdued" borderWidth="large" padding="base">
+        <s-grid
+          gap="base"
+          padding="small-200 none base none"
+          gridTemplateColumns="1fr"
+          alignItems="center"
         >
-          <View>
-            <SkeletonImage aspectRatio={1} size="fill" />
-          </View>
+          <s-stack gap="none">
+            <s-grid
+              padding="none none small-200 none"
+              gap="base"
+              gridTemplateColumns="auto 1fr"
+              alignItems="start"
+            >
+              <s-icon type="gift-card" />
+              <s-heading>{translate('title')}</s-heading>
+            </s-grid>
+            <s-paragraph>
+              <s-text>{translate('description')}</s-text> <s-text type="strong">...</s-text>
+            </s-paragraph>
+          </s-stack>
+        </s-grid>
 
-          <Button
-            kind="secondary"
-            disabled
-            accessibilityLabel={`Add Giftbox to cart`}
+        <s-stack gap="large-200">
+          <s-grid
+            padding="none none small-200 none"
+            gap="base"
+            gridTemplateColumns={`@container ${WIDE} '20% 40%', '30% 70%'`}
+            alignItems="center"
           >
-            {translate('add-to-cart')}
-          </Button>
-        </InlineLayout>
-      </BlockStack>
-    </BlockStack>
+            <s-box>
+              <s-box background="base" borderRadius="base" minBlockSize="80px" />
+            </s-box>
+
+            <s-button
+              variant="secondary"
+              inlineSize="fill"
+              disabled
+              accessibilityLabel={`Add Giftbox to cart`}
+            >
+              {translate('add-to-cart')}
+            </s-button>
+          </s-grid>
+        </s-stack>
+      </s-stack>
+    </s-query-container>
   );
 }
 
@@ -344,137 +336,129 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError }) {
       ? appendWidth(productData.images.nodes[0].url)
       : appendWidth("https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png?format=webp&v=1530129081");
 
-
+  // Narrow containers only (legacy: default 'auto', 'none' from the small viewport up)
+  const narrowOnly = `@container ${WIDE} none, auto`;
+  // Wide containers only (legacy: default 'none', 'auto' from the small viewport up)
+  const wideOnly = `@container ${WIDE} auto, none`;
 
   return (
-    <BlockStack spacing="tight" background="subdued" border="base" borderWidth="base" padding="base">
-      <InlineLayout
-        display={Style.default(['auto']).when({ viewportInlineSize: { min: 'small' } }, 'none')}
-        spacing="base"
-        columns={["fill"]}
-        blockAlignment="center"
-      >
-        <BlockStack spacing="none">
-          <InlineLayout
-            spacing="base"
-            padding={["none", "none", "tight", "none"]}
-            columns={["auto", "fill"]}
-            blockAlignment="start"
-          >
-            <Icon source="gift" />
-            <Heading level={2}> {translate('title')}</Heading>
-          </InlineLayout>
-          <InlineLayout display={Style.default(['none']).when({ viewportInlineSize: { min: 'small' } }, 'auto')}>
-            <TextBlock>
-              <Text>{translate('description')}</Text>{" "}
-              <Text emphasis="bold">
-                {priceWithSymbol}
-              </Text>
-            </TextBlock>
-          </InlineLayout>
-        </BlockStack>
-      </InlineLayout>
-
-      <BlockStack spacing="loose">
-        <InlineLayout
-          padding={["none", "none", "tight", "none"]}
-          spacing="base"
-          columns={Style.default(['30%', '70%']).when({ viewportInlineSize: { min: 'small' } }, ['20%', 'fill'])}
-          blockAlignment="center"
+    <s-query-container>
+      <s-stack gap="small-200" background="subdued" border="base" borderWidth="base" padding="base">
+        <s-grid
+          display={narrowOnly}
+          gap="base"
+          gridTemplateColumns="1fr"
+          alignItems="center"
         >
-          <View>
-            <Image
-              size="fill"
-              background="base"
-              border="none"
-              borderRadius="loose"
-              source={imageUrl}
-              alt={productData.title}
-            />
-          </View>
-
-          <View>
-            <BlockStack 
-            spacing="base" 
-            display={Style.default(['none']).when({ viewportInlineSize: { min: 'small' } }, 'auto')}>
-              <InlineLayout
-                spacing="base"
-                columns={["auto", "auto"]}
-                blockAlignment="start"
-              >
-                <Icon source="gift" />
-                <Heading level={2}>{translate('title')}</Heading>
-              </InlineLayout>
-              <TextBlock>
-                <Text>{translate('description')}</Text>{" "}
-                <Text emphasis="bold">
+          <s-stack gap="none">
+            <s-grid
+              gap="base"
+              padding="none none small-200 none"
+              gridTemplateColumns="auto 1fr"
+              alignItems="start"
+            >
+              <s-icon type="gift-card" />
+              <s-heading> {translate('title')}</s-heading>
+            </s-grid>
+            <s-grid display={wideOnly}>
+              <s-paragraph>
+                <s-text>{translate('description')}</s-text>{" "}
+                <s-text type="strong">
                   {priceWithSymbol}
-                </Text>
-              </TextBlock>
+                </s-text>
+              </s-paragraph>
+            </s-grid>
+          </s-stack>
+        </s-grid>
 
-              <InlineLayout
-                  spacing="base"
-                  columns={Style.default(['100%']).when({ viewportInlineSize: { min: 'small' } }, ['100%'])}
-                  blockAlignment="center"
+        <s-stack gap="large-200">
+          <s-grid
+            padding="none none small-200 none"
+            gap="base"
+            gridTemplateColumns={`@container ${WIDE} '20% 1fr', '30% 70%'`}
+            alignItems="center"
+          >
+            <s-box>
+              <s-image
+                inlineSize="fill"
+                src={imageUrl}
+                alt={productData.title}
+              />
+            </s-box>
+
+            <s-box>
+              <s-stack gap="base" display={wideOnly}>
+                <s-grid
+                  gap="base"
+                  gridTemplateColumns="auto auto"
+                  alignItems="start"
                 >
-                  <View>
-                  <Button
-                      kind="secondary"
+                  <s-icon type="gift-card" />
+                  <s-heading>{translate('title')}</s-heading>
+                </s-grid>
+                <s-paragraph>
+                  <s-text>{translate('description')}</s-text>{" "}
+                  <s-text type="strong">
+                    {priceWithSymbol}
+                  </s-text>
+                </s-paragraph>
+
+                <s-grid
+                  gap="base"
+                  gridTemplateColumns="100%"
+                  alignItems="center"
+                >
+                  <s-box>
+                    <s-button
+                      variant="secondary"
+                      inlineSize="fill"
                       loading={adding}
                       accessibilityLabel={`Add ${productData.title} to cart`}
-                      onPress={() => handleAddToCart(product.id)}
+                      onClick={() => handleAddToCart(product.id)}
                     >
                       {translate('add-to-cart')}
-                    </Button>
-                  </View>
+                    </s-button>
+                  </s-box>
+                </s-grid>
+              </s-stack>
 
-       
-              </InlineLayout>
+              <s-stack gap="base" display={narrowOnly}>
+                <s-paragraph>
+                  <s-text>{translate('description')}</s-text>{" "}
+                  <s-text type="strong">
+                    {priceWithSymbol}
+                  </s-text>
+                </s-paragraph>
 
-         
-            </BlockStack>
-    
-            <BlockStack spacing="base" display={Style.default(['auto']).when({ viewportInlineSize: { min: 'small' } }, 'none')}>
-              <TextBlock>
-                <Text>{translate('description')}</Text>{" "}
-                <Text emphasis="bold">
-                  {priceWithSymbol}
-                </Text>
-              </TextBlock>
-
-              <InlineLayout
-                  spacing="base"
-                  columns={Style.default(['fill']).when({ viewportInlineSize: { min: 'small' } }, ['fill'])}
-                  blockAlignment="center"
+                <s-grid
+                  gap="base"
+                  gridTemplateColumns="1fr"
+                  alignItems="center"
                 >
-
-              <Button
-                kind="secondary"
-                loading={adding}
-                accessibilityLabel={`Add ${productData.title} to cart`}
-                onPress={() => handleAddToCart(product.id)}
-              >
-                {translate('add-to-cart')}
-              </Button>
-
-
-
-            </InlineLayout>
-    
-            </BlockStack>
-
-          </View>
-        </InlineLayout>
-      </BlockStack>
-      {showError && <ErrorBanner />}
-    </BlockStack>
+                  <s-button
+                    variant="secondary"
+                    inlineSize="fill"
+                    loading={adding}
+                    accessibilityLabel={`Add ${productData.title} to cart`}
+                    onClick={() => handleAddToCart(product.id)}
+                  >
+                    {translate('add-to-cart')}
+                  </s-button>
+                </s-grid>
+              </s-stack>
+            </s-box>
+          </s-grid>
+        </s-stack>
+        {showError && <ErrorBanner />}
+      </s-stack>
+    </s-query-container>
   );
 }
 
 function ErrorBanner() {
   return (
-    <Banner status="critical">
+    <s-banner tone="critical">
       There was an issue adding this product. Please try again.
-    </Banner>
+    </s-banner>
   );
 }

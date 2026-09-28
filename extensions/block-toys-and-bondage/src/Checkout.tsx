@@ -1,31 +1,26 @@
+import '@shopify/ui-extensions/preact';
+import { render } from 'preact';
+import { useEffect, useState } from 'preact/hooks';
 import {
-  reactExtension,
   useBuyerJourneyIntercept,
   useShippingAddress,
   useCartLines,
-  Banner,
-  BlockStack,
-  TextBlock,
-  View,
-  Button,
-  Text,
-  useApplyCartLinesChange,
   useTranslate,
-} from '@shopify/ui-extensions-react/checkout';
-import { useEffect, useState } from 'react';
+} from '@shopify/ui-extensions/checkout/preact';
 
-export default reactExtension(
-  'purchase.checkout.delivery-address.render-before',
-  () => <Extension />,
-);
+type CartLine = ReturnType<typeof useCartLines>[number];
+
+export default function extension() {
+  render(<Extension />, document.body);
+}
 
 function Extension() {
   const address = useShippingAddress();
   const cartLines = useCartLines();
-  const applyCartLinesChange = useApplyCartLinesChange();
   const translate = useTranslate();
+
   const [showBanner, setShowBanner] = useState(false);
-  const [restrictedItems, setRestrictedItems] = useState([]);
+  const [restrictedItems, setRestrictedItems] = useState<CartLine[]>([]);
 
   const restrictedCountries = ["EG", "SA", "AE", "QA", "OM", "BH", "YE", "IN", "PK", "MV", "TH", "VN", "ID", "MY", "SY", "IQ", "AF", "TR"];
   const restrictedProductTypes = ["Toys", "Bondage"];
@@ -36,9 +31,10 @@ function Extension() {
       console.log("Shipping country code:", countryCode);
       console.log("Address:", address);
 
-      const restrictedItems = cartLines.filter(line => 
+      const restrictedItems = cartLines.filter(line =>
         restrictedProductTypes.includes(line.merchandise.product.productType)
       );
+
       console.log("Restricted items in cart:", restrictedItems);
 
       if (restrictedCountries.includes(countryCode) && restrictedItems.length > 0) {
@@ -88,16 +84,21 @@ function Extension() {
       for (const item of restrictedItems) {
         const change = {
           id: item.id,
-          type: "removeCartLine",
+          type: "removeCartLine" as const,
           quantity: item.quantity,
         };
+
         console.log("Applying change:", change);
-        const result = await applyCartLinesChange(change);
+
+        const result = await shopify.applyCartLinesChange(change);
+
         console.log("Result of applying cart lines change:", result);
+
         if (result.type !== 'success') {
           console.error("Failed to remove restricted item:", result);
         }
       }
+
       console.log("Restricted items removed.");
       setShowBanner(false);
     } catch (error) {
@@ -106,19 +107,19 @@ function Extension() {
   };
 
   return showBanner ? (
-    <Banner title="Restricted items in cart" status="critical">
-      <BlockStack spacing="base">
-        <View>
-          <TextBlock>
-            {translate('please-remove')}
-            <Text emphasis="bold">{translate('toys-or-bondage')}</Text> 
-            <Text>{translate('description')}</Text> 
-          </TextBlock>
-        </View>
-        <View>
-          <Button onPress={removeRestrictedItems}>{translate('remove-items')}</Button>
-        </View>
-      </BlockStack>
-    </Banner>
+    <s-banner heading="Restricted items in cart" tone="critical">
+      <s-stack direction="block" gap="base">
+        <s-paragraph>
+          {translate('please-remove')}
+          <s-text type="strong">{translate('toys-or-bondage')}</s-text>
+          <s-text>{translate('description')}</s-text>
+        </s-paragraph>
+        <s-box>
+          <s-button variant="primary" onClick={removeRestrictedItems}>
+            {translate('remove-items')}
+          </s-button>
+        </s-box>
+      </s-stack>
+    </s-banner>
   ) : null;
 }

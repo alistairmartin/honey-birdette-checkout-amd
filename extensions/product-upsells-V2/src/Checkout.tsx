@@ -1,41 +1,21 @@
-import React, { useEffect, useState } from "react";
+import "@shopify/ui-extensions/preact";
+import { render } from "preact";
+import { useEffect, useState } from "preact/hooks";
 import {
-  reactExtension,
-  ScrollView,
-  Divider,
-  ProductThumbnail,
-  Banner,
-  Heading,
-  Button,
-  InlineLayout,
-  BlockStack,
-  Text,
-  Grid,
-  GridItem,
-  View,
-  TextBlock,
-  Image,
-  InlineSpacer,
-  SkeletonText,
-  SkeletonImage,
-  Modal,
-  Pressable,
   useCartLines,
-  useApplyCartLinesChange,
-  useApi,
   useAttributes,
   useCheckoutSettings,
   useSettings,
   useTranslate,
-  Style,
-  Icon,
-  useShop,         
+  useShop,
   useShippingAddress,
   useDeliveryGroups,
-} from "@shopify/ui-extensions-react/checkout";
+} from "@shopify/ui-extensions/checkout/preact";
 
 // Set up the entry point for the extension
-export default reactExtension("purchase.checkout.block.render", () => <App />);
+export default function extension() {
+  render(<App />, document.body);
+}
 
 // ---------------------------------------------------------------------------
 // Variant / size picker helpers (ported from checkout-recommendations)
@@ -142,7 +122,8 @@ const sizedImage = (url, size) =>
     : "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png";
 
 function App() {
-  const { query, i18n } = useApi();
+  // `shopify` is the global extension API (replaces useApi()).
+  const i18n = shopify.i18n;
   // Hide the upsell/giftbox block on draft-order checkouts (merchant-created
   // invoices). Cart lines aren't buyer-editable there, so the "Add" actions
   // wouldn't work. `orderSubmission` is 'DRAFT_ORDER' vs 'ORDER'.
@@ -150,7 +131,6 @@ function App() {
   const isDraftOrder = checkoutSettings?.orderSubmission === "DRAFT_ORDER";
   const { myshopifyDomain } = useShop();
   const shippingAddress = useShippingAddress();
-  const applyCartLinesChange = useApplyCartLinesChange();
 
   const deliveryGroups = useDeliveryGroups();
 
@@ -169,10 +149,10 @@ function App() {
   const pickupSelected = isPickupSelectedFromGroups(deliveryGroups as any);
 
   // Store variants in state
-  const [variant1, setVariant1] = useState(null);
-  const [variant2, setVariant2] = useState(null);
-  const [variant3, setVariant3] = useState(null);
-  const [variant4, setVariant4] = useState(null);
+  const [variant1, setVariant1] = useState<any>(null);
+  const [variant2, setVariant2] = useState<any>(null);
+  const [variant3, setVariant3] = useState<any>(null);
+  const [variant4, setVariant4] = useState<any>(null);
 
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -281,7 +261,7 @@ useEffect(() => {
     try {
       const productIds = lines.map((line) => line.merchandise.product.id);
       if (productIds.length > 0) {
-        const response = await query(
+        const response: any = await shopify.query(
           `
           query ($productIds: [ID!]!) {
             nodes(ids: $productIds) {
@@ -396,7 +376,7 @@ useEffect(() => {
   }
 
   checkGiftboxes();
-}, [lines, myshopifyDomain, shippingAddress, query]);
+}, [lines, myshopifyDomain, shippingAddress]);
 
   // If buyer selects Pickup / Ship to store, remove any giftbox lines and hide giftbox offer
   useEffect(() => {
@@ -438,7 +418,7 @@ useEffect(() => {
     (async () => {
       try {
         for (const gl of giftLines) {
-          await applyCartLinesChange({
+          await shopify.applyCartLinesChange({
             type: 'removeCartLine',
             id: gl.id,
             quantity: 1
@@ -451,7 +431,7 @@ useEffect(() => {
         setGiftboxValid(false);
       }
     })();
-  }, [deliveryGroups, lines, variant1, variant2, variant3, variant4, isGiftbox1, isGiftbox2, isGiftbox3, isGiftbox4, applyCartLinesChange]);
+  }, [deliveryGroups, lines, variant1, variant2, variant3, variant4, isGiftbox1, isGiftbox2, isGiftbox3, isGiftbox4]);
 
 
   useEffect(() => {
@@ -511,7 +491,7 @@ useEffect(() => {
         : []),
     ];
 
-    const result = await applyCartLinesChange({
+    const result = await shopify.applyCartLinesChange({
       type: "addCartLine",
       merchandiseId: variantId,
       quantity: 1,
@@ -530,7 +510,7 @@ useEffect(() => {
     if (!variantId) return;
 
     try {
-      const response = await query(
+      const response: any = await shopify.query(
         `
         query ($variantId: ID!) {
           node(id: $variantId) {
@@ -666,46 +646,48 @@ useEffect(() => {
 function LoadingSkeleton({ titleSetting }) {
   const translate = useTranslate();
   return (
-    <BlockStack spacing="tight" background="subdued" border="none" padding="none">
-      <InlineLayout
-        spacing="base"
-        padding={["tight", "none", "base", "none"]}
-        columns={["fill"]}
-        blockAlignment="center"
+    <s-stack gap="small-200" background="subdued" border="none" padding="none">
+      <s-grid
+        gap="base"
+        padding="small-200 none base none"
+        gridTemplateColumns="1fr"
+        alignItems="center"
       >
-        <BlockStack spacing="none">
-          <InlineLayout
-            padding={["none", "none", "tight", "none"]}
-            spacing="base"
-            columns={["auto", "fill"]}
-            blockAlignment="start"
+        <s-stack gap="none">
+          <s-grid
+            padding="none none small-200 none"
+            gap="base"
+            gridTemplateColumns="auto 1fr"
+            alignItems="start"
           >
-            <Icon source="bag" />
-            <Heading level={2}>{titleSetting}</Heading>
-          </InlineLayout>
-          <TextBlock>
-             <Text emphasis="bold" appearance="accent">...</Text>
-          </TextBlock>
-        </BlockStack>
-      </InlineLayout>
+            <s-icon type="bag" />
+            <s-heading>{titleSetting}</s-heading>
+          </s-grid>
+          <s-paragraph>
+             <s-text type="strong" tone="auto">...</s-text>
+          </s-paragraph>
+        </s-stack>
+      </s-grid>
 
-      <BlockStack spacing="loose">
-        <InlineLayout
-          padding={["none", "none", "tight", "none"]}
-          spacing="base"
-          columns={Style.default(["20%", "80%"]).when({ viewportInlineSize: { min: "small" } }, ["20%", "40%"])}
-          blockAlignment="center"
-        >
-          <View>
-            <SkeletonImage aspectRatio={1} size="fill" />
-          </View>
+      <s-stack gap="large-200">
+        <s-query-container>
+          <s-grid
+            padding="none none small-200 none"
+            gap="base"
+            gridTemplateColumns="@container (inline-size > 750px) '20% 40%', '20% 80%'"
+            alignItems="center"
+          >
+            <s-box>
+              <s-image aspectRatio="1" inlineSize="fill" />
+            </s-box>
 
-          <Button kind="secondary" disabled accessibilityLabel="Add Items to cart">
-            {translate("add-to-cart")}
-          </Button>
-        </InlineLayout>
-      </BlockStack>
-    </BlockStack>
+            <s-button variant="secondary" inlineSize="fill" disabled accessibilityLabel="Add Items to cart">
+              {translate("add-to-cart")}
+            </s-button>
+          </s-grid>
+        </s-query-container>
+      </s-stack>
+    </s-stack>
   );
 }
 function ProductOffer({
@@ -746,10 +728,7 @@ function ProductOffer({
 
   pickupSelected,
 }) {
-  // We import these from @shopify/ui-extensions-react/checkout
-  // (ScrollView, BlockStack, InlineLayout, Heading, etc.)
-
-  // 1. Bundle each product’s data into an array
+  // 1. Bundle each product's data into an array
   const allItems = [
     {
       variant: variant1,
@@ -797,25 +776,25 @@ function ProductOffer({
   }
 
   return (
-    <BlockStack spacing="base">
-    <View><Heading level={2}>You May Also Like</Heading></View>
-    <View>
-    <ScrollView
-      maxBlockSize={400}
-      hint={{ type: 'pill', content: 'Scroll for more' }}
+    <s-stack gap="base">
+    <s-box><s-heading>You May Also Like</s-heading></s-box>
+    <s-box>
+    <s-scroll-box
+      maxBlockSize="400px"
+      overflow="auto hidden"
       padding="none"
       border="none"
       borderRadius="none"
     >
-      <View   border="none"
+      <s-box   border="none"
         padding="none"
-        minBlockSize={50}>
+        minBlockSize="50px">
 
 
         {/* Product upsell section */}
         {filteredItems.length > 0 && (
-          <BlockStack spacing="tight">
-            
+          <s-stack gap="small-200">
+
             {filteredItems.map((item, index) => (
               <VariantCard
                 key={`product-${index}`}
@@ -830,19 +809,19 @@ function ProductOffer({
                 handleAddToCart={handleAddToCart}
               />
             ))}
-          </BlockStack>
+          </s-stack>
         )}
 
         {showError && <ErrorBanner />}
-      </View>
-    </ScrollView>
-    </View>
-    </BlockStack>
+      </s-box>
+    </s-scroll-box>
+    </s-box>
+    </s-stack>
   );
 }
 
 /**
- * Renders each variant’s card: image, title, description, and Add-to-cart button.
+ * Renders each variant's card: image, title, description, and Add-to-cart button.
  * Incorporates GWP logic if desired (e.g., hide price or show 'FREE').
  */
 function VariantCard({
@@ -858,7 +837,6 @@ function VariantCard({
 }) {
   const product = variant?.product || {};
   const translate = useTranslate();
-  const { ui } = useApi();
 
   // Size picker data (ported from checkout-recommendations). For products with
   // real options the Add button opens a modal; the buyer's pick drives the price
@@ -922,186 +900,201 @@ function VariantCard({
   const modalPrice = isGWP ? "FREE" : stripCurrency(i18n.formatCurrency(priceAmount).replace(/\.00$/, ""));
   const addLabel = isGWP ? translate("add-free-gift") : translate("add-to-cart");
 
+  // The modal is rendered as a sibling of the card row and opened by the Add
+  // button through command/commandFor (the legacy `overlay` prop is gone).
   const sizePickerModal = card.hasOptions ? (
-    <Modal id={modalId} accessibilityLabel={card.title || title} padding>
-      <BlockStack spacing="base">
+    <s-modal id={modalId} accessibilityLabel={card.title || title} padding="base">
+      <s-stack gap="base">
         {/* Row: product image (left) | title over price (right). */}
-        <Grid columns={["fill", "fill"]} spacing="base" blockAlignment="center">
-          <Image
-            source={modalImageUrl}
-            accessibilityDescription={mainImage?.alt || card.title}
-            aspectRatio={1}
-            fit="cover"
+        <s-grid gridTemplateColumns="1fr 1fr" gap="base" alignItems="center">
+          <s-image
+            src={modalImageUrl}
+            alt={mainImage?.alt || card.title}
+            aspectRatio="1"
+            objectFit="cover"
             border="none"
-            cornerRadius="base"
+            borderRadius="base"
           />
-          <BlockStack spacing="tight">
-            <Text emphasis="bold">{card.title || title}</Text>
-            <Text appearance="subdued">{modalPrice}</Text>
-          </BlockStack>
-        </Grid>
+          <s-stack gap="small-200">
+            <s-text type="strong">{card.title || title}</s-text>
+            <s-text color="subdued">{modalPrice}</s-text>
+          </s-stack>
+        </s-grid>
 
         {/* Tappable thumbnail strip to switch the main image. */}
         {images.length > 1 && (
-          <ScrollView direction="inline" padding="none" hint="innerShadow">
-            <InlineLayout spacing="tight" columns={images.map(() => 56)} blockAlignment="center">
+          <s-scroll-box overflow="hidden auto" padding="none">
+            <s-grid
+              gap="small-200"
+              gridTemplateColumns={images.map(() => "56px").join(" ")}
+              alignItems="center"
+            >
               {images.map((image, index) => (
-                <Pressable
+                <s-clickable
                   key={image.url}
-                  onPress={() => setActiveImage(index)}
-                  cornerRadius="base"
+                  onClick={() => setActiveImage(index)}
+                  borderRadius="base"
                   border={index === activeIdx ? "base" : "none"}
                   padding="none"
                   accessibilityLabel={`View image ${index + 1}`}
                 >
-                  <Image
-                    source={sizedImage(image.url, 160)}
-                    accessibilityDescription={image.alt}
-                    aspectRatio={1}
-                    fit="cover"
+                  <s-image
+                    src={sizedImage(image.url, 160)}
+                    alt={image.alt}
+                    aspectRatio="1"
+                    objectFit="cover"
                     border="none"
-                    cornerRadius="base"
+                    borderRadius="base"
                   />
-                </Pressable>
+                </s-clickable>
               ))}
-            </InlineLayout>
-          </ScrollView>
+            </s-grid>
+          </s-scroll-box>
         )}
 
         {/* One row of selector buttons per option (e.g. Size, Cup). */}
         {card.options.map((option) => (
-          <BlockStack key={option.name} spacing="tight">
-            <Text appearance="subdued">{option.name}</Text>
-            <Grid
-              columns={Array(Math.min(option.values.length, 4)).fill("fill")}
-              spacing="tight"
+          <s-stack key={option.name} gap="small-200">
+            <s-text color="subdued">{option.name}</s-text>
+            <s-grid
+              gridTemplateColumns={Array(Math.min(option.values.length, 4)).fill("1fr").join(" ")}
+              gap="small-200"
             >
               {option.values.map((value) => (
-                <Button
+                <s-button
                   key={value}
-                  kind={selection[option.name] === value ? "primary" : "secondary"}
+                  inlineSize="fill"
+                  variant={selection[option.name] === value ? "primary" : "secondary"}
                   disabled={!valueIsAvailable(card, selection, option, value)}
-                  onPress={() =>
+                  onClick={() =>
                     setSelection((prev) => reconcileSelection(card, prev, option.name, value))
                   }
                 >
                   {value}
-                </Button>
+                </s-button>
               ))}
-            </Grid>
-          </BlockStack>
+            </s-grid>
+          </s-stack>
         ))}
 
-        <Button
-          kind="primary"
+        {/* command="--hide" closes the modal (replaces ui.overlay.close). */}
+        <s-button
+          variant="primary"
+          inlineSize="fill"
           loading={adding}
           disabled={!selected}
-          onPress={() => {
-            ui.overlay.close(modalId);
+          command="--hide"
+          commandFor={modalId}
+          onClick={() => {
             handleAddToCart(selectedVariantId, isGiftbox, isGWP ? null : compareAtAmount);
           }}
         >
           {addLabel}
-        </Button>
-      </BlockStack>
-    </Modal>
+        </s-button>
+      </s-stack>
+    </s-modal>
   ) : null;
 
   // --- Insert isGiftboxDisabled flag here ---
   const isGiftboxDisabled = pickupSelected && isGiftbox;
 
   return (
-    <BlockStack
+    <s-stack
       background="transparent"
       border="none"
       borderRadius="none"
       padding="none"
-      spacing="none"
+      gap="none"
     >
-      <InlineLayout
-        spacing="base"
-        columns={isGiftboxDisabled ? ["auto", "fill"] : ["auto", "fill", "auto"]}
-        blockAlignment="center"
+      <s-grid
+        gap="base"
+        gridTemplateColumns={isGiftboxDisabled ? "auto 1fr" : "auto 1fr auto"}
+        alignItems="center"
       >
         {/* Image */}
-        <View maxInlineSize={64}>
-          <Image
-            source={finalImageUrl}
+        <s-box maxInlineSize="64px">
+          <s-image
+            src={finalImageUrl}
             alt={product.title || "Product image"}
-            size="fill"
+            inlineSize="fill"
             border="none"
-            cornerRadius="base"
+            borderRadius="base"
           />
-        </View>
+        </s-box>
 
         {/* Text Info: Title / Desc / Price */}
-        <BlockStack spacing="extraTight">
-          <InlineLayout
-            spacing="tight"
-            padding={["none", "none", "none", "none"]}
-            columns={["auto", "fill"]}
-            blockAlignment="start"
+        <s-stack gap="small-400">
+          <s-grid
+            gap="small-200"
+            padding="none none none none"
+            gridTemplateColumns="auto 1fr"
+            alignItems="start"
           >
-            {isGWP && <Icon source="gift" />}
-            <Heading level={3}> {title}</Heading>
-          </InlineLayout>
+            {isGWP && <s-icon type="gift-card" />}
+            <s-heading> {title}</s-heading>
+          </s-grid>
 
-          <TextBlock appearance="subdued">
-            <Text appearance="subdued">{priceWithSymbol}</Text>
+          <s-paragraph color="subdued">
+            <s-text color="subdued">{priceWithSymbol}</s-text>
             {compareAtWithSymbol && (
               <>
-                <Text appearance="subdued">{' '}</Text>
-                <Text appearance="subdued" accessibilityRole="deletion">{compareAtWithSymbol}</Text>
+                <s-text color="subdued">{' '}</s-text>
+                <s-text color="subdued" type="redundant">{compareAtWithSymbol}</s-text>
               </>
             )}
-          </TextBlock>
+          </s-paragraph>
 
           {/* Insert helper text when giftbox is disabled */}
           {isGiftboxDisabled && (
-            <TextBlock appearance="subdued">
-              <Text emphasis="bold">Not available for Pickup Orders</Text>
-            </TextBlock>
+            <s-paragraph color="subdued">
+              <s-text type="strong">Not available for Pickup Orders</s-text>
+            </s-paragraph>
           )}
-        </BlockStack>
+        </s-stack>
 
         {/* Rightmost button/message column, only render if NOT disabled */}
         {!isGiftboxDisabled && (
-          <InlineLayout
-            spacing="base"
-            columns={["fill"]}
-            blockAlignment="center"
+          <s-grid
+            gap="base"
+            gridTemplateColumns="1fr"
+            alignItems="center"
           >
             {pickupSelected && isGiftbox ? (
-              <Text appearance="subdued" emphasis="bold" accessibilityRole="status">
-                Not available for Pickup Orders
-              </Text>
+              <s-box accessibilityRole="status">
+                <s-text color="subdued" type="strong">
+                  Not available for Pickup Orders
+                </s-text>
+              </s-box>
             ) : (
               card.hasOptions ? (
                 // Multi-variant: open the size picker instead of adding blindly.
-                <Button kind="secondary" loading={adding} overlay={sizePickerModal}>
+                <s-button variant="secondary" inlineSize="fill" loading={adding} command="--show" commandFor={modalId}>
                   {addLabel}
-                </Button>
+                </s-button>
               ) : (
-                <Button
-                  kind="secondary"
+                <s-button
+                  variant="secondary"
+                  inlineSize="fill"
                   loading={adding}
-                  onPress={() => handleAddToCart(variant.id, isGiftbox, isGWP ? null : compareAtAmount)}
+                  onClick={() => handleAddToCart(variant.id, isGiftbox, isGWP ? null : compareAtAmount)}
                 >
                   {addLabel}
-                </Button>
+                </s-button>
               )
             )}
-          </InlineLayout>
+          </s-grid>
         )}
-      </InlineLayout>
-    </BlockStack>
+      </s-grid>
+
+      {sizePickerModal}
+    </s-stack>
   );
 }
 
 function ErrorBanner() {
   return (
-    <Banner status="critical">
+    <s-banner tone="critical">
       There was an issue adding this product. Please try again.
-    </Banner>
+    </s-banner>
   );
 }

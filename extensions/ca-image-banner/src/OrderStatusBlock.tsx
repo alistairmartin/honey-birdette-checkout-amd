@@ -1,29 +1,19 @@
-import {
-  BlockStack,
-  reactExtension,
-  Image,
-  Link,
-  useSettings,
-} from "@shopify/ui-extensions-react/customer-account";
+import "@shopify/ui-extensions/preact";
+import { render } from "preact";
+import { useSettings } from "@shopify/ui-extensions/customer-account/preact";
 
-export default reactExtension(
-  "customer-account.order-status.block.render",
-  () => <PromotionBanner />
-);
+// Container width (px) above which the desktop image is shown. The legacy
+// Image component switched on viewport width ("medium", 750px). Polaris web
+// components switch on the width of the block's container instead, so the
+// threshold sits between phone widths and the desktop content column.
+const DESKTOP_MIN_CONTAINER_WIDTH = 480;
 
-export const profileBlock = reactExtension(
-  "customer-account.profile.block.render",
-  () => <PromotionBanner />
-);
-
-export const orderIndexBlock = reactExtension(
-  "customer-account.order-index.block.render",
-  () => <PromotionBanner />
-);
+export default function extension() {
+  render(<PromotionBanner />, document.body);
+}
 
 function PromotionBanner() {
   const settings = useSettings();
-
   const desktopImageUrl =
     typeof settings.desktop_image_url === "string"
       ? settings.desktop_image_url.trim()
@@ -42,38 +32,42 @@ function PromotionBanner() {
     return null;
   }
 
-  const imageSource =
-    defaultSource &&
-    desktopSource &&
-    defaultSource !== desktopSource
-      ? {
-          default: defaultSource,
-          conditionals: [
-            {
-              conditions: { viewportInlineSize: { min: "medium" } },
-              value: desktopSource,
-            },
-          ],
-        }
-      : defaultSource || desktopSource;
+  const isResponsive =
+    Boolean(defaultSource) &&
+    Boolean(desktopSource) &&
+    defaultSource !== desktopSource;
 
-  const image = (
-    <Image
-      source={imageSource}
-      accessibilityDescription="Promotional banner"
-    />
+  const image = isResponsive ? (
+    <s-query-container>
+      <s-box
+        display={`@container (inline-size > ${DESKTOP_MIN_CONTAINER_WIDTH}px) none, auto`}
+      >
+        <s-image src={defaultSource} alt="Promotional banner" />
+      </s-box>
+      <s-box
+        display={`@container (inline-size > ${DESKTOP_MIN_CONTAINER_WIDTH}px) auto, none`}
+      >
+        <s-image src={desktopSource} alt="Promotional banner" />
+      </s-box>
+    </s-query-container>
+  ) : (
+    <s-image src={defaultSource || desktopSource} alt="Promotional banner" />
   );
 
   return (
-    <BlockStack inlineAlignment="center">
+    <s-stack direction="block" alignItems="center">
       {linkUrl ? (
-        <Link to={linkUrl} external={isExternalUrl(linkUrl)}>
+        <s-clickable
+          href={linkUrl}
+          target={isExternalUrl(linkUrl) ? "_blank" : "auto"}
+          accessibilityLabel="Promotional banner"
+        >
           {image}
-        </Link>
+        </s-clickable>
       ) : (
         image
       )}
-    </BlockStack>
+    </s-stack>
   );
 }
 

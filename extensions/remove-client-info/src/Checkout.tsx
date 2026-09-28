@@ -1,21 +1,17 @@
-import { useEffect, useRef } from "react";
-import {
-  reactExtension,
-  useAttributeValues,
-  useApplyAttributeChange,
-} from "@shopify/ui-extensions-react/checkout";
+import "@shopify/ui-extensions/preact";
+import { render } from "preact";
+import { useEffect, useRef } from "preact/hooks";
+import { useAttributeValues } from "@shopify/ui-extensions/checkout/preact";
 
 // The cart attribute we want to strip from the checkout.
 const ATTRIBUTE_KEY = "_client_info";
 
-// 1. Choose an extension target
-export default reactExtension("purchase.checkout.block.render", () => (
-  <Extension />
-));
+export default function extension() {
+  render(<Extension />, document.body);
+}
 
 function Extension() {
   const [clientInfo] = useAttributeValues([ATTRIBUTE_KEY]);
-  const applyAttributeChange = useApplyAttributeChange();
 
   // Guard so we only fire the removal once per detected value, even though
   // the component re-renders while the attribute change is applied.
@@ -27,19 +23,17 @@ function Extension() {
       removing.current = false;
       return;
     }
-
     if (removing.current) return;
     removing.current = true;
 
     (async () => {
       try {
         // Checkout UI extensions clear an attribute by setting it to "".
-        const result = await applyAttributeChange({
+        const result = await shopify.applyAttributeChange({
           type: "updateAttribute",
           key: ATTRIBUTE_KEY,
           value: "",
         });
-
         if (result.type === "error") {
           console.error(`Failed to remove ${ATTRIBUTE_KEY}:`, result.message);
           removing.current = false;
@@ -49,7 +43,7 @@ function Extension() {
         removing.current = false;
       }
     })();
-  }, [clientInfo, applyAttributeChange]);
+  }, [clientInfo]);
 
   // This is a side-effect-only component; it renders nothing.
   return null;

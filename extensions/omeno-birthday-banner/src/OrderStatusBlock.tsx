@@ -1,25 +1,17 @@
-import React, { useEffect, useState } from "react";
+import "@shopify/ui-extensions/preact";
+import { render } from "preact";
+import { useEffect, useState } from "preact/hooks";
 import {
-  Banner,
-  BlockStack,
-  Button,
-  Card,
-  Divider,
-  Form,
-  Text,
-  Select,
-  Grid,
-  View,
-  reactExtension,
   useAuthenticatedAccountCustomer,
   useSettings,
   useTranslate,
-} from "@shopify/ui-extensions-react/customer-account";
+} from "@shopify/ui-extensions/customer-account/preact";
 
-export default reactExtension(
-  "customer-account.profile.block.render",
-  () => <CustomerBirthdayBlock />
-);
+// Single entry point. It serves every target that points at this module in
+// shopify.extension.toml (profile, order status and order index blocks).
+export default function extension() {
+  render(<CustomerBirthdayBlock />, document.body);
+}
 
 // Fallback config if settings aren't configured
 const DEFAULT_CONFIG = {
@@ -28,12 +20,19 @@ const DEFAULT_CONFIG = {
   proxyUrl: "https://www.honeybirdette.com"
 };
 
+// The change event is typed as a plain Event, so narrow its target to read
+// the selected value (the old Select passed the value string directly).
+function selectValue(event: Event): string {
+  const target = event.currentTarget as HTMLElementTagNameMap["s-select"];
+  return target.value ?? "";
+}
+
 function CustomerBirthdayBlock() {
   const authenticatedCustomer = useAuthenticatedAccountCustomer();
-  
+
   // Read settings configured by merchant in Shopify admin
   const settings = useSettings();
-  
+
   // Get store configuration from settings
   const storeConfig = {
     region: settings.region || DEFAULT_CONFIG.region,
@@ -108,16 +107,16 @@ function CustomerBirthdayBlock() {
 
         if (result.success && result.metafields) {
           const metafields = result.metafields;
-          
+
           // Read birthday from metafields
           const birthdayDay = metafields.birthday_day;
           const birthdayMonth = metafields.birthday_month;
-          
+
           if (birthdayDay && birthdayMonth) {
             // Pad with zeros for display
             const paddedDay = String(birthdayDay).padStart(2, '0');
             const paddedMonth = String(birthdayMonth).padStart(2, '0');
-            
+
             setDay(paddedDay);
             setMonth(paddedMonth);
             console.log(`🎂 Found birthday: ${paddedDay}/${paddedMonth} (from metafields)`);
@@ -252,86 +251,106 @@ function CustomerBirthdayBlock() {
 
   if (loading) {
     return (
-      <Banner>
-        <Text>Loading…</Text>
-      </Banner>
+      <s-banner tone="info">
+        <s-text>Loading…</s-text>
+      </s-banner>
     );
   }
 
   return (
-    <Card padding>
-      <BlockStack spacing="base">
-      <BlockStack spacing="extraTight">
-        <Text size="large" emphasis="bold">{translate("birthdayTitle")}</Text>
-        <Text appearance="subdued">{translate("birthdayDescription")}</Text>
-      </BlockStack>
-      <Divider />
-      <BlockStack spacing="base">
+    <s-box border="base" padding="base" borderRadius="base">
+      <s-stack gap="base">
+      <s-stack gap="small-400">
+        <s-heading>{translate("birthdayTitle")}</s-heading>
+        <s-text color="subdued">{translate("birthdayDescription")}</s-text>
+      </s-stack>
+      <s-divider />
+      <s-stack gap="base">
          {storeConfig.showDebug && (
-        <Text size="small" appearance="subdued">
+        <s-text type="small" color="subdued">
           Region: {storeConfig.region}
-        </Text>
+        </s-text>
         )}
 
         {storeConfig.showDebug && (
-        <Text size="small" appearance="subdued">
+        <s-text type="small" color="subdued">
           Customer ID: {customerId || "Loading..."}
-        </Text>
+        </s-text>
          )}
 
-        <Form onSubmit={save}>
-          <BlockStack spacing="base">
-            <Grid columns={['fill', 'fill']} spacing="loose">
-              <View>
-                <Select
+        <s-form onSubmit={save}>
+          <s-stack gap="base">
+            <s-grid gridTemplateColumns="1fr 1fr" gap="large-200">
+              <s-box>
+                <s-select
                   label={translate("dayLabel")}
                   value={day}
-                  onChange={(value) => setDay(value)}
-                  options={dayOptions}
-                />
-              </View>
-              <View>
-                <Select
+                  onChange={(event) => setDay(selectValue(event))}
+                >
+                  {dayOptions.map((option) => (
+                    <s-option key={option.value} value={option.value}>
+                      {option.label}
+                    </s-option>
+                  ))}
+                </s-select>
+              </s-box>
+              <s-box>
+                <s-select
                   label={translate("monthLabel")}
                   value={month}
-                  onChange={(value) => setMonth(value)}
-                  options={monthOptions}
-                />
-              </View>
-            </Grid>
+                  onChange={(event) => setMonth(selectValue(event))}
+                >
+                  {monthOptions.map((option) => (
+                    <s-option key={option.value} value={option.value}>
+                      {option.label}
+                    </s-option>
+                  ))}
+                </s-select>
+              </s-box>
+            </s-grid>
 
             {error && (
-              <Banner status="critical">
-                <Text>{error}</Text>
-              </Banner>
+              <s-banner tone="critical">
+                <s-text>{error}</s-text>
+              </s-banner>
             )}
 
             {saved && (
-              <Banner status="success">
-                <Text>{saved}</Text>
-              </Banner>
+              <s-banner tone="success">
+                <s-text>{saved}</s-text>
+              </s-banner>
             )}
 
-            <Button kind="primary" submit loading={saving} disabled={saving}>
+            <s-button
+              variant="primary"
+              type="submit"
+              inlineSize="fill"
+              loading={saving}
+              disabled={saving}
+            >
               {saving ? translate("saving") : translate("saveBirthday")}
-            </Button>
+            </s-button>
 
             {storeConfig.showDebug && (
-              <Button kind="secondary" onPress={() => setShowDebug((v) => !v)}>
+              <s-button
+                variant="secondary"
+                inlineSize="fill"
+                onClick={() => setShowDebug((v) => !v)}
+              >
                 {showDebug ? "Hide debug" : "Show debug"}
-              </Button>
+              </s-button>
             )}
 
             {showDebug && debug && (
-              <BlockStack spacing="tight">
-                <Text size="small">Debug info:</Text>
-                <Text size="small">{debug}</Text>
-              </BlockStack>
+              <s-stack gap="small-200">
+                <s-text type="small">Debug info:</s-text>
+                <s-text type="small">{debug}</s-text>
+              </s-stack>
             )}
-          </BlockStack>
-        </Form>
-      </BlockStack>
-      </BlockStack>
-    </Card>
+          </s-stack>
+        </s-form>
+      </s-stack>
+      </s-stack>
+    </s-box>
   );
 }

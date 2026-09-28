@@ -4,7 +4,7 @@
 # offer per enabled config: a progress banner with a label, then auto-adds the
 # gift line. The gift-with-purchase-discount Shopify Function makes the gift line
 # free (or % off).
-api_version = "2025-07"
+api_version = "2026-04"
 
 [[extensions]]
 name = "Gift With Purchase"

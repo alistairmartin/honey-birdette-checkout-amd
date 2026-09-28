@@ -1,54 +1,29 @@
-import {
-  reactExtension,
-  BlockStack,
-  Text,
-  TextBlock,
-  Icon,
-  View,
-  useApi,
-  useSettings,
-  InlineLayout,
-  useTranslate,
-  Heading,
-  Link,
-} from "@shopify/ui-extensions-react/checkout";
+import "@shopify/ui-extensions/preact";
+import { render } from "preact";
+import { useSettings } from "@shopify/ui-extensions/checkout/preact";
 
-// 1. Choose an extension target
-export default reactExtension("purchase.checkout.block.render", () => (
-  <Extension />
-));
+export default function extension() {
+  render(<Extension />, document.body);
+}
 
 function Extension() {
-  const translate = useTranslate();
-  const { extension } = useApi();
   const { title, description, linkurl, linktext } = useSettings();
 
-  const titleSetting = title ?? 'Title';
-  const descriptionSetting = description ?? 'Descriptin';
-
-    const linkUrl = linkurl ?? 'https://eu.honeybirdette.com/pages/contact-us';
-  const linkText = linktext ?? 'Link Text';
+  const titleSetting = title ?? "Title";
+  const descriptionSetting = description ?? "Descriptin";
+  const linkUrl = String(linkurl ?? "https://eu.honeybirdette.com/pages/contact-us");
+  const linkText = linktext ?? "Link Text";
 
   return (
-   <BlockStack>
-    
-      <View>
-          <InlineLayout columns={['auto', 'fill']} spacing="extraTight" blockAlignment="center">
-            <Icon source="mobile" appearance="base" />
-            <Text emphasis="bold">{ titleSetting }</Text>
-          </InlineLayout>
-        </View>
-
-        <View>
-          <TextBlock>{descriptionSetting}</TextBlock>
-        </View>
-
-         <View>
-          <Link to={linkUrl}>{ linkText }</Link>
-        </View>
-
-    </BlockStack>
+    <s-stack direction="block" gap="base">
+      <s-grid gridTemplateColumns="auto 1fr" gap="small-400" alignItems="center">
+        <s-icon type="mobile" />
+        <s-text type="strong">{titleSetting}</s-text>
+      </s-grid>
+      <s-paragraph>{descriptionSetting}</s-paragraph>
+      <s-box>
+        <s-link href={linkUrl}>{linkText}</s-link>
+      </s-box>
+    </s-stack>
   );
-
-
 }

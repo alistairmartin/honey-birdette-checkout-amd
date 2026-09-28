@@ -1,42 +1,27 @@
-import React, { useEffect, useState } from "react";
+import "@shopify/ui-extensions/preact";
+import { render } from "preact";
+import { useEffect, useState } from "preact/hooks";
 import {
-  reactExtension,
-  ScrollView,
-  Divider,
-  ProductThumbnail,
-  Banner,
-  Heading,
-  Button,
-  InlineLayout,
-  BlockStack,
-  Text,
-  Grid,
-  GridItem,
-  View,
-  TextBlock,
-  Image,
-  InlineSpacer,
-  SkeletonText,
-  SkeletonImage,
   useCartLines,
-  useApplyCartLinesChange,
-  useApi,
   useSettings,
   useTranslate,
-  Style,
-  Icon,
-  useShop,         
+  useShop,
   useShippingAddress,
-} from "@shopify/ui-extensions-react/checkout";
+} from "@shopify/ui-extensions/checkout/preact";
+
+// Container width (px) above which the card uses the wide layout (button on the right).
+// Replaces the legacy viewport breakpoint `viewportInlineSize: { min: "small" }`.
+const WIDE_LAYOUT_MIN = "450px";
 
 // Set up the entry point for the extension
-export default reactExtension("purchase.checkout.block.render", () => <App />);
+export default function extension() {
+  render(<App />, document.body);
+}
 
 function App() {
-  const { query, i18n } = useApi();
+  const { i18n } = shopify;
   const { myshopifyDomain } = useShop();
   const shippingAddress = useShippingAddress();
-  const applyCartLinesChange = useApplyCartLinesChange();
 
   // Store variants in state
   const [variant1, setVariant1] = useState(null);
@@ -255,7 +240,7 @@ useEffect(() => {
   }
 
   checkGiftboxes();
-}, [lines, myshopifyDomain, shippingAddress, query]);
+}, [lines, myshopifyDomain, shippingAddress]);
 
 
   useEffect(() => {
@@ -295,9 +280,9 @@ useEffect(() => {
   // “Add to cart” button callback
   async function handleAddToCart(variantId) {
     setAdding(true);
-    const result = await applyCartLinesChange({
+    const result = await shopify.applyCartLinesChange({
       type: "addCartLine",
-      merchandiseId: variantId,
+      merchandiseId: String(variantId),
       quantity: 1,
       attributes: [{ key: "_checkout_upsell", value: "true" }],
     });
@@ -314,7 +299,7 @@ useEffect(() => {
     if (!variantId) return;
 
     try {
-      const response = await query(
+      const response = await shopify.query<{ node: any }>(
         `
         query ($variantId: ID!) {
           node(id: $variantId) {
@@ -444,46 +429,48 @@ useEffect(() => {
 function LoadingSkeleton({ titleSetting, descriptionSetting }) {
   const translate = useTranslate();
   return (
-    <BlockStack spacing="tight" background="subdued" borderWidth="medium" padding="base">
-      <InlineLayout
-        spacing="base"
-        padding={["tight", "none", "base", "none"]}
-        columns={["fill"]}
-        blockAlignment="center"
-      >
-        <BlockStack spacing="none">
-          <InlineLayout
-            padding={["none", "none", "tight", "none"]}
-            spacing="base"
-            columns={["auto", "fill"]}
-            blockAlignment="start"
-          >
-            <Icon source="bag" />
-            <Heading level={2}>{titleSetting}</Heading>
-          </InlineLayout>
-          <TextBlock>
-            <Text>{descriptionSetting}</Text> <Text emphasis="bold">...</Text>
-          </TextBlock>
-        </BlockStack>
-      </InlineLayout>
-
-      <BlockStack spacing="loose">
-        <InlineLayout
-          padding={["none", "none", "tight", "none"]}
-          spacing="base"
-          columns={Style.default(["20%", "80%"]).when({ viewportInlineSize: { min: "small" } }, ["20%", "40%"])}
-          blockAlignment="center"
+    <s-query-container>
+      <s-stack gap="small-200" background="subdued" borderWidth="large" padding="base">
+        <s-grid
+          gap="base"
+          padding="small-200 none base none"
+          gridTemplateColumns="1fr"
+          alignItems="center"
         >
-          <View>
-            <SkeletonImage aspectRatio={1} size="fill" />
-          </View>
+          <s-stack gap="none">
+            <s-grid
+              padding="none none small-200 none"
+              gap="base"
+              gridTemplateColumns="auto 1fr"
+              alignItems="start"
+            >
+              <s-icon type="bag" />
+              <s-heading>{titleSetting}</s-heading>
+            </s-grid>
+            <s-paragraph>
+              <s-text>{descriptionSetting}</s-text> <s-text type="strong">...</s-text>
+            </s-paragraph>
+          </s-stack>
+        </s-grid>
 
-          <Button kind="secondary" disabled accessibilityLabel="Add Items to cart">
-            {translate("add-to-cart")}
-          </Button>
-        </InlineLayout>
-      </BlockStack>
-    </BlockStack>
+        <s-stack gap="large-200">
+          <s-grid
+            padding="none none small-200 none"
+            gap="base"
+            gridTemplateColumns={`@container (inline-size > ${WIDE_LAYOUT_MIN}) '20% 40%', '20% 80%'`}
+            alignItems="center"
+          >
+            <s-box>
+              <s-image aspectRatio="1" inlineSize="fill" />
+            </s-box>
+
+            <s-button variant="secondary" disabled accessibilityLabel="Add Items to cart" inlineSize="fill">
+              {translate("add-to-cart")}
+            </s-button>
+          </s-grid>
+        </s-stack>
+      </s-stack>
+    </s-query-container>
   );
 }
 function ProductOffer({
@@ -533,8 +520,8 @@ function ProductOffer({
   isGWP5,
   isGiftbox5,
 }) {
-  // We import these from @shopify/ui-extensions-react/checkout
-  // (ScrollView, BlockStack, InlineLayout, Heading, etc.)
+  // Rendered with Polaris web components
+  // (s-scroll-box, s-stack, s-grid, s-heading, etc.)
 
   // 1. Bundle each product’s data into an array
   const allItems = [
@@ -591,44 +578,38 @@ function ProductOffer({
   }
 
   return (
+    <s-query-container>
+      <s-scroll-box
+        maxBlockSize="300px"
+        padding="base"
+        border="base"
+        borderRadius="base"
+      >
+        <s-box border="none" padding="none" minBlockSize="50px">
+          {/* Product upsell section */}
+          {filteredItems.length > 0 && (
+            <s-stack gap="small-200">
+              {filteredItems.map((item, index) => (
+                <VariantCard
+                  key={`product-${index}`}
+                  variant={item.variant}
+                  title={item.title}
+                  description={item.description}
+                  isGWP={item.isGWP}
+                  isGiftbox={item.isGiftbox}
+                  giftboxValid={giftboxValid}
+                  i18n={i18n}
+                  adding={adding}
+                  handleAddToCart={handleAddToCart}
+                />
+              ))}
+            </s-stack>
+          )}
 
-    <ScrollView
-      maxBlockSize={300}
-      hint={{ type: 'pill', content: 'Scroll for more' }}
-      padding="base"
-      border="base"
-      borderRadius="base"
-    >
-      <View   border="none"
-        padding="none"
-        minBlockSize={50}>
-
-
-        {/* Product upsell section */}
-        {filteredItems.length > 0 && (
-          <BlockStack spacing="tight">
-            
-            {filteredItems.map((item, index) => (
-              <VariantCard
-                key={`product-${index}`}
-                variant={item.variant}
-                title={item.title}
-                description={item.description}
-                isGWP={item.isGWP}
-                isGiftbox={item.isGiftbox}
-                giftboxValid={giftboxValid}
-                i18n={i18n}
-                adding={adding}
-                handleAddToCart={handleAddToCart}
-              />
-            ))}
-          </BlockStack>
-        )}
-
-        {showError && <ErrorBanner />}
-      </View>
-    </ScrollView>
-
+          {showError && <ErrorBanner />}
+        </s-box>
+      </s-scroll-box>
+    </s-query-container>
   );
 }
 
@@ -686,82 +667,86 @@ function VariantCard({
     : "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png";
 
   return (
-    <BlockStack 
+    <s-stack
       background="subdued"
       border="base"
-      borderRadius="loose"
       padding="base"
-      spacing="none"
+      gap="none"
     >
-      <InlineLayout spacing="base" columns={["auto", "fill", "auto"]} blockAlignment="center">
+      <s-grid
+        gap="base"
+        gridTemplateColumns={`@container (inline-size > ${WIDE_LAYOUT_MIN}) 'auto 1fr auto', 'auto 1fr'`}
+        alignItems="center"
+      >
         {/* Image */}
-        <View maxInlineSize={80}>
-          <Image
-            source={finalImageUrl}
+        <s-box maxInlineSize="80px">
+          <s-image
+            src={finalImageUrl}
             alt={product.title || "Product image"}
-            size="fill"
+            inlineSize="fill"
             border="none"
-            borderRadius="loose"
           />
-        </View>
+        </s-box>
 
         {/* Text Info: Title / Desc / Price */}
-        <BlockStack spacing="extraTight">
-          <InlineLayout
-            spacing="tight"
-            padding={["none", "none", "none", "none"]}
-            columns={["auto", "fill"]}
-            blockAlignment="start"
+        <s-stack gap="small-400">
+          <s-grid
+            gap="small-200"
+            padding="none none none none"
+            gridTemplateColumns="auto 1fr"
+            alignItems="start"
           >
-             {isGWP && <Icon source="gift" />}
-            <Heading level={3}> {title}</Heading>
-          </InlineLayout>
-      
-          <TextBlock>
-            <Text>{description}</Text> 
+            {isGWP && <s-icon type="gift-card" />}
+            <s-heading> {title}</s-heading>
+          </s-grid>
+
+          <s-paragraph>
+            <s-text>{description}</s-text>
             {" "}
-            <Text emphasis="bold">{priceWithSymbol}</Text>
-          </TextBlock>
+            <s-text type="strong">{priceWithSymbol}</s-text>
+          </s-paragraph>
 
-          <InlineLayout
-          display={Style.default(['auto']).when({ viewportInlineSize: { min: 'small' } }, 'none')}
-          spacing="base"
-          columns={["fill"]}
-          blockAlignment="center"
+          <s-grid
+            display={`@container (inline-size > ${WIDE_LAYOUT_MIN}) none, auto`}
+            gap="base"
+            gridTemplateColumns="1fr"
+            alignItems="center"
           >
-            <Button
-              kind={isGWP ? "secondary" : "secondary" }
+            <s-button
+              variant={isGWP ? "secondary" : "secondary"}
+              inlineSize="fill"
               loading={adding}
-              onPress={() => handleAddToCart(variant.id)}
+              onClick={() => handleAddToCart(variant.id)}
             >
-              {isGWP ? translate('add-free-gift') : translate('add-to-cart') }
-            </Button>
-        </InlineLayout>
-        </BlockStack>
+              {isGWP ? translate('add-free-gift') : translate('add-to-cart')}
+            </s-button>
+          </s-grid>
+        </s-stack>
 
-        <InlineLayout
-          display={Style.default(['none']).when({ viewportInlineSize: { min: 'small' } }, 'auto')}
-          spacing="base"
-          columns={["fill"]}
-          blockAlignment="center"
+        <s-grid
+          display={`@container (inline-size > ${WIDE_LAYOUT_MIN}) auto, none`}
+          gap="base"
+          gridTemplateColumns="1fr"
+          alignItems="center"
+        >
+          <s-button
+            variant={isGWP ? "secondary" : "secondary"}
+            inlineSize="fill"
+            loading={adding}
+            onClick={() => handleAddToCart(variant.id)}
           >
-            <Button
-              kind={isGWP ? "secondary" : "secondary" }
-              loading={adding}
-              onPress={() => handleAddToCart(variant.id)}
-            >
-              {isGWP ? translate('add-free-gift') : translate('add-to-cart') }
-            </Button>
-        </InlineLayout>
-      </InlineLayout>
-    </BlockStack>
+            {isGWP ? translate('add-free-gift') : translate('add-to-cart')}
+          </s-button>
+        </s-grid>
+      </s-grid>
+    </s-stack>
   );
 }
 
 function ErrorBanner() {
   return (
-    <Banner status="critical">
+    <s-banner tone="critical">
       There was an issue adding this product. Please try again.
-    </Banner>
+    </s-banner>
   );
 }

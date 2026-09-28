@@ -7,7 +7,7 @@
 #
 # NOTE: this block only MERCHANDISES + links. True purchase gating must be
 # enforced on the storefront (e.g. Locksmith tag rule on the collection/PDP).
-api_version = "2025-07"
+api_version = "2026-04"
 
 [[extensions]]
 name = "Honey Club Exclusives"

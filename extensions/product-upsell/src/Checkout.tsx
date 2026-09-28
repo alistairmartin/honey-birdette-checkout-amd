@@ -1,35 +1,26 @@
-import React, { useEffect, useState } from "react";
+import '@shopify/ui-extensions/preact';
+import {render} from 'preact';
+import {useEffect, useState} from 'preact/hooks';
 import {
-  reactExtension,
-  Divider,
-  ProductThumbnail,
-  Banner,
-  Heading,
-  Button,
-  InlineLayout,
-  BlockStack,
-  Text,
-  View,
-  TextBlock,
-  Image,
-  InlineSpacer,
-  SkeletonText,
-  SkeletonImage,
   useCartLines,
-  useApplyCartLinesChange,
-  useApi,
   useSettings,
   useTranslate,
-  Style,
-  Icon,
-} from "@shopify/ui-extensions-react/checkout";
+} from '@shopify/ui-extensions/checkout/preact';
 
 // Set up the entry point for the extension
-export default reactExtension("purchase.checkout.block.render", () => <App />);
+export default function extension() {
+  render(<App />, document.body);
+}
+
+// The legacy Style helper switched layouts on the viewport ("small" breakpoint).
+// Polaris web components only support container queries, so the switch is now
+// based on the width of the extension's own container. Phones render the block
+// at roughly 400px or less, tablet and desktop checkouts render it wider.
+const DISPLAY_NARROW_ONLY = '@container (inline-size > 420px) none, auto';
+const DISPLAY_WIDE_ONLY = '@container (inline-size > 420px) auto, none';
 
 function App() {
-  const { query, i18n } = useApi();
-  const applyCartLinesChange = useApplyCartLinesChange();
+  const i18n = shopify.i18n;
   const [variant, setVariant] = useState(null);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -37,7 +28,7 @@ function App() {
 
   const lines = useCartLines();
   const { product, title, description, gwp } = useSettings();
-  const variantId = product ?? "gid://shopify/ProductVariant/41816694947955";
+  const variantId = (product ?? "gid://shopify/ProductVariant/41816694947955") as string;
 
   const titleSetting = title ?? 'Upsell Title';
   const descriptionSetting = description ?? 'Upsell Description.';
@@ -58,7 +49,7 @@ function App() {
 
   async function handleAddToCart(variantId) {
     setAdding(true);
-    const result = await applyCartLinesChange({
+    const result = await shopify.applyCartLinesChange({
       type: "addCartLine",
       merchandiseId: variantId,
       quantity: 1,
@@ -77,7 +68,7 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await query(
+      const response = await shopify.query<{ node: any }>(
         `query ($variantId: ID!) {
           node(id: $variantId) {
             ... on ProductVariant {
@@ -107,7 +98,7 @@ function App() {
       } else {
         console.error('No variant response found:', response.errors || 'Unknown error');
       }
-      
+
     } catch (error) {
       console.error('Error fetching variant:', error);
     } finally {
@@ -151,58 +142,55 @@ function App() {
   );
 }
 
-function LoadingSkeleton({titleSetting,descriptionSetting}) {
+function LoadingSkeleton({titleSetting, descriptionSetting}: {titleSetting?: any, descriptionSetting?: any}) {
   const translate = useTranslate();
   return (
+    <s-query-container>
+      <s-stack gap="small-200" background="subdued" borderWidth="large" padding="base">
+        <s-grid
+          gap="base"
+          padding="small-200 none base none"
+          gridTemplateColumns="1fr"
+          alignItems="center"
+        >
+          <s-stack gap="none">
+            <s-grid
+              padding="none none small-200 none"
+              gap="base"
+              gridTemplateColumns="auto 1fr"
+              alignItems="start"
+            >
+              <s-heading>{titleSetting}</s-heading>
+            </s-grid>
+            <s-paragraph>
+              <s-text>{descriptionSetting}</s-text> <s-text type="strong">...</s-text>
+            </s-paragraph>
+          </s-stack>
+        </s-grid>
 
-    <BlockStack spacing="tight" background="subdued" borderWidth="medium" padding="base">
-      <InlineLayout
-          spacing="base"
-          padding={["tight", "none", "base", "none"]}
-          columns={["fill"]}
-          blockAlignment="center">
-
-          <BlockStack spacing="none">
-            <InlineLayout
-            padding={["none", "none", "tight", "none"]}
-            spacing="base"
-            columns={["auto", "fill"]}
-            blockAlignment="start"> 
-              <Heading level={2}>{titleSetting}</Heading>
-            </InlineLayout>
-            <TextBlock>
-              <Text>{descriptionSetting}</Text> <Text emphasis="bold">...</Text>
-            </TextBlock>
-          </BlockStack>
-      </InlineLayout>
-
-      <BlockStack spacing="loose">
-        <InlineLayout
-          padding={["none", "none", "tight", "none"]}
-          spacing="base"
-          columns={Style.default(['20%', '80%'])
-            .when({ viewportInlineSize: { min: 'small' } }, ['20%', '40%'])
-          }
-          blockAlignment="center"
+        <s-stack gap="large-200">
+          <s-grid
+            padding="none none small-200 none"
+            gap="base"
+            gridTemplateColumns="@container (inline-size > 420px) '20% 40%', '20% 1fr'"
+            alignItems="center"
           >
+            <s-box>
+              <s-image aspectRatio="1" inlineSize="fill" />
+            </s-box>
 
-          <View>
-            <SkeletonImage aspectRatio={1} size="fill" />
-          </View>
-
-            <Button
-              kind="secondary"
+            <s-button
+              variant="secondary"
+              inlineSize="fill"
               disabled
               accessibilityLabel={`Add Items to cart`}
             >
               {translate('add-to-cart')}
-            </Button>
-
-        </InlineLayout>
-      </BlockStack>
-    </BlockStack>
-    
-    
+            </s-button>
+          </s-grid>
+        </s-stack>
+      </s-stack>
+    </s-query-container>
   );
 }
 
@@ -222,141 +210,134 @@ function ProductOffer({ product, i18n, adding, handleAddToCart, showError, title
   };
   const priceWithSymbol = formattedPrice
     .replace(/\b(EUR|USD|AUD|NZD|GBP|CAD)\b/g, (match) => currencySymbols[match])
-    .replace(/\s+/g, ''); 
+    .replace(/\s+/g, '');
   const imageUrl =
     productData.images.nodes[0]?.url
       ? appendWidth(productData.images.nodes[0].url)
       : appendWidth("https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png?format=webp&v=1530129081");
-  
+
   return (
-    <BlockStack spacing="tight" background="subdued" border="base" borderWidth="base" padding="base">
-      <InlineLayout
-        display={Style.default(['auto']).when({ viewportInlineSize: { min: 'small' } }, 'none')}
-        spacing="base"
-        columns={["fill"]}
-        blockAlignment="center"
-      >
-        <BlockStack spacing="none">
-          <InlineLayout
-            spacing="base"
-            padding={["none", "none", "tight", "none"]}
-            columns={["auto", "fill"]}
-            blockAlignment="start"
-          >
-             {gwpSetting && <Icon source="bag" />}
-            <Heading level={2}> {titleSetting}</Heading>
-          </InlineLayout>
-          <InlineLayout display={Style.default(['none']).when({ viewportInlineSize: { min: 'small' } }, 'auto')}>
-            <TextBlock>
-              <Text>{descriptionSetting}</Text>{" "}
-              <Text emphasis="bold">
-                {priceWithSymbol}
-              </Text>
-            </TextBlock>
-          </InlineLayout>
-        </BlockStack>
-      </InlineLayout>
-
-      <BlockStack spacing="loose">
-        <InlineLayout
-          padding={["none", "none", "tight", "none"]}
-          spacing="base"
-          columns={Style.default(['20%', '80%']).when({ viewportInlineSize: { min: 'small' } }, ['20%', 'fill'])}
-          blockAlignment="center"
+    <s-query-container>
+      <s-stack gap="small-200" background="subdued" border="base" borderWidth="base" padding="base">
+        <s-grid
+          display={DISPLAY_NARROW_ONLY}
+          gap="base"
+          gridTemplateColumns="1fr"
+          alignItems="center"
         >
-          <View>
-            <Image
-              size="fill"
-              background="base"
-              border="none"
-              borderRadius="loose"
-              source={imageUrl}
-              alt={productData.title}
-            />
-          </View>
+          <s-stack gap="none">
+            <s-grid
+              gap="base"
+              padding="none none small-200 none"
+              gridTemplateColumns="auto 1fr"
+              alignItems="start"
+            >
+              {gwpSetting && <s-icon type="bag" />}
+              <s-heading> {titleSetting}</s-heading>
+            </s-grid>
+            <s-grid display={DISPLAY_WIDE_ONLY}>
+              <s-paragraph>
+                <s-text>{descriptionSetting}</s-text>{" "}
+                <s-text type="strong">
+                  {priceWithSymbol}
+                </s-text>
+              </s-paragraph>
+            </s-grid>
+          </s-stack>
+        </s-grid>
 
-          <View>
-            <BlockStack 
-            spacing="base" 
-            display={Style.default(['none']).when({ viewportInlineSize: { min: 'small' } }, 'auto')}>
-              <InlineLayout
-                spacing="base"
-                columns={["auto", "auto"]}
-                blockAlignment="start"
+        <s-stack gap="large-200">
+          <s-grid
+            padding="none none small-200 none"
+            gap="base"
+            gridTemplateColumns="20% 1fr"
+            alignItems="center"
+          >
+            <s-box>
+              <s-image
+                inlineSize="fill"
+                border="none"
+                src={imageUrl}
+                alt={productData.title}
+              />
+            </s-box>
+
+            <s-box>
+              <s-stack
+                gap="base"
+                display={DISPLAY_WIDE_ONLY}
               >
-                {gwpSetting && <Icon source="gift" />}
-                <Heading level={2}>{titleSetting}</Heading>
-              </InlineLayout>
-              <TextBlock>
-                <Text>{descriptionSetting}</Text>{" "}
-                <Text emphasis="bold">
-                  {gwpSetting ? "FREE" : priceWithSymbol }
-                </Text>
-              </TextBlock>
-
-              <InlineLayout
-                  spacing="base"
-                  columns={Style.default(['100%']).when({ viewportInlineSize: { min: 'small' } }, ['100%'])}
-                  blockAlignment="center"
+                <s-grid
+                  gap="base"
+                  gridTemplateColumns="auto auto"
+                  alignItems="start"
                 >
-                  <View>
-                  <Button
-                      kind="secondary"
+                  {gwpSetting && <s-icon type="gift-card" />}
+                  <s-heading>{titleSetting}</s-heading>
+                </s-grid>
+                <s-paragraph>
+                  <s-text>{descriptionSetting}</s-text>{" "}
+                  <s-text type="strong">
+                    {gwpSetting ? "FREE" : priceWithSymbol }
+                  </s-text>
+                </s-paragraph>
+
+                <s-grid
+                  gap="base"
+                  gridTemplateColumns="100%"
+                  alignItems="center"
+                >
+                  <s-box>
+                    <s-button
+                      variant="secondary"
+                      inlineSize="fill"
                       loading={adding}
                       accessibilityLabel={`Add ${productData.title} to cart`}
-                      onPress={() => handleAddToCart(product.id)}
+                      onClick={() => handleAddToCart(product.id)}
                     >
-                         {gwpSetting ? translate('add-free-gift') : translate('add-to-cart') }
-                    </Button>
-                  </View>
+                      {gwpSetting ? translate('add-free-gift') : translate('add-to-cart') }
+                    </s-button>
+                  </s-box>
+                </s-grid>
+              </s-stack>
 
-       
-              </InlineLayout>
+              <s-stack gap="base" display={DISPLAY_NARROW_ONLY}>
+                <s-paragraph>
+                  <s-text>{descriptionSetting}</s-text>{" "}
+                  <s-text type="strong">
+                    {gwpSetting ? "FREE" : priceWithSymbol }
+                  </s-text>
+                </s-paragraph>
 
-         
-            </BlockStack>
-    
-            <BlockStack spacing="base" display={Style.default(['auto']).when({ viewportInlineSize: { min: 'small' } }, 'none')}>
-              <TextBlock>
-                <Text>{descriptionSetting}</Text>{" "}
-                <Text emphasis="bold">
-                  {gwpSetting ? "FREE" : priceWithSymbol }
-                </Text>
-              </TextBlock>
-
-              <InlineLayout
-                  spacing="base"
-                  columns={Style.default(['fill']).when({ viewportInlineSize: { min: 'small' } }, ['fill'])}
-                  blockAlignment="center"
+                <s-grid
+                  gap="base"
+                  gridTemplateColumns="1fr"
+                  alignItems="center"
                 >
-
-              <Button
-                kind="secondary"
-                loading={adding}
-                accessibilityLabel={`Add ${productData.title} to cart`}
-                onPress={() => handleAddToCart(product.id)}
-              >
-                {gwpSetting ? translate('add-free-gift') : translate('add-to-cart') }
-              </Button>
-
-
-
-            </InlineLayout>
-    
-            </BlockStack>
-
-          </View>
-        </InlineLayout>
-      </BlockStack>
-      {showError && <ErrorBanner />}
-    </BlockStack>
+                  <s-button
+                    variant="secondary"
+                    inlineSize="fill"
+                    loading={adding}
+                    accessibilityLabel={`Add ${productData.title} to cart`}
+                    onClick={() => handleAddToCart(product.id)}
+                  >
+                    {gwpSetting ? translate('add-free-gift') : translate('add-to-cart') }
+                  </s-button>
+                </s-grid>
+              </s-stack>
+            </s-box>
+          </s-grid>
+        </s-stack>
+        {showError && <ErrorBanner />}
+      </s-stack>
+    </s-query-container>
   );
 }
 
 function ErrorBanner() {
   return (
-    <Banner status="critical">
+    <s-banner tone="critical">
       There was an issue adding this product. Please try again.
-    </Banner>
+    </s-banner>
   );
 }
