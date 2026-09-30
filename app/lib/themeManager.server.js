@@ -212,8 +212,25 @@ export async function duplicateTheme(shop, themeId, name) {
   throwOnUserErrors(payload?.userErrors, "Duplicate failed");
 
   const newTheme = payload?.newTheme;
-  if (!newTheme) throw new Error("Shopify didn't return the duplicated theme");
+  if (!newTheme) throw new Error(await missingDuplicateReason(admin));
   return newTheme;
+}
+
+// Shopify's cap on themes per store. At the cap, themeDuplicate comes back with
+// no theme and no userErrors, so the reason has to be worked out from the count.
+const THEME_LIMIT = 100;
+
+async function missingDuplicateReason(admin) {
+  const count = await listThemesWith(admin)
+    .then((themes) => themes.length)
+    .catch(() => null);
+
+  if (count !== null && count >= THEME_LIMIT) {
+    return `Theme limit reached: this store has ${count} themes and the maximum is ${THEME_LIMIT}. Remove unused themes to add more.`;
+  }
+  return count === null
+    ? "Shopify didn't return the duplicated theme"
+    : `Shopify didn't return the duplicated theme (store has ${count} of ${THEME_LIMIT} themes)`;
 }
 
 export async function renameTheme(shop, themeId, name) {

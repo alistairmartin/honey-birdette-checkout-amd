@@ -21,6 +21,10 @@ module = "./src/Checkout.tsx"
 target = "purchase.checkout.block.render"
 
 [extensions.capabilities]
+# Lets the extension fetch the banner image to read its dimensions, so the
+# image frame can match the real shape of the file.
+network_access = true
+
 # Gives your extension access to directly query Shopify’s storefront API.
 # https://shopify.dev/docs/api/checkout-ui-extensions/unstable/configuration#api-access
 api_access = true
@@ -43,6 +47,18 @@ api_access = true
   type = "single_line_text_field"
   name = "Link URL"
   description = "Optional. When set, the banner links to this URL."
+
+  [[extensions.settings.fields]]
+  key = "desktop_image_aspect_ratio"
+  type = "single_line_text_field"
+  name = "Desktop image aspect ratio"
+  description = "Optional. Width/height of the desktop image, for example 1254/192. Leave empty to detect it automatically."
+
+  [[extensions.settings.fields]]
+  key = "mobile_image_aspect_ratio"
+  type = "single_line_text_field"
+  name = "Mobile image aspect ratio"
+  description = "Optional. Width/height of the mobile image, for example 750/400. Leave empty to detect it automatically."
 
 # Gives your extension access to make external network calls, using the
 # JavaScript `fetch()` API. Learn more:

@@ -1,5 +1,6 @@
 import "@shopify/ui-extensions/preact";
 import {render} from "preact";
+import { useImageAspectRatio } from "./imageRatio";
 import {useEffect, useState} from "preact/hooks";
 import {
   useAuthenticatedAccountCustomer,
@@ -129,6 +130,12 @@ function HoneyClubExclusives() {
   const defaultSource = mobileImageUrl || desktopImageUrl;
   const desktopSource = desktopImageUrl || mobileImageUrl;
 
+  // <s-image> frames every image in an aspect ratio box (1/1 by default), so
+  // the real ratio is read from the file. Undefined means still loading.
+  const defaultRatio = useImageAspectRatio(defaultSource);
+  const desktopRatio = useImageAspectRatio(desktopSource);
+  const ratiosReady = defaultRatio !== undefined && desktopRatio !== undefined;
+
   // Nothing to show without imagery.
   if (!defaultSource && !desktopSource) {
     return null;
@@ -149,23 +156,38 @@ function HoneyClubExclusives() {
     <s-query-container>
       <s-box padding="base" borderRadius="base" background="subdued">
         <s-stack gap="base" alignItems="center">
-          {responsive ? (
+          {!ratiosReady ? null : responsive ? (
             <>
               <s-box
                 inlineSize="100%"
                 display={`@container (inline-size > ${DESKTOP_MIN_INLINE_SIZE}px) none, auto`}
               >
-                <s-image src={defaultSource} alt="Honey Club Exclusives" />
+                <s-image
+                  src={defaultSource}
+                  alt="Honey Club Exclusives"
+                  aspectRatio={defaultRatio || "1/1"}
+                  objectFit="cover"
+                />
               </s-box>
               <s-box
                 inlineSize="100%"
                 display={`@container (inline-size > ${DESKTOP_MIN_INLINE_SIZE}px) auto, none`}
               >
-                <s-image src={desktopSource} alt="Honey Club Exclusives" />
+                <s-image
+                  src={desktopSource}
+                  alt="Honey Club Exclusives"
+                  aspectRatio={desktopRatio || "1/1"}
+                  objectFit="cover"
+                />
               </s-box>
             </>
           ) : (
-            <s-image src={singleSource} alt="Honey Club Exclusives" />
+            <s-image
+              src={singleSource}
+              alt="Honey Club Exclusives"
+              aspectRatio={defaultRatio || "1/1"}
+              objectFit="cover"
+            />
           )}
           <s-stack gap="small-200" alignItems="center">
             <s-heading>{heading}</s-heading>

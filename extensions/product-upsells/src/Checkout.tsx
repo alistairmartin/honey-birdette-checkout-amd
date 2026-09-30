@@ -31,7 +31,9 @@ function App() {
   const [variant5, setVariant5] = useState(null);
 
   const [loading, setLoading] = useState(false);
-  const [adding, setAdding] = useState(false);
+  // Variant id currently being added (null when idle). Only the clicked card
+  // shows a spinner; the other cards are disabled until the add finishes.
+  const [adding, setAdding] = useState<string | null>(null);
   const [showError, setShowError] = useState(false);
   const [giftboxValid, setGiftboxValid] = useState(true);
   const [loadingGiftCheck, setLoadingGiftCheck] = useState(true);
@@ -279,14 +281,14 @@ useEffect(() => {
 
   // “Add to cart” button callback
   async function handleAddToCart(variantId) {
-    setAdding(true);
+    setAdding(String(variantId));
     const result = await shopify.applyCartLinesChange({
       type: "addCartLine",
       merchandiseId: String(variantId),
       quantity: 1,
       attributes: [{ key: "_checkout_upsell", value: "true" }],
     });
-    setAdding(false);
+    setAdding(null);
 
     if (result.type === "error") {
       setShowError(true);
@@ -633,6 +635,9 @@ function VariantCard({
   const priceAmount = variant?.price?.amount || "0.00";
   const imageUrl = product?.images?.nodes?.[0]?.url || "";
   const translate = useTranslate();
+  // `adding` holds the variant id being added, or null when idle.
+  const isAddingThis = Boolean(adding) && adding === String(variant?.id);
+  const isAddingOther = Boolean(adding) && !isAddingThis;
 
   if (title === "Upsell Title") {
     return null;
@@ -675,11 +680,11 @@ function VariantCard({
     >
       <s-grid
         gap="base"
-        gridTemplateColumns={`@container (inline-size > ${WIDE_LAYOUT_MIN}) 'auto 1fr auto', 'auto 1fr'`}
+        gridTemplateColumns={`@container (inline-size > ${WIDE_LAYOUT_MIN}) '80px 1fr auto', '80px 1fr'`}
         alignItems="center"
       >
         {/* Image */}
-        <s-box maxInlineSize="80px">
+        <s-box inlineSize="80px" maxInlineSize="80px">
           <s-image
             src={finalImageUrl}
             alt={product.title || "Product image"}
@@ -715,7 +720,8 @@ function VariantCard({
             <s-button
               variant={isGWP ? "secondary" : "secondary"}
               inlineSize="fill"
-              loading={adding}
+              loading={isAddingThis}
+              disabled={isAddingOther}
               onClick={() => handleAddToCart(variant.id)}
             >
               {isGWP ? translate('add-free-gift') : translate('add-to-cart')}
@@ -732,7 +738,8 @@ function VariantCard({
           <s-button
             variant={isGWP ? "secondary" : "secondary"}
             inlineSize="fill"
-            loading={adding}
+            loading={isAddingThis}
+            disabled={isAddingOther}
             onClick={() => handleAddToCart(variant.id)}
           >
             {isGWP ? translate('add-free-gift') : translate('add-to-cart')}

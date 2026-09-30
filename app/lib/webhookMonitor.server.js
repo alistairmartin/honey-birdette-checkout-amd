@@ -778,58 +778,79 @@ function floorHour(date) {
   return d;
 }
 
-// Re-aggregates every completed hour in the last RAW_WINDOW_DAYS. Rows are
+// Aggregates completed hours, starting at the last hour already rolled up
+// (or RAW_WINDOW_DAYS back on a first run or after a long gap). Rows are
 // stamped receivedAt = now on arrival, so older hours cannot change. Upsert
 // makes it idempotent, so running it more often than hourly is harmless.
+//
+// This shares one SQLite file with the webhook handler, so it must stay
+// light: the counting happens in the database one hour at a time, and each
+// hour's buckets are written in a single short transaction. Loading the raw
+// rows into Node (the first version) stalled webhook deliveries past
+// Shopify's 5 second limit every time the cron ran.
 export async function rollupHours({ now = new Date() } = {}) {
   const currentHour = floorHour(now);
-  const from = new Date(currentHour.getTime() - RAW_WINDOW_DAYS * 86400e3);
+  const windowStart = new Date(
+    currentHour.getTime() - RAW_WINDOW_DAYS * 86400e3,
+  );
 
-  const rows = await prisma.webhookEvent.findMany({
-    where: { receivedAt: { gte: from, lt: currentHour } },
-    select: {
-      shop: true,
-      topic: true,
-      classification: true,
-      receivedAt: true,
-      repeatOfPrev: true,
-    },
-  });
+  const last = await prisma.webhookHourly.aggregate({ _max: { hour: true } });
+  const lastHour = last._max.hour;
+  const from =
+    lastHour && lastHour > windowStart ? floorHour(lastHour) : windowStart;
 
-  const buckets = new Map();
-  for (const r of rows) {
-    const hour = floorHour(r.receivedAt);
-    const key = `${r.shop}|${r.topic}|${r.classification}|${hour.toISOString()}`;
-    const b = buckets.get(key) || {
-      shop: r.shop,
-      topic: r.topic,
-      classification: r.classification,
-      hour,
-      count: 0,
-      repeats: 0,
-    };
-    b.count += 1;
-    if (r.repeatOfPrev) b.repeats += 1;
-    buckets.set(key, b);
-  }
-
+  let rawRows = 0;
   let written = 0;
-  for (const b of buckets.values()) {
-    await prisma.webhookHourly.upsert({
+  for (
+    let hour = from;
+    hour < currentHour;
+    hour = new Date(hour.getTime() + 3600e3)
+  ) {
+    const groups = await prisma.webhookEvent.groupBy({
+      by: ["shop", "topic", "classification", "repeatOfPrev"],
       where: {
-        shop_topic_classification_hour: {
-          shop: b.shop,
-          topic: b.topic,
-          classification: b.classification,
-          hour: b.hour,
-        },
+        receivedAt: { gte: hour, lt: new Date(hour.getTime() + 3600e3) },
       },
-      create: b,
-      update: { count: b.count, repeats: b.repeats },
+      _count: { _all: true },
     });
-    written += 1;
+    if (!groups.length) continue;
+
+    const buckets = new Map();
+    for (const g of groups) {
+      const key = `${g.shop}|${g.topic}|${g.classification}`;
+      const b = buckets.get(key) || {
+        shop: g.shop,
+        topic: g.topic,
+        classification: g.classification,
+        hour,
+        count: 0,
+        repeats: 0,
+      };
+      b.count += g._count._all;
+      if (g.repeatOfPrev) b.repeats += g._count._all;
+      buckets.set(key, b);
+      rawRows += g._count._all;
+    }
+
+    await prisma.$transaction(
+      [...buckets.values()].map((b) =>
+        prisma.webhookHourly.upsert({
+          where: {
+            shop_topic_classification_hour: {
+              shop: b.shop,
+              topic: b.topic,
+              classification: b.classification,
+              hour: b.hour,
+            },
+          },
+          create: b,
+          update: { count: b.count, repeats: b.repeats },
+        }),
+      ),
+    );
+    written += buckets.size;
   }
-  return { rawRows: rows.length, buckets: written };
+  return { rawRows, buckets: written };
 }
 
 export async function pruneOld({ now = new Date() } = {}) {
@@ -841,16 +862,20 @@ export async function pruneOld({ now = new Date() } = {}) {
   const payloadCutoff = new Date(
     now.getTime() - PAYLOAD_RETENTION_DAYS * 86400e3,
   );
-  const [raw, payloads, hourly, queue] = await Promise.all([
-    prisma.webhookEvent.deleteMany({ where: { receivedAt: { lt: rawCutoff } } }),
-    prisma.webhookPayload.deleteMany({
-      where: { receivedAt: { lt: payloadCutoff } },
-    }),
-    prisma.webhookHourly.deleteMany({ where: { hour: { lt: hourlyCutoff } } }),
-    prisma.webhookQueueSample.deleteMany({
-      where: { sampledAt: { lt: queueCutoff } },
-    }),
-  ]);
+  // One at a time: SQLite has a single writer, so parallel deletes only queue
+  // behind each other and hold webhook inserts out for longer.
+  const raw = await prisma.webhookEvent.deleteMany({
+    where: { receivedAt: { lt: rawCutoff } },
+  });
+  const payloads = await prisma.webhookPayload.deleteMany({
+    where: { receivedAt: { lt: payloadCutoff } },
+  });
+  const hourly = await prisma.webhookHourly.deleteMany({
+    where: { hour: { lt: hourlyCutoff } },
+  });
+  const queue = await prisma.webhookQueueSample.deleteMany({
+    where: { sampledAt: { lt: queueCutoff } },
+  });
   return {
     raw: raw.count,
     hourly: hourly.count,

@@ -23,18 +23,18 @@ export const action = async ({ request }) => {
   // Admin API, and it runs even when the shop has uninstalled (no admin) so
   // the record is complete. See WEBHOOK_MONITOR_HANDOFF.md.
   if (MONITORED_TOPICS.has(topic)) {
-    try {
-      await recordWebhookEvent({
-        shop,
-        topic,
-        payload,
-        headers: monitorHeaders,
-        payloadBytes,
-      });
-    } catch (err) {
-      // Never let a monitoring failure make Shopify retry the delivery.
+    // Not awaited: Shopify fails a delivery that takes over 5 seconds, and a
+    // busy database (rollup, prune, a heavy dashboard read) must never be the
+    // reason. The 200 goes out now and the insert finishes in the background.
+    recordWebhookEvent({
+      shop,
+      topic,
+      payload,
+      headers: monitorHeaders,
+      payloadBytes,
+    }).catch((err) => {
       console.error(`[webhook-monitor] ${topic} on ${shop} failed:`, err?.message || err);
-    }
+    });
     throw new Response();
   }
 

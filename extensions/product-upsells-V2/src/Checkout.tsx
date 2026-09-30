@@ -155,7 +155,9 @@ function App() {
   const [variant4, setVariant4] = useState<any>(null);
 
   const [loading, setLoading] = useState(false);
-  const [adding, setAdding] = useState(false);
+  // Variant id currently being added (null when idle). Only the clicked card
+  // shows a spinner; the other cards are disabled until the add finishes.
+  const [adding, setAdding] = useState<string | null>(null);
   const [showError, setShowError] = useState(false);
   const [giftboxValid, setGiftboxValid] = useState(true);
   const [loadingGiftCheck, setLoadingGiftCheck] = useState(true);
@@ -468,11 +470,11 @@ useEffect(() => {
 
   // “Add to cart” button callback
   async function handleAddToCart(variantId, isGiftboxParam?: boolean, compareAtAmount?: string | number | null) {
-    setAdding(true);
+    setAdding(String(variantId));
     // Block adding gift box when Pickup / Pickup Point is selected
     if (isGiftboxParam && pickupSelected) {
       console.log('Blocking gift box add: pickup/pickupPoint selected');
-      setAdding(false);
+      setAdding(null);
       return;
     }
 
@@ -497,7 +499,7 @@ useEffect(() => {
       quantity: 1,
       attributes,
     });
-    setAdding(false);
+    setAdding(null);
 
     if (result.type === "error") {
       setShowError(true);
@@ -854,6 +856,11 @@ function VariantCard({
   const mainImage = images[activeIdx];
 
   const selectedVariantId = card.hasOptions && selected ? selected.id : variant?.id;
+  // `adding` holds the variant id being added, or null when idle.
+  const isAddingThis =
+    Boolean(adding) &&
+    (adding === variant?.id || card.variants.some((v) => v.id === adding));
+  const isAddingOther = Boolean(adding) && !isAddingThis;
   const priceAmount = (card.hasOptions && selected ? selected.price : variant?.price?.amount) || "0.00";
   const compareAtAmount = (card.hasOptions && selected ? selected.compareAtPrice : variant?.compareAtPrice?.amount) || null;
   const imageUrl = images[0]?.url || "";
@@ -981,8 +988,8 @@ function VariantCard({
         <s-button
           variant="primary"
           inlineSize="fill"
-          loading={adding}
-          disabled={!selected}
+          loading={isAddingThis}
+          disabled={!selected || isAddingOther}
           command="--hide"
           commandFor={modalId}
           onClick={() => {
@@ -1008,15 +1015,17 @@ function VariantCard({
     >
       <s-grid
         gap="base"
-        gridTemplateColumns={isGiftboxDisabled ? "auto 1fr" : "auto 1fr auto"}
+        gridTemplateColumns={isGiftboxDisabled ? "64px 1fr" : "64px 1fr auto"}
         alignItems="center"
       >
         {/* Image */}
-        <s-box maxInlineSize="64px">
+        <s-box inlineSize="64px" maxInlineSize="64px">
           <s-image
             src={finalImageUrl}
             alt={product.title || "Product image"}
             inlineSize="fill"
+            aspectRatio="1"
+            objectFit="cover"
             border="none"
             borderRadius="base"
           />
@@ -1068,14 +1077,15 @@ function VariantCard({
             ) : (
               card.hasOptions ? (
                 // Multi-variant: open the size picker instead of adding blindly.
-                <s-button variant="secondary" inlineSize="fill" loading={adding} command="--show" commandFor={modalId}>
+                <s-button variant="secondary" inlineSize="fill" loading={isAddingThis} disabled={isAddingOther} command="--show" commandFor={modalId}>
                   {addLabel}
                 </s-button>
               ) : (
                 <s-button
                   variant="secondary"
                   inlineSize="fill"
-                  loading={adding}
+                  loading={isAddingThis}
+                  disabled={isAddingOther}
                   onClick={() => handleAddToCart(variant.id, isGiftbox, isGWP ? null : compareAtAmount)}
                 >
                   {addLabel}

@@ -171,6 +171,8 @@ model WebhookEvent {
   @@index([shop, receivedAt])
   @@index([shop, topic, receivedAt])
   @@index([shop, resourceType, resourceId, receivedAt])
+  // The hourly rollup and the prune range over receivedAt across all shops.
+  @@index([receivedAt])
 }
 
 // Optional: legacy backend queue depth, posted every minute by a cron on that
