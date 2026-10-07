@@ -32,6 +32,7 @@ function PromotionBanner() {
   // <s-image> frames every image in an aspect ratio box (1/1 by default), so
   // the real ratio has to be supplied or a wide banner gets empty bands above
   // and below. Merchant settings win; otherwise the ratio is read from the file.
+  // If it cannot be read, the whole image is shown uncropped in the default frame.
   const desktopOverride = parseAspectRatio(settings.desktop_image_aspect_ratio);
   const mobileOverride = parseAspectRatio(settings.mobile_image_aspect_ratio);
   const defaultRatio = useImageAspectRatio(
@@ -66,7 +67,7 @@ function PromotionBanner() {
           src={defaultSource}
           alt="Promotional banner"
           aspectRatio={defaultRatio || "1/1"}
-          objectFit="cover"
+          objectFit={defaultRatio ? "cover" : "contain"}
         />
       </s-box>
       <s-box
@@ -76,7 +77,7 @@ function PromotionBanner() {
           src={desktopSource}
           alt="Promotional banner"
           aspectRatio={desktopRatio || "1/1"}
-          objectFit="cover"
+          objectFit={desktopRatio ? "cover" : "contain"}
         />
       </s-box>
     </s-query-container>
@@ -85,7 +86,7 @@ function PromotionBanner() {
       src={defaultSource || desktopSource}
       alt="Promotional banner"
       aspectRatio={defaultRatio || "1/1"}
-      objectFit="cover"
+      objectFit={defaultRatio ? "cover" : "contain"}
     />
   );
 

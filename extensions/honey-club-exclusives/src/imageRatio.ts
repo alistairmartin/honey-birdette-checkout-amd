@@ -90,20 +90,23 @@ async function detectAspectRatio(url: string): Promise<AspectRatio | null> {
     console.error(`Honey Club Exclusives: image request failed with status ${response.status}`, url);
     return null;
   }
-  const blob = await response.blob();
-  const bytes = new Uint8Array(await blob.arrayBuffer());
+  // Read the body directly. Safari runs extensions in a worker with an opaque
+  // origin, where reading a Blob (response.blob() then blob.arrayBuffer())
+  // throws NotReadableError.
+  const type = response.headers.get("content-type") || "";
+  const bytes = new Uint8Array(await response.arrayBuffer());
 
   let size = readDimensions(bytes);
   if (!size && typeof createImageBitmap === "function") {
     // Formats the header parser does not cover (for example AVIF).
-    const bitmap = await createImageBitmap(blob);
+    const bitmap = await createImageBitmap(new Blob([bytes], { type }));
     size = { width: bitmap.width, height: bitmap.height };
     bitmap.close?.();
   }
 
   if (!size || !(size.width > 0) || !(size.height > 0)) {
     console.error(
-      `Honey Club Exclusives: could not read dimensions from ${bytes.length} bytes of type "${blob.type}"`,
+      `Honey Club Exclusives: could not read dimensions from ${bytes.length} bytes of type "${type}"`,
       url,
     );
     return null;

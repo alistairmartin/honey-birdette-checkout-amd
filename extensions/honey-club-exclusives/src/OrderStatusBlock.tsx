@@ -166,7 +166,7 @@ function HoneyClubExclusives() {
                   src={defaultSource}
                   alt="Honey Club Exclusives"
                   aspectRatio={defaultRatio || "1/1"}
-                  objectFit="cover"
+                  objectFit={defaultRatio ? "cover" : "contain"}
                 />
               </s-box>
               <s-box
@@ -177,7 +177,7 @@ function HoneyClubExclusives() {
                   src={desktopSource}
                   alt="Honey Club Exclusives"
                   aspectRatio={desktopRatio || "1/1"}
-                  objectFit="cover"
+                  objectFit={desktopRatio ? "cover" : "contain"}
                 />
               </s-box>
             </>
@@ -186,7 +186,7 @@ function HoneyClubExclusives() {
               src={singleSource}
               alt="Honey Club Exclusives"
               aspectRatio={defaultRatio || "1/1"}
-              objectFit="cover"
+              objectFit={defaultRatio ? "cover" : "contain"}
             />
           )}
           <s-stack gap="small-200" alignItems="center">
