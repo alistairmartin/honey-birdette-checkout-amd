@@ -1,0 +1,16 @@
+{
+  "levelTitle": "Honey Club level",
+  "spentThisYear": "{{amount}} spent this year",
+  "toNextTier": "{{amount}} to {{tier}}",
+  "topTier": "You've reached our highest tier, Honey.",
+  "maintainedUntil": "{{tier}} maintained until {{date}}",
+  "progressLabel": "Progress to {{tier}}",
+  "balanceTitle": "Honey Club balance",
+  "balanceNote": "Redeemable at checkout",
+  "eyebrow": "The Honey Club",
+  "joinHeading": "Join the club, Honey",
+  "joinBody": "$30 off* your first purchase, when signing up to The Honey Club",
+  "joinBenefit1": "Birthday treat. $25 voucher*",
+  "joinBenefit2": "Shipping perks. Free domestic standard shipping, orders $150+",
+  "joinCta": "Join now"
+}

@@ -1,95 +1,58 @@
 import {
-  DiscountClass,
-  OrderDiscountSelectionStrategy,
-  ProductDiscountSelectionStrategy,
   CartInput,
   CartLinesDiscountsGenerateRunResult,
 } from '../generated/api';
 
+const MESSAGE = "Sorry Honey, you can't use your staff discount with certain items in your cart.";
 
+// Rejects every entered discount code when a customer tagged "Honey Birdette Staff"
+// has a product tagged "stop-staff-discount-code" in the cart.
 export function cartLinesDiscountsGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
-  if (!input.cart.lines.length) {
+  if (!input.cart.buyerIdentity?.customer?.isStaff) {
     return {operations: []};
   }
 
-  const email = input.cart.buyerIdentity?.email ?? '';
-  if (email.toLowerCase().includes('@honeybirdette.com')) {
+  const restrictedTitles: string[] = [];
+  for (const line of input.cart.lines) {
+    const merchandise = line.merchandise;
+    if (!('product' in merchandise) || !merchandise.product.stopStaffDiscount) continue;
+    const title = merchandise.product.title;
+    if (!restrictedTitles.includes(title)) restrictedTitles.push(title);
+  }
+
+  if (!restrictedTitles.length) {
     return {operations: []};
   }
 
-  const hasOrderDiscountClass = input.discount.discountClasses.includes(
-    DiscountClass.Order,
-  );
-  const hasProductDiscountClass = input.discount.discountClasses.includes(
-    DiscountClass.Product,
-  );
+  const codesToReject = input.enteredDiscountCodes
+    .filter((dc) => dc.rejectable)
+    .map((dc) => ({code: dc.code}));
 
-  if (!hasOrderDiscountClass && !hasProductDiscountClass) {
+  if (!codesToReject.length) {
     return {operations: []};
   }
 
-  const maxCartLine = input.cart.lines.reduce((maxLine, line) => {
-    if (line.cost.subtotalAmount.amount > maxLine.cost.subtotalAmount.amount) {
-      return line;
-    }
-    return maxLine;
-  }, input.cart.lines[0]);
-
-  const operations = [];
-
-  if (hasOrderDiscountClass) {
-    operations.push({
-      orderDiscountsAdd: {
-        candidates: [
-          {
-            message: '10% OFF ORDER',
-            targets: [
-              {
-                orderSubtotal: {
-                  excludedCartLineIds: [],
-                },
-              },
-            ],
-            value: {
-              percentage: {
-                value: 10,
-              },
-            },
-          },
-        ],
-        selectionStrategy: OrderDiscountSelectionStrategy.First,
-      },
-    });
+  // Append product names while the message stays within the 120 char limit
+  let message = MESSAGE;
+  const fittingTitles: string[] = [];
+  for (const title of restrictedTitles) {
+    if (`${MESSAGE} (${[...fittingTitles, title].join(', ')})`.length > 120) break;
+    fittingTitles.push(title);
   }
-
-  if (hasProductDiscountClass) {
-    operations.push({
-      productDiscountsAdd: {
-        candidates: [
-          {
-            message: '20% OFF PRODUCT',
-            targets: [
-              {
-                cartLine: {
-                  id: maxCartLine.id,
-                },
-              },
-            ],
-            value: {
-              percentage: {
-                value: 20,
-              },
-            },
-          },
-        ],
-        selectionStrategy: ProductDiscountSelectionStrategy.First,
-      },
-    });
+  if (fittingTitles.length) {
+    message = `${MESSAGE} (${fittingTitles.join(', ')})`;
   }
 
   return {
-    operations,
+    operations: [
+      {
+        enteredDiscountCodesReject: {
+          message,
+          codes: codesToReject,
+        },
+      },
+    ],
   };
 }

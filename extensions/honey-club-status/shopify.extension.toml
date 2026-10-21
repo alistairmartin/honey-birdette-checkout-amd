@@ -1,0 +1,80 @@
+# Honey Club Status - Customer Account UI extension
+# Members see two cards: "Honey Club level" (tier badge, spend this year,
+# progress to next tier, maintained-until date) and "Honey Club balance".
+# Non-members see a "Join the club" card instead.
+#
+# Data comes from Omneo via the app backend route /api/honey-club,
+# authenticated with the customer-account session token
+# (see app/routes/api.honey-club.jsx). If the backend fails, the block renders
+# nothing rather than wrongly showing "Join" to a member.
+api_version = "2026-07"
+
+[[extensions]]
+name = "Honey Club Status"
+handle = "honey-club-status"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/HoneyClubStatus.tsx"
+target = "customer-account.profile.block.render"
+
+[extensions.capabilities]
+# network_access: lets the extension call the app backend for Omneo data.
+api_access = true
+network_access = true
+
+[extensions.settings]
+  [[extensions.settings.fields]]
+  key = "api_url"
+  type = "single_line_text_field"
+  name = "App backend URL"
+  description = "Base URL of the AMD Checkout app (e.g. https://honey-birdette-checkout-amd.onrender.com). No trailing slash."
+
+  # --- Join the club (non-members) ---
+  [[extensions.settings.fields]]
+  key = "join_image_url"
+  type = "single_line_text_field"
+  name = "Join: image URL"
+  description = "Image shown beside the Join copy. Leave blank for text only."
+
+  [[extensions.settings.fields]]
+  key = "join_heading"
+  type = "single_line_text_field"
+  name = "Join: heading"
+  description = "Default: Join the club, Honey"
+
+  [[extensions.settings.fields]]
+  key = "join_body"
+  type = "single_line_text_field"
+  name = "Join: intro"
+  description = "Default: $30 off* your first purchase, when signing up to The Honey Club"
+
+  [[extensions.settings.fields]]
+  key = "join_benefit_1"
+  type = "single_line_text_field"
+  name = "Join: benefit 1"
+  description = "Default: Birthday treat. $25 voucher*"
+
+  [[extensions.settings.fields]]
+  key = "join_benefit_2"
+  type = "single_line_text_field"
+  name = "Join: benefit 2"
+  description = "Default: Shipping perks. Free domestic standard shipping, orders $150+"
+
+  [[extensions.settings.fields]]
+  key = "join_benefit_3"
+  type = "single_line_text_field"
+  name = "Join: benefit 3"
+  description = "Optional third benefit. Leave blank to hide."
+
+  [[extensions.settings.fields]]
+  key = "join_cta_text"
+  type = "single_line_text_field"
+  name = "Join: button text"
+  description = "Default: Join now"
+
+  [[extensions.settings.fields]]
+  key = "join_cta_url"
+  type = "single_line_text_field"
+  name = "Join: button URL"
+  description = "Where the Join button links (Honey Club sign-up page). The button is hidden if blank."

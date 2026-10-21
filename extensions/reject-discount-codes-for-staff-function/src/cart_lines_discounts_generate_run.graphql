@@ -1,18 +1,23 @@
 query CartInput {
   cart {
     buyerIdentity {
-      email
+      customer {
+        isStaff: hasAnyTag(tags: ["Honey Birdette Staff"])
+      }
     }
     lines {
-      id
-      cost {
-        subtotalAmount {
-          amount
+      merchandise {
+        ... on ProductVariant {
+          product {
+            title
+            stopStaffDiscount: hasAnyTag(tags: ["stop-staff-discount-code"])
+          }
         }
       }
     }
   }
-  discount {
-    discountClasses
+  enteredDiscountCodes {
+    code
+    rejectable
   }
 }
