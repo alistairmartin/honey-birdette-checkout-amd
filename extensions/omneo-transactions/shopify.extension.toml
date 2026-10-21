@@ -11,6 +11,7 @@ api_version = "2026-07"
 [[extensions]]
 name = "In-store purchases"
 handle = "omneo-transactions"
+uid = "0e09e449-d80d-e44d-8a67-887d66383b079c5ad271"
 type = "ui_extension"
 
 [[extensions.targeting]]
@@ -40,3 +41,9 @@ network_access = true
   type = "boolean"
   name = "Include online orders"
   description = "Also list online orders from Omneo. Off by default, since online orders already show in the order list above."
+
+  [[extensions.settings.fields]]
+  key = "test_mode"
+  type = "boolean"
+  name = "Test mode"
+  description = "Show example purchases instead of real Omneo data, to preview the layout. Turn off before going live."

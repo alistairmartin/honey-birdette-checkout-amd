@@ -37,7 +37,80 @@ function formatDate(iso) {
   return shopify.i18n.formatDate(date, { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// Example data for the "Test mode" editor setting. Shapes match
+// /api/omneo-transactions, so the layout can be previewed without Omneo.
+// No image: s-product-thumbnail renders its own placeholder.
+const SAMPLE_IMAGE = null;
+
+function sampleTransactions() {
+  const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString();
+  const currency = shopify.localization?.currency?.value?.isoCode || "AUD";
+  return [
+    {
+      id: "sample-1",
+      date: daysAgo(3),
+      total: 249.95,
+      currency,
+      channel: "store",
+      location: "Honey Birdette Pitt Street",
+      receipt: "R-104829",
+      isReturn: false,
+      items: [
+        { name: "Lilou Black Plunge Bra", quantity: 1, price: 129.95, image: SAMPLE_IMAGE },
+        { name: "Lilou Black Thong", quantity: 2, price: 60, image: SAMPLE_IMAGE },
+      ],
+    },
+    {
+      id: "sample-2",
+      date: daysAgo(18),
+      total: 189.95,
+      currency,
+      channel: "online",
+      location: null,
+      receipt: "#AU123456",
+      isReturn: false,
+      items: [{ name: "Kensington Red Bodysuit", quantity: 1, price: 189.95, image: SAMPLE_IMAGE }],
+    },
+    {
+      id: "sample-3",
+      date: daysAgo(41),
+      total: -79.95,
+      currency,
+      channel: "store",
+      location: "Honey Birdette Chadstone",
+      receipt: "R-099311",
+      isReturn: true,
+      items: [{ name: "Ada Suspender", quantity: 1, price: -79.95, image: SAMPLE_IMAGE }],
+    },
+    {
+      id: "sample-4",
+      date: daysAgo(66),
+      total: 419.8,
+      currency,
+      channel: "store",
+      location: "Honey Birdette Bondi Junction",
+      receipt: "R-091207",
+      isReturn: false,
+      items: [
+        { name: "Mila Nude Bra", quantity: 1, price: 119.95, image: SAMPLE_IMAGE },
+        { name: "Mila Nude Brief", quantity: 1, price: 59.95, image: SAMPLE_IMAGE },
+        { name: "Silk Eye Mask", quantity: 1, price: 49.95, image: SAMPLE_IMAGE },
+        { name: "Satin Robe", quantity: 1, price: 189.95, image: SAMPLE_IMAGE },
+      ],
+    },
+  ];
+}
+
 async function fetchPage(page, includeOnline) {
+  if (setting("test_mode") === true) {
+    const transactions = sampleTransactions().filter((tx) => includeOnline || tx.channel === "store");
+    // Page 2 repeats the samples so "Show more" can be tried; no page 3.
+    return {
+      transactions: transactions.map((tx) => ({ ...tx, id: `${tx.id}-p${page}` })),
+      hasMore: page < 2,
+    };
+  }
+
   const token = await shopify.sessionToken.get();
   const params = new URLSearchParams({ page: String(page), scope: includeOnline ? "all" : "store" });
   const resp = await fetch(`${apiBase()}/api/omneo-transactions?${params}`, {
@@ -89,6 +162,7 @@ function OmneoTransactions() {
     }
   }
 
+  const testMode = setting("test_mode") === true;
   const heading = setting("heading") || t(includeOnline ? "headingAll" : "heading");
 
   if (transactions === undefined) {
@@ -105,6 +179,7 @@ function OmneoTransactions() {
   return (
     <s-section heading={heading}>
       <s-stack gap="base">
+        {testMode && <s-badge tone="critical">{t("testMode")}</s-badge>}
         {transactions.length === 0 && !hasMore ? (
           <s-text color="subdued">{t(includeOnline ? "emptyAll" : "empty")}</s-text>
         ) : (
@@ -152,7 +227,7 @@ function Transaction({ tx, showChannel }) {
 
       {shown.map((item, i) => (
         <s-stack key={`${tx.id}-${i}`} direction="inline" gap="small-300" alignItems="center">
-          {item.image && <s-product-thumbnail src={item.image} alt={item.name} size="small" />}
+          <s-product-thumbnail src={item.image || undefined} alt={item.name} size="small" />
           <s-stack gap="none">
             <s-text>{item.name}</s-text>
             {item.quantity > 1 && (
