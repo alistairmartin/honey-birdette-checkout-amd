@@ -1,0 +1,14 @@
+{
+  "heading": "In-store purchases",
+  "headingAll": "Purchase history",
+  "empty": "No in-store purchases yet.",
+  "emptyAll": "No purchases yet.",
+  "online": "Online",
+  "inStore": "In store",
+  "return": "Return",
+  "receipt": "Receipt {{ref}}",
+  "quantity": "Qty {{quantity}}",
+  "moreItems": "+{{count}} more",
+  "showMore": "Show more",
+  "loadError": "Couldn't load more purchases. Try again."
+}

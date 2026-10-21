@@ -12,6 +12,7 @@ api_version = "2026-07"
 [[extensions]]
 name = "Honey Club Status"
 handle = "honey-club-status"
+uid = "45a0c80b-6cd3-1501-517d-f1eb00efbdd6012a99a8"
 type = "ui_extension"
 
 [[extensions.targeting]]

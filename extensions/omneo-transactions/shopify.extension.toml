@@ -1,0 +1,42 @@
+# Omneo Transactions - Customer Account UI extension
+# Shopify's native Orders list only shows Shopify orders, so customers can't see
+# their in-store (retail POS) purchases. This block lists them on the Orders
+# page from Omneo, which holds every transaction across channels.
+#
+# Data comes from the app backend route /api/omneo-transactions, authenticated
+# with the customer-account session token (see app/routes/api.omneo-transactions.jsx).
+# If the backend fails, the block renders nothing.
+api_version = "2026-07"
+
+[[extensions]]
+name = "In-store purchases"
+handle = "omneo-transactions"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/OmneoTransactions.tsx"
+target = "customer-account.order-index.block.render"
+
+[extensions.capabilities]
+# network_access: lets the extension call the app backend for Omneo data.
+api_access = true
+network_access = true
+
+[extensions.settings]
+  [[extensions.settings.fields]]
+  key = "api_url"
+  type = "single_line_text_field"
+  name = "App backend URL"
+  description = "Base URL of the AMD Checkout app (e.g. https://honey-birdette-checkout-amd.onrender.com). No trailing slash."
+
+  [[extensions.settings.fields]]
+  key = "heading"
+  type = "single_line_text_field"
+  name = "Heading"
+  description = "Default: In-store purchases"
+
+  [[extensions.settings.fields]]
+  key = "include_online"
+  type = "boolean"
+  name = "Include online orders"
+  description = "Also list online orders from Omneo. Off by default, since online orders already show in the order list above."
