@@ -11,7 +11,7 @@
 # birthday Render service, same as the honey-club-status profile block.
 # Full-page targets can't share an extension with other targets, hence a
 # separate extension rather than a second target on honey-club-status.
-api_version = "2026-07"
+api_version = "2026-10"
 
 [[extensions]]
 name = "The Honey Club"
