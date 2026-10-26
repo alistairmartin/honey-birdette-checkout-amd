@@ -150,80 +150,132 @@ function HoneyClubStatus() {
   );
 }
 
-// "Gold AU" -> "Gold" for the sentence; the badge keeps the full tier name.
-function shortTierName(name) {
-  return name.replace(/\s+[A-Z]{2}$/, "") || name;
-}
-
-// Two subdued texts on one line, pushed to opposite edges.
-function SplitRow({ left, right }) {
+// Two pieces of content on one line, pushed to opposite edges.
+function SplitRow({ children }) {
   return (
     <s-stack direction="inline" gap="small-300" alignItems="center" justifyContent="space-between">
-      <s-text color="subdued">{left}</s-text>
-      {right && <s-text color="subdued">{right}</s-text>}
+      {children}
     </s-stack>
   );
 }
 
-function LevelCard({ status }) {
-  const { tier, nextTier, currency, spent, remaining, progress, maintainedUntil } = status;
-  const until = maintainedUntil ? formatDate(maintainedUntil) : "";
-  const spentText = t("spentThisYear", { amount: money(spent, currency) });
+// One rung of the tier ladder. Mirrors the Omneo block: the current tier's bar
+// shows progress to the next tier, tiers below it are full, tiers above empty.
+function TierRow({ rung, status }) {
+  const { nextTier, currency, remaining, progress } = status;
+  const isCurrent = rung.status === "current";
+  const value = rung.status === "achieved" ? 100 : isCurrent ? (nextTier ? progress ?? 0 : 100) : 0;
 
-  // Design: heading + badge / progress bar / spent left, to-next right / maintained.
+  return (
+    <s-stack gap="small-300">
+      <SplitRow>
+        <s-text type={isCurrent ? "strong" : undefined} color={isCurrent ? undefined : "subdued"}>
+          {rung.name}
+        </s-text>
+        {rung.status === "achieved" && <s-text color="subdued">{t("tierAchieved")}</s-text>}
+      </SplitRow>
+      <s-progress value={value} max={100} accessibilityLabel={rung.name} />
+      {isCurrent && nextTier && remaining !== null && (
+        <s-text color="subdued">
+          {t("toEarnTier", {
+            percent: progress ?? 0,
+            amount: money(remaining, currency),
+            tier: nextTier.name,
+          })}
+        </s-text>
+      )}
+      {isCurrent && !nextTier && <s-text color="subdued">{t("topTier")}</s-text>}
+    </s-stack>
+  );
+}
+
+// Fallback when tier definitions are unavailable: one bar, current -> next.
+function NextTierProgress({ status }) {
+  const { nextTier, currency, remaining, progress } = status;
+  if (!nextTier) return <s-text color="subdued">{t("topTier")}</s-text>;
+  return (
+    <s-stack gap="small-300">
+      <s-progress
+        value={progress ?? 0}
+        max={100}
+        accessibilityLabel={t("progressLabel", { tier: nextTier.name })}
+      />
+      {remaining !== null && (
+        <s-text color="subdued">
+          {t("toEarnTier", { percent: progress ?? 0, amount: money(remaining, currency), tier: nextTier.name })}
+        </s-text>
+      )}
+    </s-stack>
+  );
+}
+
+// Same content as the Omneo "Honey Club Level" block: tier + yearly progress,
+// a bar per tier, and what's needed to keep the current tier.
+function LevelCard({ status }) {
+  const { tier, tiers, currency, spent, maintainRemaining, maintainedUntil } = status;
+  const until = maintainedUntil ? formatDate(maintainedUntil) : "";
+
   return (
     <s-section>
       <s-stack gap="base">
-        <s-stack direction="inline" gap="small-300" alignItems="center" justifyContent="space-between">
+        <SplitRow>
           <s-heading>{t("levelTitle")}</s-heading>
           <s-badge>{tier.name}</s-badge>
-        </s-stack>
+        </SplitRow>
+        <SplitRow>
+          <s-text color="subdued">{t("yearlyProgress")}</s-text>
+          <s-text type="strong">{money(spent, currency)}</s-text>
+        </SplitRow>
 
-        {nextTier ? (
-          <>
-            {progress !== null && (
-              <s-progress
-                value={progress}
-                max={100}
-                accessibilityLabel={t("progressLabel", { tier: nextTier.name })}
-              />
-            )}
-            <SplitRow
-              left={spentText}
-              right={
-                remaining !== null
-                  ? t("toNextTier", { amount: money(remaining, currency), tier: nextTier.name })
-                  : ""
-              }
-            />
-          </>
+        <s-divider />
+
+        {tiers?.length ? (
+          <s-stack gap="base">
+            {tiers.map((rung) => (
+              <TierRow key={rung.handle || rung.name} rung={rung} status={status} />
+            ))}
+          </s-stack>
         ) : (
-          <>
-            <s-progress value={100} max={100} accessibilityLabel={t("topTier")} />
-            <SplitRow left={spentText} right={t("topTier")} />
-          </>
+          <NextTierProgress status={status} />
         )}
 
-        {until && (
-          <s-text color="subdued">
-            {t("maintainedUntil", { tier: shortTierName(tier.name), date: until })}
-          </s-text>
+        {maintainRemaining !== null && (
+          <>
+            <s-divider />
+            <s-stack gap="small-500">
+              <s-text>
+                {t("maintainNeeded", { amount: money(maintainRemaining, currency), tier: tier.name })}
+              </s-text>
+              {until && <s-text color="subdued">{t("maintainBy", { date: until })}</s-text>}
+            </s-stack>
+          </>
         )}
       </s-stack>
     </s-section>
   );
 }
 
-// Design: heading left, amount right / note.
+// Same content as the Omneo "Honey Club Balance" block: heading + amount, then
+// a centred "Your Honey Club balance / amount / Total value available" panel.
 function BalanceCard({ status }) {
+  const amount = money(status.balance, status.currency);
   return (
     <s-section>
       <s-stack gap="base">
-        <s-stack direction="inline" gap="small-300" alignItems="center" justifyContent="space-between">
-          <s-heading>{t("balanceTitle")}</s-heading>
-          <s-heading>{money(status.balance, status.currency)}</s-heading>
-        </s-stack>
-        <s-text color="subdued">{t("balanceNote")}</s-text>
+        <SplitRow>
+          <s-stack gap="small-500">
+            <s-heading>{t("balanceTitle")}</s-heading>
+            <s-text color="subdued">{t("balanceSubtitle")}</s-text>
+          </s-stack>
+          <s-heading>{amount}</s-heading>
+        </SplitRow>
+        <s-box border="base" padding="base">
+          <s-stack gap="small-300" alignItems="center">
+            <s-text color="subdued">{t("balanceBoxTitle")}</s-text>
+            <s-text type="strong">{amount}</s-text>
+            <s-text color="subdued">{t("balanceBoxNote")}</s-text>
+          </s-stack>
+        </s-box>
       </s-stack>
     </s-section>
   );

@@ -1,0 +1,6 @@
+mutation UpdateAccountsBranding($id: ID!, $configuration: CheckoutAndAccountsConfigurationInput!) {
+  checkoutAndAccountsConfigurationUpdate(id: $id, configuration: $configuration) {
+    configuration { id }
+    userErrors { field message }
+  }
+}

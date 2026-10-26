@@ -7,6 +7,8 @@
 //   GET /profiles/{id}/tiers                           -> { data: TierProgress }
 //   GET /profiles/{id}/balances                        -> { data: ProfileBalances }
 //   GET /profiles/{id}/transactions                    -> { data: Transaction[], meta }
+//   GET /tiers/definitions                             -> { data: TierDefinition[] }
+//     (every region's tiers; verified live 2026-10-26)
 //
 // Env: OMNEO_API_TOKEN, one read-only token for every Omneo call (identities,
 // profiles, tiers, loyalty, transactions, lists). OMNEO_TENANT / OMNEO_API_BASE
@@ -78,6 +80,20 @@ export async function findOmneoProfile(shop, customerId) {
 export async function getOmneoTierProgress(profileId) {
   const result = await omneoRequest(`/profiles/${encodeURIComponent(profileId)}/tiers`);
   return result?.data ?? null;
+}
+
+// Tier definitions rarely change, so cache them per process for an hour.
+const TIER_DEFINITIONS_TTL_MS = 60 * 60 * 1000;
+let tierDefinitionsCache = null;
+
+export async function getOmneoTierDefinitions() {
+  if (tierDefinitionsCache && Date.now() - tierDefinitionsCache.at < TIER_DEFINITIONS_TTL_MS) {
+    return tierDefinitionsCache.data;
+  }
+  const result = await omneoRequest(`/tiers/definitions`);
+  const data = Array.isArray(result?.data) ? result.data : [];
+  tierDefinitionsCache = { at: Date.now(), data };
+  return data;
 }
 
 export async function getOmneoBalances(profileId) {

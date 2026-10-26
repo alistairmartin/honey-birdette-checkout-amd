@@ -1,0 +1,21 @@
+{
+  "components": {
+    "main": {
+      "section": { "colors": { "base": { "background": "#F1ECE4" } } }
+    }
+  },
+  "surfaces": {
+    "customerAccounts": {
+      "components": {
+        "main": {
+          "section": {
+            "background": "BASE",
+            "cornerRadius": "NONE",
+            "border": "NONE",
+            "colors": { "base": { "background": "#F1ECE4" } }
+          }
+        }
+      }
+    }
+  }
+}

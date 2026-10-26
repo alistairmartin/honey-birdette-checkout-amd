@@ -1,0 +1,5 @@
+{
+  "designTokens": {
+    "cornerRadius": { "small": 1, "base": 1, "large": 1 }
+  }
+}
