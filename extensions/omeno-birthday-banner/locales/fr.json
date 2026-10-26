@@ -23,5 +23,11 @@
   "edit": "Modifier",
   "cancel": "Annuler",
   "formTitle": "Quand est ton anniversaire ?",
-  "formDescription": "Dis-le-nous et nous t'enverrons une surprise d'anniversaire spéciale."
+  "formDescription": "Dis-le-nous et nous t'enverrons une surprise d'anniversaire spéciale.",
+  "loadError": "Impossible de charger ton anniversaire. Actualise la page.",
+  "saveError": "Impossible d'enregistrer ton anniversaire. Réessaie.",
+  "dayRangeError": "Le jour doit être compris entre 1 et 31.",
+  "monthRangeError": "Le mois doit être compris entre 1 et 12.",
+  "bothRequiredError": "Choisis un jour et un mois.",
+  "noChanges": "Aucune modification à enregistrer."
 }

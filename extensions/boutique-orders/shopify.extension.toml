@@ -1,0 +1,25 @@
+# Boutique Orders - Customer Account full-page extension
+# A standalone account page listing the customer's in-store (retail POS)
+# purchases from Omneo. Same data as the omneo-transactions block, but as its
+# own page so it can be linked from the customer account menu
+# (Content > Menus > customer account menu > Add menu item > Apps > Boutique Orders).
+#
+# Full-page targets can't share an extension with other targets, hence a
+# separate extension. Data comes from /api/omneo-transactions
+# (see app/routes/api.omneo-transactions.jsx), no backend changes needed.
+api_version = "2026-07"
+
+[[extensions]]
+name = "Boutique Orders"
+handle = "boutique-orders"
+uid = "ed22654b-67c5-4f2b-1da1-e37e6b1ee5d2c2ddd26e"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/BoutiqueOrders.tsx"
+target = "customer-account.page.render"
+
+[extensions.capabilities]
+# network_access: lets the extension call the app backend for Omneo data.
+api_access = true
+network_access = true

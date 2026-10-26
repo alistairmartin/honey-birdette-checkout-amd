@@ -1,0 +1,10 @@
+{
+  "heading": "Boutique-Bestellungen",
+  "empty": "Noch keine Einkäufe in der Boutique. Deine Einkäufe in unseren Boutiquen erscheinen hier.",
+  "return": "Rückgabe",
+  "receipt": "Beleg {{ref}}",
+  "quantity": "Menge {{quantity}}",
+  "showMore": "Mehr anzeigen",
+  "loadError": "Deine Boutique-Einkäufe konnten gerade nicht geladen werden. Bitte versuche es später erneut.",
+  "loadMoreError": "Weitere Einkäufe konnten nicht geladen werden. Bitte versuche es erneut."
+}

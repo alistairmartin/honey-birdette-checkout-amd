@@ -1,0 +1,15 @@
+{
+  "heading": "Einkäufe im Store",
+  "headingAll": "Bestellhistorie",
+  "empty": "Noch keine Einkäufe im Store.",
+  "emptyAll": "Noch keine Einkäufe.",
+  "online": "Online",
+  "inStore": "Im Store",
+  "return": "Rückgabe",
+  "receipt": "Beleg {{ref}}",
+  "quantity": "Menge {{quantity}}",
+  "moreItems": "+{{count}} weitere",
+  "showMore": "Mehr anzeigen",
+  "testMode": "Testmodus: Beispieldaten",
+  "loadError": "Weitere Einkäufe konnten nicht geladen werden. Bitte versuche es erneut."
+}

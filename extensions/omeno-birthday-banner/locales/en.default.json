@@ -23,5 +23,11 @@
   "edit": "Edit",
   "cancel": "Cancel",
   "formTitle": "When's your birthday?",
-  "formDescription": "Tell us and we'll send you a special birthday surprise."
+  "formDescription": "Tell us and we'll send you a special birthday surprise.",
+  "loadError": "We couldn't load your birthday. Please refresh the page.",
+  "saveError": "We couldn't save your birthday. Please try again.",
+  "dayRangeError": "Day must be between 1 and 31.",
+  "monthRangeError": "Month must be between 1 and 12.",
+  "bothRequiredError": "Please choose both a day and a month.",
+  "noChanges": "No changes to save."
 }

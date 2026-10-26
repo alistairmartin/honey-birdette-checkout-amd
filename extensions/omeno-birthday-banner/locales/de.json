@@ -23,5 +23,11 @@
   "edit": "Bearbeiten",
   "cancel": "Abbrechen",
   "formTitle": "Wann hast du Geburtstag?",
-  "formDescription": "Verrate es uns und wir schicken dir eine besondere Geburtstagsüberraschung."
+  "formDescription": "Verrate es uns und wir schicken dir eine besondere Geburtstagsüberraschung.",
+  "loadError": "Dein Geburtstag konnte nicht geladen werden. Bitte lade die Seite neu.",
+  "saveError": "Dein Geburtstag konnte nicht gespeichert werden. Bitte versuche es erneut.",
+  "dayRangeError": "Der Tag muss zwischen 1 und 31 liegen.",
+  "monthRangeError": "Der Monat muss zwischen 1 und 12 liegen.",
+  "bothRequiredError": "Bitte wähle einen Tag und einen Monat.",
+  "noChanges": "Keine Änderungen zu speichern."
 }

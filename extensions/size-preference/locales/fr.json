@@ -1,0 +1,18 @@
+{
+  "title": "Ton profil de tailles",
+  "subtitle": "Renseigne-le une fois, et nous sélectionnerons ta taille à chaque ajout au panier.",
+  "empty": "Aucune taille enregistrée. Renseigne-les une fois, achète plus vite partout.",
+  "braBand": "Tour de dessous de soutien-gorge",
+  "braCup": "Bonnet de soutien-gorge",
+  "corset": "Corset",
+  "suspender": "Porte-jarretelles",
+  "bottoms": "Culottes",
+  "hosiery": "Bas",
+  "robe": "Peignoir & Nuisette",
+  "save": "Enregistrer mes tailles",
+  "saving": "Enregistrement...",
+  "saved": "Profil de tailles enregistré sur ton compte.",
+  "loadError": "Impossible de charger ton profil de tailles. Réessaie.",
+  "saveError": "Impossible d'enregistrer tes tailles. Réessaie.",
+  "unset": "Choisir"
+}

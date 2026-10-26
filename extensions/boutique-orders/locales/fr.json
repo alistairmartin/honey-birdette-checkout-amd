@@ -1,0 +1,10 @@
+{
+  "heading": "Commandes en boutique",
+  "empty": "Aucun achat en boutique pour le moment. Tes achats en boutique apparaîtront ici.",
+  "return": "Retour",
+  "receipt": "Reçu {{ref}}",
+  "quantity": "Qté {{quantity}}",
+  "showMore": "Voir plus",
+  "loadError": "Impossible de charger tes achats en boutique pour le moment. Réessaie plus tard.",
+  "loadMoreError": "Impossible de charger plus d'achats. Réessaie."
+}

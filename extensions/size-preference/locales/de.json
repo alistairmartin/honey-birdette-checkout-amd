@@ -1,0 +1,18 @@
+{
+  "title": "Dein Größenprofil",
+  "subtitle": "Einmal festlegen, und wir wählen deine Größe jedes Mal aus, wenn du etwas in den Warenkorb legst.",
+  "empty": "Noch keine Größen gespeichert. Einmal festlegen, überall schneller shoppen.",
+  "braBand": "BH-Unterbrustweite",
+  "braCup": "BH-Körbchengröße",
+  "corset": "Korsett",
+  "suspender": "Strapsgürtel",
+  "bottoms": "Slips",
+  "hosiery": "Strümpfe",
+  "robe": "Morgenmantel & Chemise",
+  "save": "Meine Größen speichern",
+  "saving": "Wird gespeichert...",
+  "saved": "Größenprofil in deinem Konto gespeichert.",
+  "loadError": "Dein Größenprofil konnte nicht geladen werden. Bitte versuche es erneut.",
+  "saveError": "Deine Größen konnten nicht gespeichert werden. Bitte versuche es erneut.",
+  "unset": "Auswählen"
+}

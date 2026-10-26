@@ -3,6 +3,7 @@
 import "@shopify/ui-extensions/preact";
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
+import { BirthdayCard } from "./Birthday";
 
 // The target is bound in shopify.extension.toml
 // (customer-account.profile.block.render -> this module).
@@ -22,10 +23,15 @@ function setting(key) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+// Whole amounts drop the cents ("A$300"). The minimum must be lowered with the
+// maximum: AUD defaults to a minimum of 2, and max < min throws a RangeError
+// that crashes the whole block.
 function money(amount, currency) {
+  const digits = Number.isInteger(amount) ? 0 : 2;
   return shopify.i18n.formatCurrency(amount, {
     currency,
-    maximumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   });
 }
 
@@ -36,6 +42,12 @@ function formatDate(iso) {
   return shopify.i18n.formatDate(date, { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// "Gold AU" -> "Gold": Omneo suffixes tier names with the region, which the
+// customer doesn't need to see.
+function tierLabel(name) {
+  return String(name || "").replace(/\s+(AU|UK|EU|US)$/i, "") || name;
+}
+
 // Editor-only preview data, so both states can be checked in the customer
 // account editor (its preview customer isn't in Omneo, so live data is always
 // the Join card there).
@@ -43,11 +55,12 @@ const PREVIEW_MEMBER = {
   member: true,
   currency: "AUD",
   tier: { name: "Gold AU", handle: "gold-au" },
-  nextTier: { name: "Platinum AU", handle: "platinum-au" },
-  spent: 0,
-  remaining: 500,
-  progress: 6,
-  maintainedUntil: "2027-09-01",
+  nextTier: { name: "Diamond AU", handle: "diamond-au", min: 500 },
+  spent: 300,
+  remaining: 200,
+  progress: 60,
+  maintainRemaining: 0,
+  maintainedUntil: "2027-07-24T13:59:59.000Z",
   balance: 0,
 };
 const PREVIEW_JOIN = { member: false, currency: "AUD" };
@@ -122,31 +135,52 @@ function HoneyClubStatus() {
     : liveStatus;
   const switcher = inEditor && <PreviewSwitcher value={preview} onChange={setPreview} />;
 
-  if (status === undefined) {
-    return (
-      <s-section heading={t("levelTitle")}>
-        <s-skeleton-paragraph />
-      </s-section>
-    );
-  }
-
-  // On a backend/Omneo failure, show nothing: guessing would risk telling a
-  // member to "Join the club".
-  if (status === null) return switcher || null;
-
+  // Every slot stays in the same position whatever the status, so the birthday
+  // card (which loads on its own) isn't remounted when the Omneo data arrives.
   return (
     <s-stack gap="base">
       {switcher}
       {firstName && <s-heading>{t("greeting", { name: firstName })}</s-heading>}
-      {status.member ? (
-        <>
-          <LevelCard status={status} />
-          {status.balance !== null && <BalanceCard status={status} />}
-        </>
-      ) : (
-        <JoinCard />
-      )}
+      <ClubCards status={status} />
+      {!shopify.settings?.value?.hide_birthday && <BirthdayCard />}
     </s-stack>
+  );
+}
+
+function ClubCards({ status }) {
+  if (status === undefined) return <ClubSkeleton />;
+  // On a backend/Omneo failure, show nothing: guessing would risk telling a
+  // member to "Join the club".
+  if (status === null) return null;
+  if (!status.member) return <JoinCard />;
+  return (
+    <>
+      <LevelCard status={status} />
+      {status.balance !== null && <BalanceCard status={status} />}
+    </>
+  );
+}
+
+// Placeholder level + balance cards while Omneo loads, shaped like the real
+// ones so the page doesn't jump when they arrive.
+function ClubSkeleton() {
+  return (
+    <>
+      <s-section>
+        <s-stack gap="base">
+          <s-heading>{t("levelTitle")}</s-heading>
+          <s-skeleton-paragraph />
+          <s-divider />
+          <s-skeleton-paragraph />
+        </s-stack>
+      </s-section>
+      <s-section>
+        <s-stack gap="base">
+          <s-heading>{t("balanceTitle")}</s-heading>
+          <s-skeleton-paragraph />
+        </s-stack>
+      </s-section>
+    </>
   );
 }
 
@@ -159,60 +193,45 @@ function SplitRow({ children }) {
   );
 }
 
-// One rung of the tier ladder. Mirrors the Omneo block: the current tier's bar
-// shows progress to the next tier, tiers below it are full, tiers above empty.
-function TierRow({ rung, status }) {
-  const { nextTier, currency, remaining, progress } = status;
-  const isCurrent = rung.status === "current";
-  const value = rung.status === "achieved" ? 100 : isCurrent ? (nextTier ? progress ?? 0 : 100) : 0;
-
+// The customer's current tier and their progress to the next one. A top-tier
+// member gets a full bar.
+function TierProgress({ status }) {
+  const { tier, nextTier, currency, remaining, progress } = status;
   return (
     <s-stack gap="small-300">
-      <SplitRow>
-        <s-text type={isCurrent ? "strong" : undefined} color={isCurrent ? undefined : "subdued"}>
-          {rung.name}
-        </s-text>
-        {rung.status === "achieved" && <s-text color="subdued">{t("tierAchieved")}</s-text>}
-      </SplitRow>
-      <s-progress value={value} max={100} accessibilityLabel={rung.name} />
-      {isCurrent && nextTier && remaining !== null && (
-        <s-text color="subdued">
-          {t("toEarnTier", {
-            percent: progress ?? 0,
-            amount: money(remaining, currency),
-            tier: nextTier.name,
-          })}
-        </s-text>
-      )}
-      {isCurrent && !nextTier && <s-text color="subdued">{t("topTier")}</s-text>}
-    </s-stack>
-  );
-}
-
-// Fallback when tier definitions are unavailable: one bar, current -> next.
-function NextTierProgress({ status }) {
-  const { nextTier, currency, remaining, progress } = status;
-  if (!nextTier) return <s-text color="subdued">{t("topTier")}</s-text>;
-  return (
-    <s-stack gap="small-300">
-      <s-progress
-        value={progress ?? 0}
-        max={100}
-        accessibilityLabel={t("progressLabel", { tier: nextTier.name })}
-      />
-      {remaining !== null && (
-        <s-text color="subdued">
-          {t("toEarnTier", { percent: progress ?? 0, amount: money(remaining, currency), tier: nextTier.name })}
-        </s-text>
+      <s-text type="strong">{tierLabel(tier.name)}</s-text>
+      {nextTier ? (
+        <>
+          <s-progress
+            value={progress ?? 0}
+            max={100}
+            accessibilityLabel={t("progressLabel", { tier: tierLabel(nextTier.name) })}
+          />
+          {remaining !== null && (
+            <s-text>
+              {t("toEarnTier", {
+                percent: progress ?? 0,
+                amount: money(remaining, currency),
+                tier: tierLabel(nextTier.name),
+              })}
+            </s-text>
+          )}
+        </>
+      ) : (
+        <>
+          <s-progress value={100} max={100} accessibilityLabel={t("topTier")} />
+          <s-text color="subdued">{t("topTier")}</s-text>
+        </>
       )}
     </s-stack>
   );
 }
 
-// Same content as the Omneo "Honey Club Level" block: tier + yearly progress,
-// a bar per tier, and what's needed to keep the current tier.
+// Same content as the Omneo "Honey Club Level" block, current tier only:
+// tier + yearly progress, progress to the next tier, and what's needed to
+// keep the current one.
 function LevelCard({ status }) {
-  const { tier, tiers, currency, spent, maintainRemaining, maintainedUntil } = status;
+  const { tier, currency, spent, maintainRemaining, maintainedUntil } = status;
   const until = maintainedUntil ? formatDate(maintainedUntil) : "";
 
   return (
@@ -220,7 +239,7 @@ function LevelCard({ status }) {
       <s-stack gap="base">
         <SplitRow>
           <s-heading>{t("levelTitle")}</s-heading>
-          <s-badge>{tier.name}</s-badge>
+          <s-badge>{tierLabel(tier.name)}</s-badge>
         </SplitRow>
         <SplitRow>
           <s-text color="subdued">{t("yearlyProgress")}</s-text>
@@ -229,26 +248,17 @@ function LevelCard({ status }) {
 
         <s-divider />
 
-        {tiers?.length ? (
-          <s-stack gap="base">
-            {tiers.map((rung) => (
-              <TierRow key={rung.handle || rung.name} rung={rung} status={status} />
-            ))}
-          </s-stack>
-        ) : (
-          <NextTierProgress status={status} />
-        )}
+        <TierProgress status={status} />
 
-        {maintainRemaining !== null && (
-          <>
-            <s-divider />
-            <s-stack gap="small-500">
-              <s-text>
-                {t("maintainNeeded", { amount: money(maintainRemaining, currency), tier: tier.name })}
-              </s-text>
-              {until && <s-text color="subdued">{t("maintainBy", { date: until })}</s-text>}
-            </s-stack>
-          </>
+        {/* Secondary info: one small, subdued line under the progress. */}
+        {maintainRemaining != null && (
+          <s-text type="small" color="subdued">
+            {t(until ? "maintainNeededBy" : "maintainNeeded", {
+              amount: money(maintainRemaining, currency),
+              tier: tierLabel(tier.name),
+              date: until,
+            })}
+          </s-text>
         )}
       </s-stack>
     </s-section>

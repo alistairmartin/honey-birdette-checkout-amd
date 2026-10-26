@@ -81,7 +81,7 @@ function CustomerBirthdayBlock() {
       .then(setShop)
       .catch((e) => {
         console.error("❌ Could not detect store:", e);
-        setError("We couldn't load your birthday. Please refresh the page.");
+        setError(translate("loadError"));
         setLoading(false);
       });
   }, []);
@@ -160,7 +160,7 @@ function CustomerBirthdayBlock() {
         }
       } catch (e: any) {
         console.error("❌ Error fetching birthday:", e);
-        setError(e?.message || "Error loading customer data");
+        setError(translate("loadError"));
       } finally {
         setLoading(false);
       }
@@ -180,7 +180,7 @@ function CustomerBirthdayBlock() {
     if (dayVal) {
       const dayNum = parseInt(dayVal, 10);
       if (isNaN(dayNum) || dayNum < 1 || dayNum > 31) {
-        setError("Day must be between 1 and 31");
+        setError(translate("dayRangeError"));
         return;
       }
     }
@@ -189,20 +189,20 @@ function CustomerBirthdayBlock() {
     if (monthVal) {
       const monthNum = parseInt(monthVal, 10);
       if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-        setError("Month must be between 1 and 12");
+        setError(translate("monthRangeError"));
         return;
       }
     }
 
     // Both or neither
     if ((dayVal && !monthVal) || (!dayVal && monthVal)) {
-      setError("Please enter both day and month");
+      setError(translate("bothRequiredError"));
       return;
     }
 
     // Check if there's anything to save
     if (!dayVal && !monthVal) {
-      setSaved("No changes to save");
+      setSaved(translate("noChanges"));
       setTimeout(() => setSaved(undefined), 2000);
       return;
     }
@@ -236,7 +236,7 @@ function CustomerBirthdayBlock() {
       }, null, 2));
 
       if (!resp.ok) {
-        setError(result?.error || "Failed to save");
+        setError(translate("saveError"));
         return;
       }
 
@@ -255,7 +255,7 @@ function CustomerBirthdayBlock() {
       setRefreshKey((k) => k + 1);
     } catch (e: any) {
       console.error("❌ Save error:", e);
-      setError(e?.message || "Something went wrong");
+      setError(translate("saveError"));
     } finally {
       setSaving(false);
     }

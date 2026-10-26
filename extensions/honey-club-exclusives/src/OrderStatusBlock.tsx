@@ -4,6 +4,7 @@ import {useEffect, useState} from "preact/hooks";
 import {
   useAuthenticatedAccountCustomer,
   useSettings,
+  useTranslate,
 } from "@shopify/ui-extensions/customer-account/preact";
 
 // The target is bound in shopify.extension.toml
@@ -27,14 +28,7 @@ const DEFAULT_CONFIG = {
   mobileImageUrl:
     "https://cdn.shopify.com/s/files/1/0585/9581/files/Cherry_Cuff12.jpg?v=1781588996",
   unlockTag: "dress-circle",
-  eyebrow: "The Honey Club Exclusive",
-  headingUnlocked: "Honey Club Exclusives",
-  messageUnlocked: "Your members-only collection is unlocked. Shop it now.",
-  ctaUnlockedText: "Shop the collection",
   ctaUnlockedUrl: "https://www.honeybirdette.com/collections/dress-circle-exclusives",
-  headingLocked: "Honey Club Exclusives",
-  messageLocked: "Reach Dress Circle to unlock members-only pieces.",
-  ctaLockedText: "How to unlock",
   ctaLockedUrl: "https://www.honeybirdette.com/pages/the-honey-club",
 };
 
@@ -63,20 +57,23 @@ function extractTags(result: any): string[] {
 function HoneyClubExclusives() {
   const authenticatedCustomer = useAuthenticatedAccountCustomer();
   const settings = useSettings();
+  // Copy typed into the block settings wins; otherwise the translated default
+  // (locales/*.json) shows in the customer's language.
+  const translate = useTranslate();
 
   const desktopImageUrl = str(settings.desktop_image_url) || DEFAULT_CONFIG.desktopImageUrl;
   const mobileImageUrl = str(settings.mobile_image_url) || DEFAULT_CONFIG.mobileImageUrl;
   const unlockTag = (str(settings.unlock_tag) || DEFAULT_CONFIG.unlockTag).toLowerCase();
-  const eyebrow = str(settings.eyebrow) || DEFAULT_CONFIG.eyebrow;
+  const eyebrow = str(settings.eyebrow) || translate("eyebrow");
 
-  const headingUnlocked = str(settings.heading_unlocked) || DEFAULT_CONFIG.headingUnlocked;
-  const messageUnlocked = str(settings.message_unlocked) || DEFAULT_CONFIG.messageUnlocked;
-  const ctaUnlockedText = str(settings.cta_unlocked_text) || DEFAULT_CONFIG.ctaUnlockedText;
+  const headingUnlocked = str(settings.heading_unlocked) || translate("headingUnlocked");
+  const messageUnlocked = str(settings.message_unlocked) || translate("messageUnlocked");
+  const ctaUnlockedText = str(settings.cta_unlocked_text) || translate("ctaUnlockedText");
   const ctaUnlockedUrl = str(settings.cta_unlocked_url) || DEFAULT_CONFIG.ctaUnlockedUrl;
 
-  const headingLocked = str(settings.heading_locked) || DEFAULT_CONFIG.headingLocked;
-  const messageLocked = str(settings.message_locked) || DEFAULT_CONFIG.messageLocked;
-  const ctaLockedText = str(settings.cta_locked_text) || DEFAULT_CONFIG.ctaLockedText;
+  const headingLocked = str(settings.heading_locked) || translate("headingLocked");
+  const messageLocked = str(settings.message_locked) || translate("messageLocked");
+  const ctaLockedText = str(settings.cta_locked_text) || translate("ctaLockedText");
   const ctaLockedUrl = str(settings.cta_locked_url) || DEFAULT_CONFIG.ctaLockedUrl;
 
   const storeConfig = {
@@ -156,7 +153,7 @@ function HoneyClubExclusives() {
             <s-heading>{heading}</s-heading>
             {/* While tags resolve, show neutral copy to avoid flashing a CTA. */}
             <s-paragraph color="subdued">
-              {loading ? "Loading your Honey Club perks…" : message}
+              {loading ? translate("loading") : message}
             </s-paragraph>
             {!loading && ctaUrl ? (
               <s-button href={ctaUrl} variant="primary">

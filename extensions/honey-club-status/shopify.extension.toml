@@ -1,7 +1,9 @@
 # Honey Club Status - Customer Account UI extension
 # Members see two cards: "Honey Club level" (tier badge, spend this year,
 # progress to next tier, maintained-until date) and "Honey Club balance".
-# Non-members see a "Join the club" card instead.
+# Non-members see a "Join the club" card instead. Everyone also gets the
+# "Your birthday" card (src/Birthday.tsx, same backend as the
+# omeno-birthday-banner extension), unless "Hide birthday" is ticked.
 #
 # Data comes from Omneo via the app backend route /api/honey-club,
 # authenticated with the customer-account session token
@@ -30,6 +32,12 @@ network_access = true
   type = "boolean"
   name = "Hide greeting"
   description = "Hide the \"Hello, <first name>\" heading above the cards."
+
+  [[extensions.settings.fields]]
+  key = "hide_birthday"
+  type = "boolean"
+  name = "Hide birthday"
+  description = "Hide the \"Your birthday\" card (e.g. if the Birthday Banner block is used instead)."
 
   # --- Join the club (non-members) ---
   [[extensions.settings.fields]]

@@ -1,0 +1,15 @@
+{
+  "heading": "Achats en boutique",
+  "headingAll": "Historique d'achats",
+  "empty": "Aucun achat en boutique pour le moment.",
+  "emptyAll": "Aucun achat pour le moment.",
+  "online": "En ligne",
+  "inStore": "En boutique",
+  "return": "Retour",
+  "receipt": "Reçu {{ref}}",
+  "quantity": "Qté {{quantity}}",
+  "moreItems": "+{{count}} de plus",
+  "showMore": "Voir plus",
+  "testMode": "Mode test : données d'exemple",
+  "loadError": "Impossible de charger plus d'achats. Réessaie."
+}

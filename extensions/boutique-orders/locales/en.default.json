@@ -1,0 +1,10 @@
+{
+  "heading": "Boutique orders",
+  "empty": "No boutique purchases yet. Purchases made in our boutiques will show here.",
+  "return": "Return",
+  "receipt": "Receipt {{ref}}",
+  "quantity": "Qty {{quantity}}",
+  "showMore": "Show more",
+  "loadError": "We couldn't load your boutique purchases right now. Try again later.",
+  "loadMoreError": "Couldn't load more purchases. Try again."
+}
