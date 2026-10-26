@@ -910,7 +910,9 @@ export async function listMonitorShops() {
       select: { shop: true },
       distinct: ["shop"],
     }),
-    prisma.webhookEvent.findMany({ select: { shop: true }, distinct: ["shop"] }),
+    // groupBy runs GROUP BY in SQLite. findMany + distinct dedupes in Node,
+    // which loads every raw row (30 days, millions) and OOMs the instance.
+    prisma.webhookEvent.groupBy({ by: ["shop"] }),
   ]);
   const set = new Set([
     ...sessions.map((s) => s.shop),

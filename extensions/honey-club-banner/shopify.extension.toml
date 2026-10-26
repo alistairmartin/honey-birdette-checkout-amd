@@ -12,6 +12,7 @@ api_version = "2026-10"
 [[extensions]]
 name = "Honey Club Banner"
 handle = "honey-club-banner"
+uid = "a524e03f-9ea1-2935-a6f1-bb0a82bd293d86514dd5"
 type = "ui_extension"
 
 [[extensions.targeting]]
