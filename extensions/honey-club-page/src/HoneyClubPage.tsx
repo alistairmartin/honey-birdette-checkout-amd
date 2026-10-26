@@ -79,6 +79,10 @@ function t(key, replacements) {
   return shopify.i18n.translate(key, replacements);
 }
 
+function setting(settings, key) {
+  return typeof settings[key] === "string" ? settings[key].trim() : "";
+}
+
 // Whole amounts drop the cents ("A$300"). The minimum must be lowered with the
 // maximum: AUD defaults to a minimum of 2, and max < min throws a RangeError.
 function money(amount, currency) {
@@ -166,11 +170,15 @@ function HoneyClubPage() {
   const member = status?.member === true;
   // Unknown until loaded; a failed load still shows the generic content.
   const currency = status?.currency || shopify.localization?.currency?.value?.isoCode || "AUD";
+  // Hero image can be swapped from the editor (extension settings).
+  const settings = shopify.settings?.value ?? {};
+  const heroUrl = setting(settings, "hero_image_url") || IMAGES.hero;
+  const heroAlt = setting(settings, "hero_image_alt") || t("tagline");
 
   return (
     <s-page heading={t("pageHeading")}>
       <s-stack gap="base">
-        <s-image src={IMAGES.hero} alt={t("tagline")} aspectRatio="3" objectFit="cover" borderRadius="base" />
+        <s-image src={heroUrl} alt={heroAlt} aspectRatio="3" objectFit="cover" borderRadius="base" />
 
         <LoyaltyMessages status={status} />
 
@@ -180,7 +188,8 @@ function HoneyClubPage() {
 
         <TierLadder status={status} currency={currency} />
 
-        {!member && <HowItWorks />}
+        {/* Wait for the status so members don't see it flash in then vanish. */}
+        {status !== undefined && !member && <HowItWorks />}
 
         <HelpLinks />
       </s-stack>
@@ -416,6 +425,8 @@ function TierLadder({ status, currency }) {
         <s-text color="subdued">{t("tiersNote")}</s-text>
         <s-stack gap="base">
           {TIERS.map((def, i) => {
+            // Invite Only is hidden for now; delete this line to show it again.
+            if (def.inviteOnly) return null;
             const rangeText = def.inviteOnly ? null : range(i);
             return (
               <s-box key={def.key} border="base" borderRadius="base" padding="base">
@@ -472,17 +483,31 @@ function HowItWorks() {
   ];
   return (
     <s-section heading={t("howHeading")}>
-      <s-query-container>
-        <s-grid gridTemplateColumns="@container (inline-size > 700px) 1fr 1fr 1fr, 1fr" gap="base">
-          {steps.map((step) => (
-            <s-stack key={step.title} gap="small-300">
-              <s-image src={step.image} alt="" aspectRatio="1.5" objectFit="cover" borderRadius="base" />
-              <s-heading>{t(step.title)}</s-heading>
-              <s-text color="subdued">{t(step.body)}</s-text>
-            </s-stack>
-          ))}
-        </s-grid>
-      </s-query-container>
+      {/* Compact numbered rows, thumbnail left, like the tier cards. Full-width
+          images were huge on desktop. */}
+      <s-stack gap="base">
+        {steps.map((step, i) => (
+          <s-box key={step.title} border="base" borderRadius="base" padding="base">
+            <s-grid gridTemplateColumns="1fr 3fr" gap="base" alignItems="center">
+              <s-image
+                src={step.image}
+                alt=""
+                inlineSize="fill"
+                aspectRatio="1"
+                objectFit="cover"
+                borderRadius="base"
+              />
+              <s-stack gap="small-300">
+                <s-text type="small" color="subdued">
+                  {String(i + 1).padStart(2, "0")}
+                </s-text>
+                <s-heading>{t(step.title)}</s-heading>
+                <s-text color="subdued">{t(step.body)}</s-text>
+              </s-stack>
+            </s-grid>
+          </s-box>
+        ))}
+      </s-stack>
     </s-section>
   );
 }
