@@ -71,14 +71,6 @@ name = "Birthday Month"
 description = "Stores the month of the customer's birthday"
 type = "number_integer"
 
-# VIP presale page settings ({ collectionHandle, percentOff }), edited at
-# /app/vip-presale and read by the vip-presale-page extension (Storefront API).
-[shop.metafields.app.vip_presale]
-name = "VIP presale settings"
-description = "Collection and percent off shown on the VIP presale account page"
-type = "json"
-access.storefront = "public_read"
-
 [app_proxy]
 url = "https://honey-birdette-birthday-app.onrender.com"
 subpath = "omeno-birthday"

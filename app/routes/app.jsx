@@ -38,7 +38,6 @@ export default function App() {
         <Link to="/app/loyalty">Loyalty</Link>
         <Link to="/app/email-banner">Email banner</Link>
         <Link to="/app/boutique-pickup-message">Boutique pickup message</Link>
-        <Link to="/app/vip-presale">VIP presale</Link>
         <Link to="/app/metafield-definitions">Metafield definitions</Link>
         <Link to="/app/graphql">GraphQL explorer</Link>
       </NavMenu>

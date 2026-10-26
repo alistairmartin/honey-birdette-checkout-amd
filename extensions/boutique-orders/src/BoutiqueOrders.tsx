@@ -122,6 +122,18 @@ function BoutiqueOrders() {
   return <s-page heading={t("heading")}>{body}</s-page>;
 }
 
+// "10 / DD · Qty 2". Returned lines have a negative quantity.
+function ItemDetails({ item }) {
+  const quantity = Math.abs(item.quantity);
+  const parts = [item.size, quantity > 1 && t("quantity", { quantity })].filter(Boolean);
+  if (parts.length === 0) return null;
+  return (
+    <s-text type="small" color="subdued">
+      {parts.join(" · ")}
+    </s-text>
+  );
+}
+
 // Full page has room, so every item is listed (the block caps at 3).
 function Transaction({ tx }) {
   const details = [tx.location, tx.receipt && t("receipt", { ref: tx.receipt })].filter(Boolean);
@@ -157,12 +169,11 @@ function Transaction({ tx }) {
           <s-stack direction="inline" gap="small-300" alignItems="center">
             <s-product-thumbnail src={item.image || undefined} alt={item.name} size="small" />
             <s-stack gap="none">
-              <s-text>{item.name}</s-text>
-              {item.quantity > 1 && (
-                <s-text type="small" color="subdued">
-                  {t("quantity", { quantity: item.quantity })}
-                </s-text>
-              )}
+              <s-stack direction="inline" gap="small-300" alignItems="center">
+                <s-text>{item.name}</s-text>
+                {item.isReturn && <s-badge tone="critical">{t("return")}</s-badge>}
+              </s-stack>
+              <ItemDetails item={item} />
             </s-stack>
           </s-stack>
           {item.price != null && <s-text>{money(item.price, tx.currency)}</s-text>}

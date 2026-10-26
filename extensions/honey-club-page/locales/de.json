@@ -1,7 +1,7 @@
 {
   "levelTitle": "Honey Club Level",
   "yearlyProgress": "Jahresfortschritt",
-  "toEarnTier": "{{percent}}% · noch {{amount}} bis {{tier}}",
+  "toEarnTier": "noch {{amount}} bis {{tier}}",
   "maintainNeeded": "Noch {{amount}}, um {{tier}} zu behalten",
   "maintainNeededBy": "Noch {{amount}} bis {{date}}, um {{tier}} zu behalten",
   "topTier": "Höchstes Level erreicht",

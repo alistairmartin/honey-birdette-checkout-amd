@@ -292,7 +292,11 @@ function LevelCard({ status }) {
         </SplitRow>
         <SplitRow>
           <s-text color="subdued">{t("yearlyProgress")}</s-text>
-          <s-text type="strong">{money(spent, currency)}</s-text>
+          <s-text type="strong">
+            {nextTier?.min
+              ? `${money(spent, currency)} / ${money(nextTier.min, currency)}`
+              : money(spent, currency)}
+          </s-text>
         </SplitRow>
 
         <s-divider />
@@ -307,7 +311,6 @@ function LevelCard({ status }) {
             {remaining !== null && (
               <s-text>
                 {t("toEarnTier", {
-                  percent: progress ?? 0,
                   amount: money(remaining, currency),
                   tier: tierLabel(nextTier.name),
                 })}

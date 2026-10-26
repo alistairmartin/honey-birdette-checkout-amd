@@ -1,7 +1,7 @@
 {
   "levelTitle": "Niveau Honey Club",
   "yearlyProgress": "Progression annuelle",
-  "toEarnTier": "{{percent}} % · encore {{amount}} pour atteindre {{tier}}",
+  "toEarnTier": "encore {{amount}} pour atteindre {{tier}}",
   "maintainNeeded": "Encore {{amount}} pour conserver {{tier}}",
   "maintainNeededBy": "Encore {{amount}} d'ici le {{date}} pour conserver {{tier}}",
   "topTier": "Niveau le plus élevé atteint",

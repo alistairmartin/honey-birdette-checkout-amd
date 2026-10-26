@@ -200,6 +200,18 @@ function OmneoTransactions() {
   );
 }
 
+// "10 / DD · Qty 2". Returned lines have a negative quantity.
+function ItemDetails({ item }) {
+  const quantity = Math.abs(item.quantity);
+  const parts = [item.size, quantity > 1 && t("quantity", { quantity })].filter(Boolean);
+  if (parts.length === 0) return null;
+  return (
+    <s-text type="small" color="subdued">
+      {parts.join(" · ")}
+    </s-text>
+  );
+}
+
 function Transaction({ tx, showChannel }) {
   const shown = tx.items.slice(0, ITEMS_SHOWN);
   const hidden = tx.items.length - shown.length;
@@ -226,12 +238,11 @@ function Transaction({ tx, showChannel }) {
         <s-stack key={`${tx.id}-${i}`} direction="inline" gap="small-300" alignItems="center">
           <s-product-thumbnail src={item.image || undefined} alt={item.name} size="small" />
           <s-stack gap="none">
-            <s-text>{item.name}</s-text>
-            {item.quantity > 1 && (
-              <s-text type="small" color="subdued">
-                {t("quantity", { quantity: item.quantity })}
-              </s-text>
-            )}
+            <s-stack direction="inline" gap="small-300" alignItems="center">
+              <s-text>{item.name}</s-text>
+              {item.isReturn && <s-badge tone="critical">{t("return")}</s-badge>}
+            </s-stack>
+            <ItemDetails item={item} />
           </s-stack>
         </s-stack>
       ))}

@@ -73,12 +73,21 @@ function toTransaction(t, fallbackCurrency) {
     isReturn: total < 0 || type.includes("return") || type.includes("refund"),
     items: (t.items || [])
       .filter((item) => !item.is_void)
-      .map((item) => ({
-        name: item.name || item.product?.title || "",
-        quantity: toNumber(item.quantity) ?? 1,
-        price: toNumber(item.price_sell) ?? toNumber(item.price_current),
-        image: itemImage(item),
-      })),
+      .map((item) => {
+        // Returned lines come back as quantity -1 with a positive unit price,
+        // so the line total carries the sign (e.g. exchanges total $0).
+        const quantity = toNumber(item.quantity) ?? 1;
+        const unitPrice = toNumber(item.price_sell) ?? toNumber(item.price_current);
+        const size = item.product_variant?.title;
+        return {
+          name: item.name || item.product?.title || "",
+          size: size && size !== "Default Title" ? size : null,
+          quantity,
+          isReturn: !!item.is_return || quantity < 0,
+          price: unitPrice === null ? null : unitPrice * quantity,
+          image: itemImage(item),
+        };
+      }),
   };
 }
 

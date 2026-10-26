@@ -210,7 +210,6 @@ function TierProgress({ status }) {
           {remaining !== null && (
             <s-text>
               {t("toEarnTier", {
-                percent: progress ?? 0,
                 amount: money(remaining, currency),
                 tier: tierLabel(nextTier.name),
               })}
@@ -231,7 +230,7 @@ function TierProgress({ status }) {
 // tier + yearly progress, progress to the next tier, and what's needed to
 // keep the current one.
 function LevelCard({ status }) {
-  const { tier, currency, spent, maintainRemaining, maintainedUntil } = status;
+  const { tier, nextTier, currency, spent, maintainRemaining, maintainedUntil } = status;
   const until = maintainedUntil ? formatDate(maintainedUntil) : "";
 
   return (
@@ -243,7 +242,11 @@ function LevelCard({ status }) {
         </SplitRow>
         <SplitRow>
           <s-text color="subdued">{t("yearlyProgress")}</s-text>
-          <s-text type="strong">{money(spent, currency)}</s-text>
+          <s-text type="strong">
+            {nextTier?.min
+              ? `${money(spent, currency)} / ${money(nextTier.min, currency)}`
+              : money(spent, currency)}
+          </s-text>
         </SplitRow>
 
         <s-divider />

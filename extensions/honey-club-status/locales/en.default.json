@@ -2,7 +2,7 @@
   "greeting": "Hello, {{name}}",
   "levelTitle": "Honey Club level",
   "yearlyProgress": "Yearly progress",
-  "toEarnTier": "{{percent}}% · {{amount}} needed to earn {{tier}}",
+  "toEarnTier": "{{amount}} needed to earn {{tier}}",
   "maintainNeeded": "{{amount}} needed to maintain {{tier}}",
   "maintainNeededBy": "{{amount}} needed to maintain {{tier}} by {{date}}",
   "topTier": "Top tier reached",
