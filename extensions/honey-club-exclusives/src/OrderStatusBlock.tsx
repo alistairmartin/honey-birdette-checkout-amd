@@ -1,6 +1,5 @@
 import "@shopify/ui-extensions/preact";
 import {render} from "preact";
-import { useImageAspectRatio } from "./imageRatio";
 import {useEffect, useState} from "preact/hooks";
 import {
   useAuthenticatedAccountCustomer,
@@ -13,11 +12,9 @@ export default function extension() {
   render(<HoneyClubExclusives />, document.body);
 }
 
-// Container width (px) at which the desktop image replaces the mobile one.
-// The legacy Style helper switched at the "medium" viewport breakpoint; web
-// components use container queries, so this is measured on the block's own
-// container instead of the viewport.
-const DESKTOP_MIN_INLINE_SIZE = 700;
+// Container width (px) above which the image sits beside the copy instead of
+// above it. Measured on the block's own container, not the viewport.
+const TWO_COLUMN_MIN_INLINE_SIZE = 600;
 
 // Fallbacks so the block still renders in dev if settings aren't configured.
 // Replace these placeholders with real values in the extension's admin settings.
@@ -30,6 +27,7 @@ const DEFAULT_CONFIG = {
   mobileImageUrl:
     "https://cdn.shopify.com/s/files/1/0585/9581/files/Cherry_Cuff12.jpg?v=1781588996",
   unlockTag: "dress-circle",
+  eyebrow: "The Honey Club Exclusive",
   headingUnlocked: "Honey Club Exclusives",
   messageUnlocked: "Your members-only collection is unlocked. Shop it now.",
   ctaUnlockedText: "Shop the collection",
@@ -69,6 +67,7 @@ function HoneyClubExclusives() {
   const desktopImageUrl = str(settings.desktop_image_url) || DEFAULT_CONFIG.desktopImageUrl;
   const mobileImageUrl = str(settings.mobile_image_url) || DEFAULT_CONFIG.mobileImageUrl;
   const unlockTag = (str(settings.unlock_tag) || DEFAULT_CONFIG.unlockTag).toLowerCase();
+  const eyebrow = str(settings.eyebrow) || DEFAULT_CONFIG.eyebrow;
 
   const headingUnlocked = str(settings.heading_unlocked) || DEFAULT_CONFIG.headingUnlocked;
   const messageUnlocked = str(settings.message_unlocked) || DEFAULT_CONFIG.messageUnlocked;
@@ -127,82 +126,46 @@ function HoneyClubExclusives() {
     fetchTags();
   }, [customerId, unlockTag, storeConfig.proxyUrl, storeConfig.shopifyDomain]);
 
-  const defaultSource = mobileImageUrl || desktopImageUrl;
-  const desktopSource = desktopImageUrl || mobileImageUrl;
-
-  // <s-image> frames every image in an aspect ratio box (1/1 by default), so
-  // the real ratio is read from the file. Undefined means still loading.
-  const defaultRatio = useImageAspectRatio(defaultSource);
-  const desktopRatio = useImageAspectRatio(desktopSource);
-  const ratiosReady = defaultRatio !== undefined && desktopRatio !== undefined;
+  // The card shows a square product shot beside the copy, so the (square)
+  // mobile image is preferred over the wide desktop banner.
+  const imageUrl = mobileImageUrl || desktopImageUrl;
 
   // Nothing to show without imagery.
-  if (!defaultSource && !desktopSource) {
+  if (!imageUrl) {
     return null;
   }
-
-  // Responsive source: swap to the desktop asset on wide containers.
-  const responsive = Boolean(
-    defaultSource && desktopSource && defaultSource !== desktopSource
-  );
-  const singleSource = defaultSource || desktopSource;
 
   const heading = unlocked ? headingUnlocked : headingLocked;
   const message = unlocked ? messageUnlocked : messageLocked;
   const ctaText = unlocked ? ctaUnlockedText : ctaLockedText;
   const ctaUrl = unlocked ? ctaUnlockedUrl : ctaLockedUrl;
 
+  // Design: image left, eyebrow / heading / copy / button right; stacks on
+  // narrow containers. Same pattern as the honey-club-status Join card.
   return (
-    <s-query-container>
-      <s-box padding="base" borderRadius="base" background="subdued">
-        <s-stack gap="base" alignItems="center">
-          {!ratiosReady ? null : responsive ? (
-            <>
-              <s-box
-                inlineSize="100%"
-                display={`@container (inline-size > ${DESKTOP_MIN_INLINE_SIZE}px) none, auto`}
-              >
-                <s-image
-                  src={defaultSource}
-                  alt="Honey Club Exclusives"
-                  aspectRatio={defaultRatio || "1/1"}
-                  objectFit={defaultRatio ? "cover" : "contain"}
-                />
-              </s-box>
-              <s-box
-                inlineSize="100%"
-                display={`@container (inline-size > ${DESKTOP_MIN_INLINE_SIZE}px) auto, none`}
-              >
-                <s-image
-                  src={desktopSource}
-                  alt="Honey Club Exclusives"
-                  aspectRatio={desktopRatio || "1/1"}
-                  objectFit={desktopRatio ? "cover" : "contain"}
-                />
-              </s-box>
-            </>
-          ) : (
-            <s-image
-              src={singleSource}
-              alt="Honey Club Exclusives"
-              aspectRatio={defaultRatio || "1/1"}
-              objectFit={defaultRatio ? "cover" : "contain"}
-            />
-          )}
-          <s-stack gap="small-200" alignItems="center">
+    <s-section>
+      <s-query-container>
+        <s-grid
+          gridTemplateColumns={`@container (inline-size > ${TWO_COLUMN_MIN_INLINE_SIZE}px) 1fr 1fr, 1fr`}
+          gap="large-100"
+          alignItems="center"
+        >
+          <s-image src={imageUrl} alt={heading} aspectRatio="1" objectFit="cover" borderRadius="base" />
+          <s-stack gap="base">
+            <s-text color="subdued">{eyebrow}</s-text>
             <s-heading>{heading}</s-heading>
             {/* While tags resolve, show neutral copy to avoid flashing a CTA. */}
-            <s-text color={loading ? "subdued" : "base"}>
+            <s-paragraph color="subdued">
               {loading ? "Loading your Honey Club perks…" : message}
-            </s-text>
+            </s-paragraph>
+            {!loading && ctaUrl ? (
+              <s-button href={ctaUrl} variant="primary">
+                {ctaText}
+              </s-button>
+            ) : null}
           </s-stack>
-          {!loading && ctaUrl ? (
-            <s-button href={ctaUrl} variant="primary">
-              {ctaText}
-            </s-button>
-          ) : null}
-        </s-stack>
-      </s-box>
-    </s-query-container>
+        </s-grid>
+      </s-query-container>
+    </s-section>
   );
 }

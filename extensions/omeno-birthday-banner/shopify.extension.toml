@@ -39,24 +39,6 @@ key = "tags"
 
 [extensions.settings]
   [[extensions.settings.fields]]
-  key = "region"
-  type = "single_line_text_field"
-  name = "Store Region"
-  description = "The region this store belongs to (US, EU, AU, UK, or DEV)"
-  
-  [[extensions.settings.fields]]
-  key = "shopify_domain"
-  type = "single_line_text_field"
-  name = "Shopify Domain"
-  description = "The myshopify domain for this store (e.g., honey-birdette-2.myshopify.com)"
-  
-  [[extensions.settings.fields]]
-  key = "proxy_url"
-  type = "single_line_text_field"
-  name = "Proxy URL"
-  description = "The public URL for app proxy (e.g., https://www.honeybirdette.com)"
-
-  [[extensions.settings.fields]]
   key = "show_debug"
   type = "boolean"
   name = "Show Debug Button"

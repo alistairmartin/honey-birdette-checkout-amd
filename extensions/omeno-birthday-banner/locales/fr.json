@@ -17,5 +17,11 @@
   "september": "Septembre",
   "october": "Octobre",
   "november": "Novembre",
-  "december": "Décembre"
+  "december": "Décembre",
+  "savedTitle": "Ton anniversaire",
+  "savedNote": "Merci de l'avoir partagé, chérie. Une petite surprise arrivera dans ta boîte mail ce mois-là.",
+  "edit": "Modifier",
+  "cancel": "Annuler",
+  "formTitle": "Quand est ton anniversaire ?",
+  "formDescription": "Dis-le-nous et nous t'enverrons une surprise d'anniversaire spéciale."
 }

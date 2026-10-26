@@ -29,18 +29,24 @@ network_access = true
 scopes = "read_customers"
 
 [extensions.settings]
-  # --- Imagery (per the slide spec: 2000px desktop / 1000px mobile) ---
-  [[extensions.settings.fields]]
-  key = "desktop_image_url"
-  type = "single_line_text_field"
-  name = "Desktop image URL"
-  description = "Hero banner image for desktop (~2000px wide)."
-
+  # --- Imagery: one square image, shown beside the copy (cropped to 1:1) ---
   [[extensions.settings.fields]]
   key = "mobile_image_url"
   type = "single_line_text_field"
-  name = "Mobile image URL"
-  description = "Hero banner image for mobile (~1000px wide)."
+  name = "Image URL"
+  description = "Square product image (~1000px), cropped to 1:1 beside the copy."
+
+  [[extensions.settings.fields]]
+  key = "desktop_image_url"
+  type = "single_line_text_field"
+  name = "Fallback image URL"
+  description = "Used only if Image URL is blank. Also cropped to 1:1."
+
+  [[extensions.settings.fields]]
+  key = "eyebrow"
+  type = "single_line_text_field"
+  name = "Eyebrow"
+  description = "Small line above the heading. Default: The Honey Club Exclusive"
 
   # --- Tier gating ---
   [[extensions.settings.fields]]

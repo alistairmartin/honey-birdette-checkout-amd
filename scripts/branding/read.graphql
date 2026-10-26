@@ -1,0 +1,44 @@
+query ReadBranding($id: ID!) {
+  checkoutBranding(checkoutProfileId: $id) {
+    designSystem {
+      cornerRadius { small base large }
+      colors {
+        global { brand accent success critical info decorative }
+        schemes {
+          scheme1 { ...Scheme }
+          scheme2 { ...Scheme }
+          scheme3 { ...Scheme }
+          scheme4 { ...Scheme }
+        }
+      }
+      typography {
+        primary { name }
+        secondary { name }
+        size { base ratio }
+      }
+    }
+    customizations {
+      global { cornerRadius typography { letterCase kerning } }
+      header { colorScheme alignment position divided padding }
+      main {
+        colorScheme
+        section { colorScheme border borderStyle borderWidth cornerRadius padding shadow }
+        divider { borderStyle borderWidth }
+      }
+      orderSummary { colorScheme }
+      primaryButton { background border cornerRadius blockPadding inlinePadding typography { letterCase weight } }
+      secondaryButton { background border cornerRadius }
+      control { color border cornerRadius labelPosition }
+      headingLevel1 { typography { letterCase weight size } }
+      headingLevel2 { typography { letterCase weight size } }
+      headingLevel3 { typography { letterCase weight size } }
+    }
+  }
+}
+
+fragment Scheme on CheckoutBrandingColorScheme {
+  base { background text border accent decorative icon }
+  primaryButton { background text border accent icon }
+  secondaryButton { background text border accent icon }
+  control { background text border accent }
+}

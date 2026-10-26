@@ -17,5 +17,11 @@
   "september": "September",
   "october": "Oktober",
   "november": "November",
-  "december": "Dezember"
+  "december": "Dezember",
+  "savedTitle": "Dein Geburtstag",
+  "savedNote": "Danke, Schatz. In diesem Monat landet eine kleine Überraschung in deinem Posteingang.",
+  "edit": "Bearbeiten",
+  "cancel": "Abbrechen",
+  "formTitle": "Wann hast du Geburtstag?",
+  "formDescription": "Verrate es uns und wir schicken dir eine besondere Geburtstagsüberraschung."
 }

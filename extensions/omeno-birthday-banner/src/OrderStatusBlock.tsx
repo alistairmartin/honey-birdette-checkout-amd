@@ -13,12 +13,28 @@ export default function extension() {
   render(<CustomerBirthdayBlock />, document.body);
 }
 
-// Fallback config if settings aren't configured
-const DEFAULT_CONFIG = {
-  region: "AU",
-  shopifyDomain: "honey-birdette-2.myshopify.com",
-  proxyUrl: "https://www.honeybirdette.com"
+// Birthday backend (separate Render service: honey-birdette-birthday-app).
+// Called directly rather than via each store's app proxy, so no per-store URL.
+const BACKEND_URL = "https://honey-birdette-birthday-app.onrender.com";
+
+// Region label per store (debug display only; the backend keys off the shop).
+const SHOP_REGIONS: Record<string, string> = {
+  "honey-birdette-2.myshopify.com": "AU",
+  "honey-birdette-uk.myshopify.com": "UK",
+  "honey-birdette-eu.myshopify.com": "EU",
+  "honey-birdette-usa.myshopify.com": "US",
+  "honeybirdette-us.myshopify.com": "US",
 };
+
+// The store this customer account belongs to, read from the session token's
+// `dest` claim (the shop's myshopify domain). Only used to route the request,
+// so decoding without verifying is fine here.
+async function currentShopDomain(): Promise<string> {
+  const token = await shopify.sessionToken.get();
+  const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+  const claims = JSON.parse(atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, "=")));
+  return String(claims.dest || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+}
 
 // The change event is typed as a plain Event, so narrow its target to read
 // the selected value (the old Select passed the value string directly).
@@ -33,11 +49,13 @@ function CustomerBirthdayBlock() {
   // Read settings configured by merchant in Shopify admin
   const settings = useSettings();
 
-  // Get store configuration from settings
+  // The store is detected from the session token, so the same block works on
+  // the AU, UK, EU and US stores without per-store settings.
+  const [shop, setShop] = useState("");
   const storeConfig = {
-    region: settings.region || DEFAULT_CONFIG.region,
-    shopifyDomain: settings.shopify_domain || DEFAULT_CONFIG.shopifyDomain,
-    proxyUrl: settings.proxy_url || DEFAULT_CONFIG.proxyUrl,
+    region: SHOP_REGIONS[shop] ?? "DEV",
+    shopifyDomain: shop,
+    proxyUrl: BACKEND_URL,
     showDebug: settings.show_debug !== undefined ? settings.show_debug : false // Hidden unless enabled in admin
   };
 
@@ -48,11 +66,25 @@ function CustomerBirthdayBlock() {
 
   const [day, setDay] = useState("");
   const [month, setMonth] = useState("");
+  // The birthday as stored; the form edits day/month until saved.
+  const [savedDay, setSavedDay] = useState("");
+  const [savedMonth, setSavedMonth] = useState("");
+  const [editing, setEditing] = useState(false);
   const [customerId, setCustomerId] = useState<string>("");
   const [showDebug, setShowDebug] = useState(false);
   const [debug, setDebug] = useState<string>("");
   const [refreshKey, setRefreshKey] = useState(0);
   const translate = useTranslate();
+
+  useEffect(() => {
+    currentShopDomain()
+      .then(setShop)
+      .catch((e) => {
+        console.error("❌ Could not detect store:", e);
+        setError("We couldn't load your birthday. Please refresh the page.");
+        setLoading(false);
+      });
+  }, []);
 
   // Log configuration on mount
   useEffect(() => {
@@ -76,8 +108,8 @@ function CustomerBirthdayBlock() {
   useEffect(() => {
     async function fetchCustomerTags() {
       try {
-        if (!customerId) {
-          console.log("⏳ Waiting for customer ID...");
+        if (!customerId || !shop) {
+          console.log("⏳ Waiting for customer ID and store...");
           return;
         }
 
@@ -86,7 +118,7 @@ function CustomerBirthdayBlock() {
         console.log("   Shop:", storeConfig.shopifyDomain);
 
         const resp = await fetch(
-          `${storeConfig.proxyUrl}/apps/omeno-birthday/get-tags?customerId=${customerId}&shop=${storeConfig.shopifyDomain}`,
+          `${BACKEND_URL}/get-tags?customerId=${customerId}&shop=${shop}`,
           {
             method: "GET",
             headers: { "Content-Type": "application/json" },
@@ -119,6 +151,8 @@ function CustomerBirthdayBlock() {
 
             setDay(paddedDay);
             setMonth(paddedMonth);
+            setSavedDay(paddedDay);
+            setSavedMonth(paddedMonth);
             console.log(`🎂 Found birthday: ${paddedDay}/${paddedMonth} (from metafields)`);
           } else {
             console.log("ℹ️ No birthday metafields found");
@@ -133,7 +167,7 @@ function CustomerBirthdayBlock() {
     }
 
     fetchCustomerTags();
-  }, [customerId, refreshKey, storeConfig.proxyUrl, storeConfig.shopifyDomain, storeConfig.region]);
+  }, [customerId, shop, refreshKey]);
 
   async function save() {
     setError(undefined);
@@ -183,7 +217,7 @@ function CustomerBirthdayBlock() {
       console.log("   Region:", storeConfig.region);
       console.log("   Shop:", storeConfig.shopifyDomain);
 
-      const resp = await fetch(`${storeConfig.proxyUrl}/apps/omeno-birthday/add-tags`, {
+      const resp = await fetch(`${BACKEND_URL}/add-tags`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -212,8 +246,10 @@ function CustomerBirthdayBlock() {
       }
 
       console.log("✅ Birthday saved!");
-      setSaved(translate("birthdaySaved"));
-      setTimeout(() => setSaved(undefined), 3000);
+      // Show the saved view straight away; the re-fetch below confirms it.
+      setSavedDay(paddedDay);
+      setSavedMonth(paddedMonth);
+      setEditing(false);
 
       // Re-fetch so the widget shows what the server actually stored
       setRefreshKey((k) => k + 1);
@@ -251,62 +287,80 @@ function CustomerBirthdayBlock() {
 
   if (loading) {
     return (
-      <s-banner tone="info">
-        <s-text>Loading…</s-text>
-      </s-banner>
+      <s-section>
+        <s-stack gap="base">
+          <s-heading>{translate("savedTitle")}</s-heading>
+          <s-skeleton-paragraph />
+        </s-stack>
+      </s-section>
     );
   }
 
+  const hasBirthday = Boolean(savedDay && savedMonth);
+
+  function cancelEdit() {
+    setDay(savedDay);
+    setMonth(savedMonth);
+    setError(undefined);
+    setEditing(false);
+  }
+
+  // Saved view: "Your birthday / 4 April / Thanks for sharing... / Edit".
+  if (hasBirthday && !editing) {
+    const monthLabel =
+      monthOptions.find((option) => option.value === savedMonth)?.label ?? savedMonth;
+    return (
+      <s-section>
+        <s-stack gap="base">
+          <s-heading>{translate("savedTitle")}</s-heading>
+          <s-text>{`${parseInt(savedDay, 10)} ${monthLabel}`}</s-text>
+          <s-text color="subdued">{translate("savedNote")}</s-text>
+          <s-link onClick={() => setEditing(true)}>{translate("edit")}</s-link>
+        </s-stack>
+      </s-section>
+    );
+  }
+
+  // Form view: no birthday yet, or editing an existing one.
   return (
-    <s-box border="base" padding="base" borderRadius="base">
+    <s-section>
       <s-stack gap="base">
-      <s-stack gap="small-400">
-        <s-heading>{translate("birthdayTitle")}</s-heading>
-        <s-text color="subdued">{translate("birthdayDescription")}</s-text>
-      </s-stack>
-      <s-divider />
-      <s-stack gap="base">
-         {storeConfig.showDebug && (
-        <s-text type="small" color="subdued">
-          Region: {storeConfig.region}
-        </s-text>
-        )}
+        <s-stack gap="small-300">
+          <s-heading>{translate("formTitle")}</s-heading>
+          <s-text color="subdued">{translate("formDescription")}</s-text>
+        </s-stack>
 
         {storeConfig.showDebug && (
-        <s-text type="small" color="subdued">
-          Customer ID: {customerId || "Loading..."}
-        </s-text>
-         )}
+          <s-text type="small" color="subdued">
+            Region: {storeConfig.region} · Customer ID: {customerId || "Loading..."}
+          </s-text>
+        )}
 
         <s-form onSubmit={save}>
           <s-stack gap="base">
-            <s-grid gridTemplateColumns="1fr 1fr" gap="large-200">
-              <s-box>
-                <s-select
-                  label={translate("dayLabel")}
-                  value={day}
-                  onChange={(event) => setDay(selectValue(event))}
-                >
-                  {dayOptions.map((option) => (
-                    <s-option key={option.value} value={option.value}>
-                      {option.label}
-                    </s-option>
-                  ))}
-                </s-select>
-              </s-box>
-              <s-box>
-                <s-select
-                  label={translate("monthLabel")}
-                  value={month}
-                  onChange={(event) => setMonth(selectValue(event))}
-                >
-                  {monthOptions.map((option) => (
-                    <s-option key={option.value} value={option.value}>
-                      {option.label}
-                    </s-option>
-                  ))}
-                </s-select>
-              </s-box>
+            <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+              <s-select
+                label={translate("dayLabel")}
+                value={day}
+                onChange={(event) => setDay(selectValue(event))}
+              >
+                {dayOptions.map((option) => (
+                  <s-option key={option.value} value={option.value}>
+                    {option.label}
+                  </s-option>
+                ))}
+              </s-select>
+              <s-select
+                label={translate("monthLabel")}
+                value={month}
+                onChange={(event) => setMonth(selectValue(event))}
+              >
+                {monthOptions.map((option) => (
+                  <s-option key={option.value} value={option.value}>
+                    {option.label}
+                  </s-option>
+                ))}
+              </s-select>
             </s-grid>
 
             {error && (
@@ -321,22 +375,17 @@ function CustomerBirthdayBlock() {
               </s-banner>
             )}
 
-            <s-button
-              variant="primary"
-              type="submit"
-              inlineSize="fill"
-              loading={saving}
-              disabled={saving}
-            >
-              {saving ? translate("saving") : translate("saveBirthday")}
-            </s-button>
+            <s-stack direction="inline" gap="base" alignItems="center">
+              <s-button variant="primary" type="submit" loading={saving} disabled={saving}>
+                {saving ? translate("saving") : translate("saveBirthday")}
+              </s-button>
+              {hasBirthday && (
+                <s-link onClick={cancelEdit}>{translate("cancel")}</s-link>
+              )}
+            </s-stack>
 
             {storeConfig.showDebug && (
-              <s-button
-                variant="secondary"
-                inlineSize="fill"
-                onClick={() => setShowDebug((v) => !v)}
-              >
+              <s-button variant="secondary" onClick={() => setShowDebug((v) => !v)}>
                 {showDebug ? "Hide debug" : "Show debug"}
               </s-button>
             )}
@@ -350,7 +399,6 @@ function CustomerBirthdayBlock() {
           </s-stack>
         </s-form>
       </s-stack>
-      </s-stack>
-    </s-box>
+    </s-section>
   );
 }

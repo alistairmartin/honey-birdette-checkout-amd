@@ -36,9 +36,61 @@ function formatDate(iso) {
   return shopify.i18n.formatDate(date, { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// Editor-only preview data, so both states can be checked in the customer
+// account editor (its preview customer isn't in Omneo, so live data is always
+// the Join card there).
+const PREVIEW_MEMBER = {
+  member: true,
+  currency: "AUD",
+  tier: { name: "Gold AU", handle: "gold-au" },
+  nextTier: { name: "Platinum AU", handle: "platinum-au" },
+  spent: 0,
+  remaining: 500,
+  progress: 6,
+  maintainedUntil: "2027-09-01",
+  balance: 0,
+};
+const PREVIEW_JOIN = { member: false, currency: "AUD" };
+
+const PREVIEW_OPTIONS = [
+  { value: "member", label: "Member" },
+  { value: "join", label: "Non-member" },
+  { value: "live", label: "Live data" },
+];
+
+// Only rendered when shopify.extension.editor is set, i.e. never for customers.
+function PreviewSwitcher({ value, onChange }) {
+  return (
+    <s-stack direction="inline" gap="small-300" alignItems="center">
+      <s-text type="small" color="subdued">Editor preview:</s-text>
+      {PREVIEW_OPTIONS.map((option) => (
+        <s-button
+          key={option.value}
+          variant={value === option.value ? "primary" : "secondary"}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </s-button>
+      ))}
+    </s-stack>
+  );
+}
+
 function HoneyClubStatus() {
   // undefined = loading, null = failed (render nothing), object = loaded.
-  const [status, setStatus] = useState(undefined);
+  const [liveStatus, setStatus] = useState(undefined);
+  const inEditor = Boolean(shopify.extension?.editor);
+  const [preview, setPreview] = useState("member");
+  const [firstName, setFirstName] = useState("");
+
+  // "Hello, Sophia" greeting: first name from the Customer Account API.
+  useEffect(() => {
+    if (shopify.settings?.value?.hide_greeting) return;
+    shopify
+      .query(`query { customer { firstName } }`)
+      .then((result) => setFirstName(result?.data?.customer?.firstName?.trim() || ""))
+      .catch((e) => console.error("HoneyClubStatus: failed to load name", e));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +114,14 @@ function HoneyClubStatus() {
     };
   }, []);
 
+  const previewing = inEditor && preview !== "live";
+  const status = previewing
+    ? preview === "member"
+      ? PREVIEW_MEMBER
+      : PREVIEW_JOIN
+    : liveStatus;
+  const switcher = inEditor && <PreviewSwitcher value={preview} onChange={setPreview} />;
+
   if (status === undefined) {
     return (
       <s-section heading={t("levelTitle")}>
@@ -72,27 +132,45 @@ function HoneyClubStatus() {
 
   // On a backend/Omneo failure, show nothing: guessing would risk telling a
   // member to "Join the club".
-  if (status === null) return null;
-
-  if (!status.member) return <JoinCard />;
+  if (status === null) return switcher || null;
 
   return (
-    <s-query-container>
-      <s-grid
-        gridTemplateColumns={status.balance === null ? "1fr" : "@container (inline-size > 600px) 2fr 1fr, 1fr"}
-        gap="base"
-      >
-        <LevelCard status={status} />
-        {status.balance !== null && <BalanceCard status={status} />}
-      </s-grid>
-    </s-query-container>
+    <s-stack gap="base">
+      {switcher}
+      {firstName && <s-heading>{t("greeting", { name: firstName })}</s-heading>}
+      {status.member ? (
+        <>
+          <LevelCard status={status} />
+          {status.balance !== null && <BalanceCard status={status} />}
+        </>
+      ) : (
+        <JoinCard />
+      )}
+    </s-stack>
+  );
+}
+
+// "Gold AU" -> "Gold" for the sentence; the badge keeps the full tier name.
+function shortTierName(name) {
+  return name.replace(/\s+[A-Z]{2}$/, "") || name;
+}
+
+// Two subdued texts on one line, pushed to opposite edges.
+function SplitRow({ left, right }) {
+  return (
+    <s-stack direction="inline" gap="small-300" alignItems="center" justifyContent="space-between">
+      <s-text color="subdued">{left}</s-text>
+      {right && <s-text color="subdued">{right}</s-text>}
+    </s-stack>
   );
 }
 
 function LevelCard({ status }) {
   const { tier, nextTier, currency, spent, remaining, progress, maintainedUntil } = status;
   const until = maintainedUntil ? formatDate(maintainedUntil) : "";
+  const spentText = t("spentThisYear", { amount: money(spent, currency) });
 
+  // Design: heading + badge / progress bar / spent left, to-next right / maintained.
   return (
     <s-section>
       <s-stack gap="base">
@@ -101,10 +179,8 @@ function LevelCard({ status }) {
           <s-badge>{tier.name}</s-badge>
         </s-stack>
 
-        <s-text>{t("spentThisYear", { amount: money(spent, currency) })}</s-text>
-
         {nextTier ? (
-          <s-stack gap="small-300">
+          <>
             {progress !== null && (
               <s-progress
                 value={progress}
@@ -112,19 +188,25 @@ function LevelCard({ status }) {
                 accessibilityLabel={t("progressLabel", { tier: nextTier.name })}
               />
             )}
-            {remaining !== null && (
-              <s-text color="subdued">
-                {t("toNextTier", { amount: money(remaining, currency), tier: nextTier.name })}
-              </s-text>
-            )}
-          </s-stack>
+            <SplitRow
+              left={spentText}
+              right={
+                remaining !== null
+                  ? t("toNextTier", { amount: money(remaining, currency), tier: nextTier.name })
+                  : ""
+              }
+            />
+          </>
         ) : (
-          <s-text color="subdued">{t("topTier")}</s-text>
+          <>
+            <s-progress value={100} max={100} accessibilityLabel={t("topTier")} />
+            <SplitRow left={spentText} right={t("topTier")} />
+          </>
         )}
 
         {until && (
-          <s-text type="small" color="subdued">
-            {t("maintainedUntil", { tier: tier.name, date: until })}
+          <s-text color="subdued">
+            {t("maintainedUntil", { tier: shortTierName(tier.name), date: until })}
           </s-text>
         )}
       </s-stack>
@@ -132,12 +214,15 @@ function LevelCard({ status }) {
   );
 }
 
+// Design: heading left, amount right / note.
 function BalanceCard({ status }) {
   return (
     <s-section>
       <s-stack gap="base">
-        <s-heading>{t("balanceTitle")}</s-heading>
-        <s-text type="strong">{money(status.balance, status.currency)}</s-text>
+        <s-stack direction="inline" gap="small-300" alignItems="center" justifyContent="space-between">
+          <s-heading>{t("balanceTitle")}</s-heading>
+          <s-heading>{money(status.balance, status.currency)}</s-heading>
+        </s-stack>
         <s-text color="subdued">{t("balanceNote")}</s-text>
       </s-stack>
     </s-section>
@@ -161,14 +246,14 @@ function JoinCard() {
   const benefits = [
     setting("join_benefit_1") || t("joinBenefit1"),
     setting("join_benefit_2") || t("joinBenefit2"),
-    setting("join_benefit_3"),
+    setting("join_benefit_3") || t("joinBenefit3"),
   ].filter(Boolean);
 
   const content = (
     <s-stack gap="base">
-      <s-text color="subdued">{t("eyebrow")}</s-text>
+      <s-text color="subdued">{setting("join_eyebrow") || t("eyebrow")}</s-text>
       <s-heading>{setting("join_heading") || t("joinHeading")}</s-heading>
-      <s-paragraph>{setting("join_body") || t("joinBody")}</s-paragraph>
+      {setting("join_body") && <s-paragraph>{setting("join_body")}</s-paragraph>}
       <s-unordered-list>
         {benefits.map((b) => (
           <Benefit key={b} text={b} />

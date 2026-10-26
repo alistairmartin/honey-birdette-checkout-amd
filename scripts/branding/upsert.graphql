@@ -1,0 +1,8 @@
+mutation UpsertBranding($id: ID!, $input: CheckoutBrandingInput!) {
+  checkoutBrandingUpsert(checkoutProfileId: $id, checkoutBrandingInput: $input) {
+    checkoutBranding {
+      designSystem { cornerRadius { small base large } }
+    }
+    userErrors { field message code }
+  }
+}

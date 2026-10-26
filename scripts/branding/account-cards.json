@@ -1,0 +1,11 @@
+{
+  "customizations": {
+    "main": {
+      "section": {
+        "colorScheme": "COLOR_SCHEME1",
+        "border": "NONE",
+        "cornerRadius": "NONE"
+      }
+    }
+  }
+}

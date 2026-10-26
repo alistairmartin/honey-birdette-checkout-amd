@@ -1,0 +1,126 @@
+{
+  "checkoutBranding": {
+    "designSystem": {
+      "cornerRadius": null,
+      "colors": {
+        "global": {
+          "brand": "#000000",
+          "accent": "#000000",
+          "success": null,
+          "critical": "#C81111",
+          "info": null,
+          "decorative": null
+        },
+        "schemes": {
+          "scheme1": {
+            "base": {
+              "background": "#F1ECE4",
+              "text": null,
+              "border": null,
+              "accent": null,
+              "decorative": null,
+              "icon": null
+            },
+            "primaryButton": null,
+            "secondaryButton": null,
+            "control": {
+              "background": null,
+              "text": null,
+              "border": null,
+              "accent": null
+            }
+          },
+          "scheme2": {
+            "base": {
+              "background": "#E9E3DA",
+              "text": null,
+              "border": null,
+              "accent": null,
+              "decorative": null,
+              "icon": null
+            },
+            "primaryButton": null,
+            "secondaryButton": null,
+            "control": null
+          },
+          "scheme3": null,
+          "scheme4": null
+        }
+      },
+      "typography": {
+        "primary": {
+          "name": "31opmtaJ"
+        },
+        "secondary": null,
+        "size": {
+          "base": 14,
+          "ratio": null
+        }
+      }
+    },
+    "customizations": {
+      "global": {
+        "cornerRadius": null,
+        "typography": null
+      },
+      "header": {
+        "colorScheme": null,
+        "alignment": null,
+        "position": null,
+        "divided": null,
+        "padding": null
+      },
+      "main": {
+        "colorScheme": "COLOR_SCHEME1",
+        "section": null,
+        "divider": null
+      },
+      "orderSummary": {
+        "colorScheme": "COLOR_SCHEME2"
+      },
+      "primaryButton": {
+        "background": null,
+        "border": null,
+        "cornerRadius": null,
+        "blockPadding": null,
+        "inlinePadding": null,
+        "typography": {
+          "letterCase": null,
+          "weight": null
+        }
+      },
+      "secondaryButton": {
+        "background": null,
+        "border": null,
+        "cornerRadius": null
+      },
+      "control": {
+        "color": "TRANSPARENT",
+        "border": null,
+        "cornerRadius": null,
+        "labelPosition": null
+      },
+      "headingLevel1": {
+        "typography": {
+          "letterCase": "UPPER",
+          "weight": "BASE",
+          "size": "BASE"
+        }
+      },
+      "headingLevel2": {
+        "typography": {
+          "letterCase": "UPPER",
+          "weight": "BASE",
+          "size": "BASE"
+        }
+      },
+      "headingLevel3": {
+        "typography": {
+          "letterCase": "UPPER",
+          "weight": "BASE",
+          "size": "BASE"
+        }
+      }
+    }
+  }
+}

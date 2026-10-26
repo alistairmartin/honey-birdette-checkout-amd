@@ -3,7 +3,7 @@
   "birthdayDescription": "We'll use this to send you a special birthday surprise!",
   "dayLabel": "Day",
   "monthLabel": "Month",
-  "saveBirthday": "Save Birthday",
+  "saveBirthday": "Save birthday",
   "birthdaySaved": "Birthday saved successfully!",
   "saving": "Saving...",
   "january": "January",
@@ -17,5 +17,11 @@
   "september": "September",
   "october": "October",
   "november": "November",
-  "december": "December"
+  "december": "December",
+  "savedTitle": "Your birthday",
+  "savedNote": "Thanks for sharing, Honey. A little surprise lands in your inbox that month.",
+  "edit": "Edit",
+  "cancel": "Cancel",
+  "formTitle": "When's your birthday?",
+  "formDescription": "Tell us and we'll send you a special birthday surprise."
 }
