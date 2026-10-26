@@ -1,0 +1,13 @@
+{
+  "pageHeading": "Vente privée VIP",
+  "intro": "Un accès anticipé à nos offres Black Friday, rien que pour vous.",
+  "loadError": "Impossible de charger la vente privée pour le moment. Réessayez plus tard.",
+  "empty": "Rien dans la vente privée pour l'instant. Revenez bientôt.",
+  "loadMore": "Voir plus",
+  "introPercent": "Un accès anticipé à nos offres Black Friday, rien que pour vous : {{percent}} % de réduction.",
+  "percentOff": "-{{percent}} %",
+  "size": "Taille",
+  "selectSize": "Choisir une taille",
+  "addToBag": "Ajouter au panier",
+  "soldOut": "Épuisé"
+}

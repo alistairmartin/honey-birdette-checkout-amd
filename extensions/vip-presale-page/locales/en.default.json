@@ -1,0 +1,13 @@
+{
+  "pageHeading": "VIP Presale",
+  "intro": "Early access to our Black Friday offers, just for you.",
+  "loadError": "We couldn't load the presale right now. Try again later.",
+  "empty": "Nothing in the presale just yet. Check back soon.",
+  "loadMore": "Load more",
+  "introPercent": "Early access to our Black Friday offers, just for you: {{percent}}% off.",
+  "percentOff": "{{percent}}% off",
+  "size": "Size",
+  "selectSize": "Select a size",
+  "addToBag": "Add to bag",
+  "soldOut": "Sold out"
+}

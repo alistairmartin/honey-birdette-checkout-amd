@@ -1,0 +1,13 @@
+{
+  "pageHeading": "VIP-Vorverkauf",
+  "intro": "Früher Zugang zu unseren Black-Friday-Angeboten, nur für dich.",
+  "loadError": "Der Vorverkauf konnte gerade nicht geladen werden. Bitte versuche es später erneut.",
+  "empty": "Noch nichts im Vorverkauf. Schau bald wieder vorbei.",
+  "loadMore": "Mehr laden",
+  "introPercent": "Früher Zugang zu unseren Black-Friday-Angeboten, nur für dich: {{percent}}% Rabatt.",
+  "percentOff": "{{percent}}% Rabatt",
+  "size": "Größe",
+  "selectSize": "Größe wählen",
+  "addToBag": "In den Warenkorb",
+  "soldOut": "Ausverkauft"
+}
