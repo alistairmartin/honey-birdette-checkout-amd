@@ -1,0 +1,29 @@
+# Honey Club - Customer Account full-page extension
+# A standalone "The Honey Club" account page, linked from the customer account
+# menu (Content > Menus > customer account menu > Add menu item > Apps > The Honey Club).
+#
+# Members: tier + progress, balance, their tier's perks, the tier ladder with
+# their position, birthday. Non-members: join hero + the tier ladder. Everyone:
+# current promo banner, how it works, and links to the storefront Honey Club
+# page / FAQs / terms.
+#
+# Data: /api/honey-club (Omneo, see app/routes/api.honey-club.jsx) and the
+# birthday Render service, same as the honey-club-status profile block.
+# Full-page targets can't share an extension with other targets, hence a
+# separate extension rather than a second target on honey-club-status.
+api_version = "2026-07"
+
+[[extensions]]
+name = "The Honey Club"
+handle = "honey-club-page"
+uid = "c60198b2-78f0-b290-db9c-d9b33b4210245e9852e1"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/HoneyClubPage.tsx"
+target = "customer-account.page.render"
+
+[extensions.capabilities]
+# network_access: lets the extension call the app backend for Omneo data.
+api_access = true
+network_access = true

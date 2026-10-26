@@ -45,6 +45,12 @@ const ADMIN_PAGES = [
       "Build any number of gift/purchase-with-purchase offers (min spend, subscription, or buy X get Y) across seven currencies. Each renders a progress banner and label in checkout and discounts the gift line via the gift-with-purchase-discount function.",
   },
   {
+    title: "Loyalty",
+    url: "/app/loyalty",
+    description:
+      "Honey Club tools: loyalty messaging banners for the account page, tier-gated loyalty exclusive gifts, tier metafield sync, and Loyalty order tag backfill.",
+  },
+  {
     title: "Kibo Checker",
     url: "/app/kibo-checker",
     description:

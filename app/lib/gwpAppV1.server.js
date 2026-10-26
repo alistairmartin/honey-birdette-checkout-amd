@@ -22,6 +22,7 @@ import {
   SHOP_METAFIELD_NAMESPACE,
   buildFunctionConfig,
 } from "./gwpAppV1.shared";
+import { applyLoyaltyEligibility } from "./loyaltyExclusives.server";
 
 const DISCOUNT_TITLE = "Gift with purchase";
 // Tag applied to the automatic discounts this app creates, so app-managed
@@ -729,6 +730,19 @@ export async function syncConfigs(admin, shop) {
     }
     return { row, config };
   });
+  // Loyalty exclusives run on their tiers' customer segments. Resolved here, at
+  // sync time, so a config's saved JSON stays tiers-only and the segments are
+  // recreated if someone deletes them in admin.
+  for (const p of parsed) {
+    if (!p.config) continue;
+    try {
+      p.config = await applyLoyaltyEligibility(admin, shop, p.config);
+    } catch (err) {
+      // Never fall back to "everyone" for a tier-only offer: skip it instead.
+      console.error(`Loyalty eligibility failed for config ${p.row.id}`, err);
+      p.config = null;
+    }
+  }
   // Stamp each config with its DB row id so the checkout extension can identify
   // which discount to ask about for the max-total-uses sold-out check. The id is
   // authoritative from the row and is never persisted back into configJson.

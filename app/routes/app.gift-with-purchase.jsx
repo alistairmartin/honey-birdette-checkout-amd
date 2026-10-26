@@ -43,11 +43,21 @@ import {
   TRIGGER_TYPES,
   triggerUsesMinSpend,
 } from "../lib/gwpAppV1.shared";
+import { LOYALTY_TIERS, isLoyaltyConfig, suggestRedeemedTag } from "../lib/loyalty.shared";
 
 // Gift With Purchase: the merchant builds and saves each offer here. Every
 // saved config (a GwpAppV1Config row) is pushed to a shop metafield read by the
 // gift-with-purchase checkout extension AND to a discount metafield read by
 // the gift-with-purchase-discount function - all handled by syncConfigs().
+//
+// The same page also serves Loyalty > Exclusives (app.loyalty.exclusives.jsx
+// re-exports it). In loyalty mode it lists and saves only `kind: "loyalty"`
+// configs, swaps customer eligibility for Honey Club tiers, and makes every offer
+// one-per-customer with a redeemed tag the app adds after the order.
+
+function isLoyaltyRequest(request) {
+  return new URL(request.url).pathname.startsWith("/app/loyalty");
+}
 
 // Map the Shopify DiscountStatus enum to merchant-facing wording. A discount
 // this app deactivates comes back as EXPIRED, which we surface as "Deactivated".
@@ -97,9 +107,20 @@ export const loader = async ({ request }) => {
     console.error("Failed to sync GWP V4 configs on load", err);
   }
 
-  const rows = await prisma.gwpAppV1Config.findMany({
-    where: { shop: session.shop },
-    orderBy: { updatedAt: "desc" },
+  // Each page lists only its own kind: GWP offers here, loyalty exclusives on
+  // /app/loyalty/exclusives.
+  const loyalty = isLoyaltyRequest(request);
+  const rows = (
+    await prisma.gwpAppV1Config.findMany({
+      where: { shop: session.shop },
+      orderBy: { updatedAt: "desc" },
+    })
+  ).filter((row) => {
+    try {
+      return isLoyaltyConfig(JSON.parse(row.configJson)) === loyalty;
+    } catch {
+      return !loyalty;
+    }
   });
   const saved = rows.map((row) => ({
     id: row.id,
@@ -182,7 +203,7 @@ export const loader = async ({ request }) => {
 
   const segments = await listSegments(admin);
 
-  return json({ saved, productInfo, discountMap, segments, timeZone });
+  return json({ saved, productInfo, discountMap, segments, timeZone, loyalty });
 };
 
 export const action = async ({ request }) => {
@@ -332,6 +353,15 @@ function emptyMinSpend() {
   }, {});
 }
 
+// Loyalty exclusives start as one-per-customer: the app tags redeemers.
+const INITIAL_LOYALTY_BUILDER = () => ({
+  ...INITIAL_BUILDER,
+  kind: "loyalty",
+  redemption_type: "one_per_customer",
+  label: "HONEY CLUB EXCLUSIVE",
+  admin_title: "{{ free_gift }} Honey Club exclusive",
+});
+
 const INITIAL_BUILDER = {
   enabled: true,
   mode: "live",
@@ -363,6 +393,9 @@ const INITIAL_BUILDER = {
   eligibility: "all",
   eligible_emails: "",
   eligible_segments: [],
+  // Loyalty exclusives only (kind "loyalty"): Honey Club tiers that qualify.
+  kind: "",
+  eligible_tiers: [],
   combines_product: false,
   combines_order: false,
   combines_shipping: false,
@@ -451,11 +484,22 @@ function buildConfig(state) {
     productDiscounts: !!state.combines_product,
     shippingDiscounts: !!state.combines_shipping,
   };
+  // Loyalty exclusives: eligibility is the tiers. syncConfigs() turns them into
+  // customer segments for the discount, so no eligibility fields are saved.
+  if (state.kind === "loyalty") {
+    config.kind = "loyalty";
+    config.eligible_tiers = LOYALTY_TIERS.map((t) => t.value).filter((v) =>
+      (state.eligible_tiers || []).includes(v),
+    );
+    config.redemption_type = "one_per_customer";
+  }
   const eligibility =
-    state.eligibility === "customers" || state.eligibility === "segments"
-      ? state.eligibility
-      : "all";
-  config.eligibility = eligibility;
+    state.kind === "loyalty"
+      ? "all"
+      : state.eligibility === "customers" || state.eligibility === "segments"
+        ? state.eligibility
+        : "all";
+  if (state.kind !== "loyalty") config.eligibility = eligibility;
   if (eligibility === "customers") {
     const emails = String(state.eligible_emails || "")
       .split(/[\s,]+/)
@@ -560,6 +604,8 @@ function builderFromConfig(c) {
     eligible_segments: Array.isArray(c.eligible_segment_ids)
       ? c.eligible_segment_ids
       : [],
+    kind: isLoyaltyConfig(c) ? "loyalty" : "",
+    eligible_tiers: Array.isArray(c.eligible_tiers) ? c.eligible_tiers : [],
     combines_product: c.combines_with?.productDiscounts === true,
     combines_order: c.combines_with?.orderDiscounts === true,
     combines_shipping: c.combines_with?.shippingDiscounts === true,
@@ -715,7 +761,14 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
       : "**Redemption:** one per **order** (no cross-order limit).") + capText,
   );
 
-  if (c.eligibility === "customers") {
+  if (isLoyaltyConfig(c)) {
+    const tiers = Array.isArray(c.eligible_tiers) ? c.eligible_tiers : [];
+    lines.push(
+      tiers.length
+        ? `**Eligible tiers:** ${tiers.map((t) => `**${t}**`).join(", ")} Honey Club members only.`
+        : "**Eligible tiers:** *none selected yet*, so no one can get this gift.",
+    );
+  } else if (c.eligibility === "customers") {
     const emails = Array.isArray(c.eligible_emails) ? c.eligible_emails : [];
     lines.push(
       emails.length
@@ -810,13 +863,14 @@ function formatTimestamp(iso) {
 }
 
 export default function GiftWithPurchasePage() {
-  const { saved, productInfo, discountMap, segments, timeZone } = useLoaderData();
+  const { saved, productInfo, discountMap, segments, timeZone, loyalty } = useLoaderData();
+  const freshBuilder = () => (loyalty ? INITIAL_LOYALTY_BUILDER() : INITIAL_BUILDER);
   const tzLabel = timeZone || "your store's timezone";
   const shopify = useAppBridge();
   const fetcher = useFetcher();
 
   const [selectedTab, setSelectedTab] = useState(0);
-  const [builder, setBuilder] = useState(INITIAL_BUILDER);
+  const [builder, setBuilder] = useState(freshBuilder);
   const [editingId, setEditingId] = useState(null);
   const [configName, setConfigName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -886,7 +940,7 @@ export default function GiftWithPurchasePage() {
         if (editingId && editingId === lastResult.id) {
           setEditingId(null);
           setConfigName("");
-          setBuilder(INITIAL_BUILDER);
+          setBuilder(freshBuilder());
         }
         shopify.toast.show("Deleted");
       } else if (lastResult.intent === "create_discount") {
@@ -1047,15 +1101,28 @@ export default function GiftWithPurchasePage() {
   };
 
   const newConfig = () => {
-    setBuilder(INITIAL_BUILDER);
+    setBuilder(freshBuilder());
     setEditingId(null);
     setConfigName("");
     setSelectedTab(1);
   };
 
+  // Loyalty exclusives can't be saved half-gated: they need tiers, and a tag
+  // to stop repeat redemptions.
+  const loyaltyProblem = () => {
+    if (!loyalty) return null;
+    if (!builder.eligible_tiers?.length) return "Pick at least one Honey Club tier";
+    if (!builder.customer_redeemed_tag.trim()) return "Add a customer redeemed tag";
+    return null;
+  };
+
   const saveNew = () => {
     if (!configName.trim()) {
       shopify.toast.show("Add a name before saving", { isError: true });
+      return;
+    }
+    if (loyaltyProblem()) {
+      shopify.toast.show(loyaltyProblem(), { isError: true });
       return;
     }
     const formData = new FormData();
@@ -1069,6 +1136,10 @@ export default function GiftWithPurchasePage() {
     if (!editingId) return;
     if (!configName.trim()) {
       shopify.toast.show("Name cannot be empty", { isError: true });
+      return;
+    }
+    if (loyaltyProblem()) {
+      shopify.toast.show(loyaltyProblem(), { isError: true });
       return;
     }
     const formData = new FormData();
@@ -1111,7 +1182,7 @@ export default function GiftWithPurchasePage() {
 
   return (
     <Page>
-      <TitleBar title="Gift With Purchase">
+      <TitleBar title={loyalty ? "Loyalty exclusives" : "Gift With Purchase"}>
         {/* App Bridge renders these in the admin top bar, so save actions stay
             visible however far down the builder form the user has scrolled. */}
         {selectedTab === 1 && (
@@ -1516,24 +1587,40 @@ export default function GiftWithPurchasePage() {
                       placeholder="all  or  AU,NZ,US,CA,GB,DE,AE"
                       helpText='Comma-separated country codes, country names, or "all".'
                     />
-                    <Select
-                      label="Redemption limit"
-                      options={[
-                        { label: "One per order", value: "one_per_order" },
-                        { label: "One per customer", value: "one_per_customer" },
-                      ]}
-                      value={builder.redemption_type}
-                      onChange={(v) => update("redemption_type", v)}
-                      helpText="One per order: no cross-order check. One per customer: limited once ever via a customer tag."
-                    />
+                    {loyalty ? null : (
+                      <Select
+                        label="Redemption limit"
+                        options={[
+                          { label: "One per order", value: "one_per_order" },
+                          { label: "One per customer", value: "one_per_customer" },
+                        ]}
+                        value={builder.redemption_type}
+                        onChange={(v) => update("redemption_type", v)}
+                        helpText="One per order: no cross-order check. One per customer: limited once ever via a customer tag."
+                      />
+                    )}
                     {showRedeemedTag && (
                       <TextField
                         label="Customer redeemed tag"
                         value={builder.customer_redeemed_tag}
                         onChange={(v) => update("customer_redeemed_tag", v)}
                         autoComplete="off"
-                        placeholder="e.g. redeemed_morning_essentials"
-                        helpText="Customers carrying this tag are treated as having already redeemed. Set by your post-order flow."
+                        placeholder={suggestRedeemedTag(configName) || "e.g. redeemed-holiday-robe"}
+                        requiredIndicator={loyalty}
+                        connectedRight={
+                          loyalty && !builder.customer_redeemed_tag && suggestRedeemedTag(configName) ? (
+                            <Button
+                              onClick={() => update("customer_redeemed_tag", suggestRedeemedTag(configName))}
+                            >
+                              Use suggested
+                            </Button>
+                          ) : undefined
+                        }
+                        helpText={
+                          loyalty
+                            ? "One per customer. When an order includes this gift, the app adds this tag to the customer, and customers with it can't redeem again."
+                            : "Customers carrying this tag are treated as having already redeemed. The app adds it to the customer when their order includes this gift."
+                        }
                       />
                     )}
                     <TextField
@@ -1548,6 +1635,29 @@ export default function GiftWithPurchasePage() {
                     />
 
                     <Divider />
+                    {loyalty ? (
+                      <>
+                        <Text as="h3" variant="headingSm">
+                          Honey Club tiers
+                        </Text>
+                        <ChoiceList
+                          allowMultiple
+                          title="Eligible tiers"
+                          titleHidden
+                          choices={LOYALTY_TIERS.map((t) => ({ label: t.label, value: t.value }))}
+                          selected={builder.eligible_tiers}
+                          onChange={(v) => update("eligible_tiers", v)}
+                        />
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Only customers tagged with one of these tiers (cx-tier-&lt;tier&gt;-&lt;region&gt;)
+                          see the gift in checkout and get the discount. The app keeps a Shopify
+                          customer segment per tier (&quot;Honey Club Gold (AU)&quot;) for the
+                          discount&apos;s eligibility. Guests and customers outside these tiers
+                          see nothing.
+                        </Text>
+                      </>
+                    ) : (
+                    <>
                     <Text as="h3" variant="headingSm">
                       Customer eligibility
                     </Text>
@@ -1597,6 +1707,8 @@ export default function GiftWithPurchasePage() {
                         </Text>
                       )
                     ) : null}
+                    </>
+                    )}
 
                     <Divider />
                     <Text as="h3" variant="headingSm">
@@ -1783,7 +1895,7 @@ export default function GiftWithPurchasePage() {
                     <Divider />
                     <InlineStack gap="200">
                       <Button onClick={newConfig}>New</Button>
-                      <Button onClick={() => setBuilder(INITIAL_BUILDER)}>
+                      <Button onClick={() => setBuilder(freshBuilder())}>
                         Reset fields
                       </Button>
                     </InlineStack>

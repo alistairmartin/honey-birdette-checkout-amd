@@ -653,6 +653,10 @@ const config = useMemo(() => {
     banner_message_added: String(cfg.banner_message_added || "").trim(),
     banner_title_redeemed: String(cfg.banner_title_redeemed || "").trim(),
     banner_message_redeemed: String(cfg.banner_message_redeemed || "").trim(),
+    // Loyalty exclusives (Loyalty > Exclusives in the app): only offered to
+    // customers in one of these Honey Club tiers. Empty = everyone (normal GWP).
+    loyalty: String(cfg.kind || "") === "loyalty",
+    eligible_tiers: Array.isArray(cfg.eligible_tiers) ? cfg.eligible_tiers.map(String) : [],
     banner_title_region: String(cfg.banner_title_region || "").trim(),
     banner_message_region: String(cfg.banner_message_region || "").trim(),
     cart_message: String(cfg.cart_message || "").trim(),
@@ -1123,6 +1127,47 @@ async function removeGiftIfPresent() {
 
   const effectiveHasRedeemed = hasRedeemed || remoteHasRedeemed === true;
 
+  // Loyalty exclusives: the buyer's Honey Club tier, from the app backend
+  // (checkout can't read customer tags). Logged-in buyers are identified by the
+  // session token; guests by the email they type. undefined = not checked yet,
+  // null = no tier. The discount is also limited to the tier segments in
+  // Shopify, so this only decides whether the gift is offered.
+  const LOYALTY_CHECK_URL = "https://honey-birdette-checkout-amd.onrender.com/api/checkout/loyalty-check";
+  const [buyerTier, setBuyerTier] = useState<string | null | undefined>(undefined);
+  const tierEmail = customerPresent ? "" : (typedEmail || "").trim().toLowerCase();
+  useEffect(() => {
+    if (!config.loyalty) return;
+    if (!customerPresent && !tierEmail.includes("@")) {
+      setBuyerTier(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const token = await sessionToken.get();
+        const res = await fetch(LOYALTY_CHECK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ email: tierEmail }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) setBuyerTier(typeof data?.tier === "string" ? data.tier : null);
+      } catch (_err) {
+        // Fail closed: no tier, no exclusive gift.
+        if (!cancelled) setBuyerTier(null);
+      }
+    }, customerPresent ? 0 : 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [config.loyalty, customerPresent, tierEmail, sessionToken]);
+  const tierPending = config.loyalty && buyerTier === undefined;
+  const tierOk =
+    !config.loyalty ||
+    (typeof buyerTier === "string" &&
+      config.eligible_tiers.some((t) => t.toLowerCase() === buyerTier.toLowerCase()));
+
   // Max-total-uses sold-out gate. The storefront API can't read a discount's
   // usage count, so we ask the app backend (which reads asyncUsageCount via the
   // Admin API and deactivates the discount once the cap is hit). We identify the
@@ -1514,7 +1559,7 @@ async function removeGiftIfPresent() {
   }, [config.trigger_type, hasTaggedLine, hitsSpendGoal, hasSubscriptionLine]);
 
   // --- Validity window check: is offer currently active? ---
-  const offerActive = useMemo(() => {
+  const windowActive = useMemo(() => {
     const tz = STORE_TIMEZONE;
     const now = nowPartsInZone(tz);
     const nowKey = toKey(now.y, now.m, now.d, now.hh, now.mm);
@@ -1526,6 +1571,9 @@ async function removeGiftIfPresent() {
     if (endKey != null && nowKey > endKey) return false;
     return true;
   }, [config.valid_date_from, config.valid_time_from, config.valid_date_till, config.valid_time_till]);
+  // A loyalty exclusive is only "on" for buyers in an eligible tier; to everyone
+  // else it behaves like an offer outside its dates (hidden, gift removed).
+  const offerActive = windowActive && tierOk;
 
   // Banner titles for various states
   // Titles support the same {{ title }} / {{ free_gift }} / {{ trigger_type }}
@@ -1820,7 +1868,11 @@ const messageText = config.banner_message_before
     // Defer auto-add for a capped offer until the usage check resolves, so we
     // never add the gift line while the discount is (or is about to be) off.
     if (usageCapConfigured && !usageChecked) return;
-    // If outside the configured validity window, ensure gift is removed
+    // Loyalty exclusive: wait for the tier lookup rather than removing a gift
+    // the buyer may well be entitled to.
+    if (tierPending) return;
+    // If outside the configured validity window (or the buyer's tier isn't
+    // eligible for a loyalty exclusive), ensure gift is removed
     if (!offerActive) {
       (async () => {
         await removeGiftIfPresent();
@@ -1914,7 +1966,7 @@ const messageText = config.banner_message_before
 
     // Fire and forget (sequential inside)
     void syncGift();
-  }, [tagsLoading, redemptionGuardSettled, effectiveHasRedeemed, shippingOk, taggedSpend, isGiftInCart, anyGiftOptionInCart, autoAdd, giftVariantGid, giftAvailable, adjustedGoal, offerActive, qualification.qualifies, usageSoldOut, usageCapConfigured, usageChecked]);
+  }, [tagsLoading, redemptionGuardSettled, effectiveHasRedeemed, shippingOk, taggedSpend, isGiftInCart, anyGiftOptionInCart, autoAdd, giftVariantGid, giftAvailable, adjustedGoal, offerActive, tierPending, qualification.qualifies, usageSoldOut, usageCapConfigured, usageChecked]);
 
   // (Optional) show fetch error
   // {tagsError ? <Text size="small">Tag fetch error</Text> : null}
@@ -1954,7 +2006,8 @@ const messageText = config.banner_message_before
   const triggerNeedsTaggedLine =
     config.trigger_type === "buy_x_get_y" || config.trigger_type === "buy_x_and_min_spend";
   const blockers: string[] = [];
-  if (!offerActive) blockers.push("outside offer window");
+  if (!windowActive) blockers.push("outside offer window");
+  if (config.loyalty && !tierOk) blockers.push(tierPending ? "checking Honey Club tier" : `tier ${buyerTier || "none"} not eligible`);
   if (tagsLoading) blockers.push("loading product tags");
   if (tagsError) blockers.push("product tag fetch failed");
   if (usageSoldOut) blockers.push("usage cap reached");

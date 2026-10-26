@@ -9,6 +9,7 @@ import {
   readWebhookHeaders,
   recordWebhookEvent,
 } from "../lib/webhookMonitor.server";
+import { tagGiftRedemptions } from "../lib/loyaltyExclusives.server";
 
 export const action = async ({ request }) => {
   // Read headers and body size before authenticate.webhook consumes the body.
@@ -35,6 +36,17 @@ export const action = async ({ request }) => {
     }).catch((err) => {
       console.error(`[webhook-monitor] ${topic} on ${shop} failed:`, err?.message || err);
     });
+    // One-per-customer gifts (GWP and loyalty exclusives): tag the customer with
+    // each redeemed gift's tag. Also not awaited, for the same 5-second reason.
+    if (topic === "ORDERS_CREATE" && admin) {
+      tagGiftRedemptions(admin, shop, payload)
+        .then(({ tagged }) => {
+          if (tagged.length) console.log(`[gwp-redeemed] ${shop} order ${payload?.name}: tagged ${tagged.join(", ")}`);
+        })
+        .catch((err) => {
+          console.error(`[gwp-redeemed] ${shop} order ${payload?.name} failed:`, err?.message || err);
+        });
+    }
     throw new Response();
   }
 

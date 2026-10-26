@@ -1,0 +1,83 @@
+# Store Announcement - Customer Account + Thank-you UI extension
+# A simple merchant-written announcement bar: message, optional link, optional
+# "See details" pop-up, optional start/end dates. Everything comes from the
+# block settings, so each page (and each store) can say something different.
+# Shows nothing if Message is empty or today is outside the dates. A dismissed
+# announcement stays hidden on that page until the message text changes.
+#
+# Settings text shows exactly as typed (no translation). The "See details" and
+# "Got it" defaults come from locales/ (en, de, fr).
+#
+# For personal nudges (tier, birthday, profile) see honey-announcement.
+api_version = "2026-07"
+
+[[extensions]]
+name = "Store Announcement"
+handle = "store-announcement"
+uid = "11e3595c-fd8c-6920-a1ac-9514e1344b97202d01bd"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/StoreAnnouncement.tsx"
+target = "customer-account.profile.announcement.render"
+
+[[extensions.targeting]]
+module = "./src/StoreAnnouncement.tsx"
+target = "customer-account.order-index.announcement.render"
+
+[[extensions.targeting]]
+module = "./src/StoreAnnouncement.tsx"
+target = "customer-account.order-status.announcement.render"
+
+[[extensions.targeting]]
+module = "./src/StoreAnnouncement.tsx"
+target = "purchase.thank-you.announcement.render"
+
+[extensions.settings]
+  [[extensions.settings.fields]]
+  key = "message"
+  type = "single_line_text_field"
+  name = "Message"
+  description = "The announcement text. Leave blank to hide the bar."
+
+  [[extensions.settings.fields]]
+  key = "link_text"
+  type = "single_line_text_field"
+  name = "Link text"
+  description = "Optional, e.g. \"Shop now\". Needs a Link URL."
+
+  [[extensions.settings.fields]]
+  key = "link_url"
+  type = "single_line_text_field"
+  name = "Link URL"
+  description = "Where the link goes, e.g. https://www.honeybirdette.com/collections/new"
+
+  [[extensions.settings.fields]]
+  key = "details_heading"
+  type = "single_line_text_field"
+  name = "Details pop-up heading"
+  description = "Optional. With Details text, adds a \"See details\" link that opens a pop-up."
+
+  [[extensions.settings.fields]]
+  key = "details_body"
+  type = "multi_line_text_field"
+  name = "Details pop-up text"
+  description = "Optional terms or extra detail shown in the pop-up."
+
+  [[extensions.settings.fields]]
+  key = "details_link_text"
+  type = "single_line_text_field"
+  name = "Details link text"
+  description = "Default: See details"
+
+  [[extensions.settings.fields]]
+  key = "start_date"
+  type = "date"
+  name = "Start date"
+  description = "Optional. Show from this date (inclusive)."
+
+  [[extensions.settings.fields]]
+  key = "end_date"
+  type = "date"
+  name = "End date"
+  description = "Optional. Show until this date (inclusive)."

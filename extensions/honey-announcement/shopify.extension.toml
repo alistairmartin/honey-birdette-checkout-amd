@@ -1,0 +1,59 @@
+# Honey Announcement - Customer Account UI extension
+# A dismissible bar at the top of the Profile, Orders and Order status pages
+# that shows ONE personal nudge, the first that applies:
+#   1. Close to next tier  - "You're A$200 away from Diamond" (Omneo, via
+#      /api/honey-club). Shown once progress reaches the "Tier nudge from %"
+#      setting.
+#   2. Birthday month      - birthday from the birthday backend
+#      (honey-birdette-birthday-app), current month matches.
+#   3. Complete profile    - no birthday or no sizes saved
+#      (/api/size-preference).
+# Nothing shows if none applies. A dismissed message stays hidden on that
+# page until the message itself changes (e.g. next tier, next birthday year).
+# Replaces the announcement-demo extension.
+api_version = "2026-07"
+
+[[extensions]]
+name = "Honey Announcement"
+handle = "honey-announcement"
+uid = "d6cc5d6e-80b5-461f-08a3-e9f3758e11abfe1e20b4"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/HoneyAnnouncement.tsx"
+target = "customer-account.profile.announcement.render"
+
+[[extensions.targeting]]
+module = "./src/HoneyAnnouncement.tsx"
+target = "customer-account.order-index.announcement.render"
+
+[[extensions.targeting]]
+module = "./src/HoneyAnnouncement.tsx"
+target = "customer-account.order-status.announcement.render"
+
+[extensions.capabilities]
+# network_access: the app backend (Omneo, sizes) and the birthday backend.
+api_access = true
+network_access = true
+
+[extensions.settings]
+  [[extensions.settings.fields]]
+  key = "tier_nudge_percent"
+  type = "number_integer"
+  name = "Tier nudge from %"
+  description = "Show \"You're X away from <next tier>\" once progress reaches this percentage. Default 50."
+
+  [[extensions.settings.fields]]
+  key = "hide_tier"
+  type = "boolean"
+  name = "Hide tier nudge"
+
+  [[extensions.settings.fields]]
+  key = "hide_birthday"
+  type = "boolean"
+  name = "Hide birthday month message"
+
+  [[extensions.settings.fields]]
+  key = "hide_profile"
+  type = "boolean"
+  name = "Hide complete-your-profile message"
