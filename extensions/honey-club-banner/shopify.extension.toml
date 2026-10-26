@@ -1,0 +1,78 @@
+# Honey Club Banner - Customer Account UI extension
+# A Profile page block that links to The Honey Club full page
+# (honey-club-page). The link is fixed to extension:honey-club-page/, so it
+# works on every regional store without pasting a store-specific /pages/ URL.
+#
+# With an image URL set it renders as an image banner (desktop + optional
+# mobile image, same sizing logic as ca-image-banner). Without one it renders
+# as a text card with a button. Text defaults come from locales/ (en, de, fr);
+# any text setting overrides them as typed.
+api_version = "2026-10"
+
+[[extensions]]
+name = "Honey Club Banner"
+handle = "honey-club-banner"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/HoneyClubBanner.tsx"
+target = "customer-account.profile.block.render"
+
+[extensions.capabilities]
+# network_access: reads the image header to size the banner frame.
+network_access = true
+
+[extensions.settings]
+  [[extensions.settings.fields]]
+  key = "desktop_image_url"
+  type = "single_line_text_field"
+  name = "Desktop image URL"
+  description = "Optional. Leave both images blank for a text card with a button."
+
+  [[extensions.settings.fields]]
+  key = "mobile_image_url"
+  type = "single_line_text_field"
+  name = "Mobile image URL"
+  description = "Optional. Shown on narrow screens. Falls back to the desktop image."
+
+  [[extensions.settings.fields]]
+  key = "desktop_image_aspect_ratio"
+  type = "single_line_text_field"
+  name = "Desktop image aspect ratio"
+  description = "Optional, e.g. 1254/192. Leave empty to detect it automatically."
+
+  [[extensions.settings.fields]]
+  key = "mobile_image_aspect_ratio"
+  type = "single_line_text_field"
+  name = "Mobile image aspect ratio"
+  description = "Optional, e.g. 750/400. Leave empty to detect it automatically."
+
+  [[extensions.settings.fields]]
+  key = "image_alt"
+  type = "single_line_text_field"
+  name = "Image alt text"
+  description = "Default: The Honey Club"
+
+  [[extensions.settings.fields]]
+  key = "eyebrow"
+  type = "single_line_text_field"
+  name = "Text card: small label"
+  description = "Default: The Honey Club"
+
+  [[extensions.settings.fields]]
+  key = "heading"
+  type = "single_line_text_field"
+  name = "Text card: heading"
+  description = "Default: Friends with benefits, only better"
+
+  [[extensions.settings.fields]]
+  key = "body"
+  type = "single_line_text_field"
+  name = "Text card: text"
+  description = "Default: See your tier, your rewards and the perks waiting for you."
+
+  [[extensions.settings.fields]]
+  key = "cta_text"
+  type = "single_line_text_field"
+  name = "Text card: button text"
+  description = "Default: Explore The Honey Club"
