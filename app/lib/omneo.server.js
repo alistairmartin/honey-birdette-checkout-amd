@@ -8,11 +8,9 @@
 //   GET /profiles/{id}/balances                        -> { data: ProfileBalances }
 //   GET /profiles/{id}/transactions                    -> { data: Transaction[], meta }
 //
-// Env: OMNEO_API_TOKEN (needs read-identities, read-profiles, plus read access to
-// tiers and balances). OMNEO_TRANSACTIONS_API_TOKEN is a separate token for the
-// transactions block (read-identities, read-profiles, read-transactions); it
-// falls back to OMNEO_API_TOKEN if unset. OMNEO_TENANT / OMNEO_API_BASE override
-// the defaults.
+// Env: OMNEO_API_TOKEN, one read-only token for every Omneo call (identities,
+// profiles, tiers, loyalty, transactions, lists). OMNEO_TENANT / OMNEO_API_BASE
+// override the defaults.
 
 const OMNEO_TENANT = process.env.OMNEO_TENANT || "honeybirdette";
 const OMNEO_API_BASE =
@@ -36,14 +34,10 @@ export function omneoConfigured() {
   return !!process.env.OMNEO_API_TOKEN;
 }
 
-export function omneoTransactionsToken() {
-  return process.env.OMNEO_TRANSACTIONS_API_TOKEN || process.env.OMNEO_API_TOKEN || null;
-}
-
-async function omneoRequest(path, token = process.env.OMNEO_API_TOKEN) {
+async function omneoRequest(path) {
   const response = await fetch(`${OMNEO_API_BASE}${path}`, {
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${process.env.OMNEO_API_TOKEN}`,
       Accept: "application/json",
     },
   });
@@ -57,11 +51,10 @@ async function omneoRequest(path, token = process.env.OMNEO_API_TOKEN) {
 // Find the Omneo profile linked to a Shopify customer. Prefer the store's own
 // identity handle, then fall back to any shopify-* identity (one tenant serves
 // every region, so a customer may only be linked via another store).
-export async function findOmneoProfile(shop, customerId, token) {
+export async function findOmneoProfile(shop, customerId) {
   const handle = omneoShopConfig(shop)?.identity;
   const result = await omneoRequest(
     `/identities/search-profile/${encodeURIComponent(customerId)}`,
-    token,
   );
   const profiles = Array.isArray(result?.data) ? result.data : [];
 
@@ -94,12 +87,12 @@ export async function getOmneoBalances(profileId) {
 
 // One page of a profile's transactions (retail POS + online), newest first.
 // Returns Omneo's paginated envelope: { data: Transaction[], meta, links }.
-export async function getOmneoTransactions(profileId, { page = 1, pageSize = 10, token } = {}) {
+export async function getOmneoTransactions(profileId, { page = 1, pageSize = 10 } = {}) {
   const params = new URLSearchParams({
     "page[number]": String(page),
     "page[size]": String(pageSize),
     sort: "-transacted_at",
     include: "product",
   });
-  return omneoRequest(`/profiles/${encodeURIComponent(profileId)}/transactions?${params}`, token);
+  return omneoRequest(`/profiles/${encodeURIComponent(profileId)}/transactions?${params}`);
 }

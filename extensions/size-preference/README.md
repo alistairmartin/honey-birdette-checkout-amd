@@ -30,9 +30,7 @@ CA UI extension (this)  ──fetch──►  /api/size-preference (this app)  �
    `info/design_handoff_size_preference/METAFIELDS.md`. The backend only sets/deletes
    values; it assumes the definitions exist.
 2. **Deploy** with `shopify app deploy` (bundles this extension + the app backend).
-3. **Set the `api_url` setting** on the extension to the app base URL
-   (default `https://honey-birdette-checkout-amd.onrender.com`, no trailing slash).
-4. **Place the block** on the Profile page via the customer account **editor**
+3. **Place the block** on the Profile page via the customer account **editor**
    (profile blocks aren't auto-injected) and approve **network access** when prompted.
 
 ## Platform constraint (fidelity)

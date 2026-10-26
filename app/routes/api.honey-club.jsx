@@ -44,7 +44,8 @@ function toStatus(progress, balances, currency) {
     remaining: toNumber(progress.next_remain),
     progress: rawProgress === null ? null : Math.max(0, Math.min(100, rawProgress)),
     maintainedUntil: tier.anniversary_at || progress.anniversary_at || null,
-    balance: toNumber(balances?.combined_balance_dollars) ?? 0,
+    // null = balances unavailable (e.g. token lacks scope); the card is hidden.
+    balance: balances ? toNumber(balances.combined_balance_dollars) ?? 0 : null,
   };
 }
 
@@ -71,7 +72,7 @@ export const loader = async ({ request }) => {
     const [progress, balances] = await Promise.all([
       getOmneoTierProgress(profile.id),
       getOmneoBalances(profile.id).catch((err) => {
-        // A missing balance shouldn't hide the tier card; show 0 instead.
+        // A missing balance shouldn't hide the tier card; hide just the balance.
         console.error("honey-club balances failed", err);
         return null;
       }),

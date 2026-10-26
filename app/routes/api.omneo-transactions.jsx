@@ -4,7 +4,7 @@ import {
   findOmneoProfile,
   getOmneoTransactions,
   omneoShopConfig,
-  omneoTransactionsToken,
+  omneoConfigured,
 } from "../lib/omneo.server";
 
 // Backs the "omneo-transactions" customer-account UI extension on the Orders
@@ -91,9 +91,7 @@ export const loader = async ({ request }) => {
   if (!customerId || !shop) {
     return cors(json({ error: "Unauthenticated" }, { status: 401 }));
   }
-  // Own token (OMNEO_TRANSACTIONS_API_TOKEN), falling back to the shared one.
-  const token = omneoTransactionsToken();
-  if (!token) {
+  if (!omneoConfigured()) {
     return cors(json({ error: "Omneo not configured" }, { status: 503 }));
   }
 
@@ -103,11 +101,11 @@ export const loader = async ({ request }) => {
   const currency = omneoShopConfig(shop)?.currency ?? "AUD";
 
   try {
-    const profile = await findOmneoProfile(shop, customerId, token);
+    const profile = await findOmneoProfile(shop, customerId);
     if (!profile) return cors(json({ transactions: [], hasMore: false, currency }));
 
     const pageSize = storeOnly ? STORE_SCOPE_PAGE_SIZE : PAGE_SIZE;
-    const result = await getOmneoTransactions(profile.id, { page, pageSize, token });
+    const result = await getOmneoTransactions(profile.id, { page, pageSize });
     const raw = Array.isArray(result?.data) ? result.data : [];
     // Pagination meta isn't documented; use it if present, else a full page
     // means there may be more.

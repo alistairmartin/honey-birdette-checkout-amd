@@ -10,7 +10,8 @@ export default async () => {
   render(<HoneyClubStatus />, document.body);
 };
 
-const DEFAULT_API_URL = "https://honey-birdette-checkout-amd.onrender.com";
+// The AMD Checkout app backend (Render). Same for every store.
+const API_URL = "https://honey-birdette-checkout-amd.onrender.com";
 
 function t(key, replacements) {
   return shopify.i18n.translate(key, replacements);
@@ -19,10 +20,6 @@ function t(key, replacements) {
 function setting(key) {
   const value = shopify.settings?.value?.[key];
   return typeof value === "string" ? value.trim() : "";
-}
-
-function apiBase() {
-  return (setting("api_url") || DEFAULT_API_URL).replace(/\/+$/, "");
 }
 
 function money(amount, currency) {
@@ -48,7 +45,7 @@ function HoneyClubStatus() {
     async function load() {
       try {
         const token = await shopify.sessionToken.get();
-        const resp = await fetch(`${apiBase()}/api/honey-club`, {
+        const resp = await fetch(`${API_URL}/api/honey-club`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!resp.ok) throw new Error(`GET failed: ${resp.status}`);
@@ -81,9 +78,12 @@ function HoneyClubStatus() {
 
   return (
     <s-query-container>
-      <s-grid gridTemplateColumns="@container (inline-size > 600px) 2fr 1fr, 1fr" gap="base">
+      <s-grid
+        gridTemplateColumns={status.balance === null ? "1fr" : "@container (inline-size > 600px) 2fr 1fr, 1fr"}
+        gap="base"
+      >
         <LevelCard status={status} />
-        <BalanceCard status={status} />
+        {status.balance !== null && <BalanceCard status={status} />}
       </s-grid>
     </s-query-container>
   );

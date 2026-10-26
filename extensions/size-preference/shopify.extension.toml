@@ -27,10 +27,3 @@ network_access = true
 
 [access_scopes]
 scopes = "read_customers, write_customers"
-
-[extensions.settings]
-  [[extensions.settings.fields]]
-  key = "api_url"
-  type = "single_line_text_field"
-  name = "App backend URL"
-  description = "Base URL of the AMD Checkout app that reads/writes the size metafields (e.g. https://honey-birdette-checkout-amd.onrender.com). No trailing slash."

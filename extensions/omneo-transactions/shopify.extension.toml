@@ -25,12 +25,6 @@ network_access = true
 
 [extensions.settings]
   [[extensions.settings.fields]]
-  key = "api_url"
-  type = "single_line_text_field"
-  name = "App backend URL"
-  description = "Base URL of the AMD Checkout app (e.g. https://honey-birdette-checkout-amd.onrender.com). No trailing slash."
-
-  [[extensions.settings.fields]]
   key = "heading"
   type = "single_line_text_field"
   name = "Heading"

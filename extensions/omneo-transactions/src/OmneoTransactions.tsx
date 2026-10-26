@@ -10,7 +10,8 @@ export default async () => {
   render(<OmneoTransactions />, document.body);
 };
 
-const DEFAULT_API_URL = "https://honey-birdette-checkout-amd.onrender.com";
+// The AMD Checkout app backend (Render). Same for every store.
+const API_URL = "https://honey-birdette-checkout-amd.onrender.com";
 const ITEMS_SHOWN = 3;
 
 function t(key, replacements) {
@@ -20,10 +21,6 @@ function t(key, replacements) {
 function setting(key) {
   const value = shopify.settings?.value?.[key];
   return typeof value === "string" ? value.trim() : value;
-}
-
-function apiBase() {
-  return (setting("api_url") || DEFAULT_API_URL).replace(/\/+$/, "");
 }
 
 function money(amount, currency) {
@@ -113,7 +110,7 @@ async function fetchPage(page, includeOnline) {
 
   const token = await shopify.sessionToken.get();
   const params = new URLSearchParams({ page: String(page), scope: includeOnline ? "all" : "store" });
-  const resp = await fetch(`${apiBase()}/api/omneo-transactions?${params}`, {
+  const resp = await fetch(`${API_URL}/api/omneo-transactions?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!resp.ok) throw new Error(`GET failed: ${resp.status}`);

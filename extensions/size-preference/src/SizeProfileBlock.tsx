@@ -78,15 +78,11 @@ function fromDraft(draft, existing) {
   };
 }
 
-const DEFAULT_API_URL = "https://honey-birdette-checkout-amd.onrender.com";
+// The AMD Checkout app backend (Render). Same for every store.
+const API_URL = "https://honey-birdette-checkout-amd.onrender.com";
 
 function t(key) {
   return shopify.i18n.translate(key);
-}
-
-function apiBase() {
-  const raw = shopify.settings?.value?.api_url || DEFAULT_API_URL;
-  return String(raw).replace(/\/+$/, "");
 }
 
 // Human-readable summary matching the form vocabulary, e.g. "BRA 10D ·
@@ -138,7 +134,7 @@ function SizeProfileBlock() {
       setLoadError(false);
       try {
         const token = await shopify.sessionToken.get();
-        const resp = await fetch(`${apiBase()}/api/size-preference`, {
+        const resp = await fetch(`${API_URL}/api/size-preference`, {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -173,7 +169,7 @@ function SizeProfileBlock() {
     setSaved(false);
     try {
       const token = await shopify.sessionToken.get();
-      const resp = await fetch(`${apiBase()}/api/size-preference`, {
+      const resp = await fetch(`${API_URL}/api/size-preference`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
