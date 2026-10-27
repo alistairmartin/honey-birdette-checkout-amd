@@ -1,0 +1,269 @@
+{
+  "checkoutAndAccountsConfiguration": {
+    "id": "gid://shopify/CheckoutAndAccountsConfiguration/43094475143",
+    "name": "HB Checkout 27.10.2026 (New Account)",
+    "isPublished": false,
+    "branding": {
+      "designTokens": {
+        "colors": null,
+        "typography": {
+          "size": {
+            "base": 14,
+            "ratio": null
+          }
+        },
+        "cornerRadius": null
+      },
+      "components": {
+        "checkbox": null,
+        "choiceList": null,
+        "control": {
+          "cornerRadius": null,
+          "border": null,
+          "labelPosition": null
+        },
+        "divider": null,
+        "shared": {
+          "cornerRadius": null,
+          "typography": null,
+          "colors": {
+            "accent": "#000000",
+            "button": "#000000",
+            "control": "transparent",
+            "decorative": null,
+            "critical": "#C81111",
+            "success": null,
+            "warning": null,
+            "info": null
+          }
+        },
+        "headingLevel1": {
+          "typography": {
+            "font": "PRIMARY",
+            "size": "BASE",
+            "weight": "BASE",
+            "letterCase": "UPPER",
+            "kerning": null
+          }
+        },
+        "headingLevel2": {
+          "typography": {
+            "font": "PRIMARY",
+            "size": "BASE",
+            "weight": "BASE",
+            "letterCase": "UPPER",
+            "kerning": null
+          }
+        },
+        "headingLevel3": {
+          "typography": {
+            "font": "PRIMARY",
+            "size": "BASE",
+            "weight": "BASE",
+            "letterCase": "UPPER",
+            "kerning": null
+          }
+        },
+        "primaryButton": {
+          "border": null,
+          "cornerRadius": null,
+          "blockPadding": null,
+          "inlinePadding": null,
+          "typography": {
+            "font": "PRIMARY",
+            "size": null,
+            "weight": null,
+            "letterCase": null,
+            "kerning": null
+          }
+        },
+        "secondaryButton": {
+          "border": null,
+          "cornerRadius": null,
+          "blockPadding": null,
+          "inlinePadding": null,
+          "typography": {
+            "font": "PRIMARY",
+            "size": null,
+            "weight": null,
+            "letterCase": null,
+            "kerning": null
+          }
+        },
+        "select": {
+          "border": null,
+          "typography": {
+            "font": "PRIMARY",
+            "size": null,
+            "weight": null,
+            "letterCase": null,
+            "kerning": null
+          }
+        },
+        "textField": {
+          "border": null,
+          "typography": {
+            "font": "PRIMARY",
+            "size": null,
+            "weight": null,
+            "letterCase": null,
+            "kerning": null
+          }
+        },
+        "main": {
+          "colors": {
+            "base": {
+              "background": "#F1ECE4",
+              "text": null,
+              "border": null,
+              "icon": null,
+              "accent": null,
+              "decorative": null
+            },
+            "control": null,
+            "primaryButton": null,
+            "secondaryButton": null
+          },
+          "divider": null,
+          "section": null
+        },
+        "footer": {
+          "divided": null,
+          "alignment": null,
+          "content": null,
+          "colors": {
+            "base": {
+              "background": "#F1ECE4",
+              "text": null,
+              "border": null,
+              "icon": null,
+              "accent": null,
+              "decorative": null
+            },
+            "control": null,
+            "primaryButton": null,
+            "secondaryButton": null
+          },
+          "background": null,
+          "padding": null
+        },
+        "header": {
+          "alignment": null,
+          "logo": {
+            "maxWidth": 184,
+            "visibility": null
+          },
+          "divided": null,
+          "colors": {
+            "base": {
+              "background": "#F1ECE4",
+              "text": null,
+              "border": null,
+              "icon": null,
+              "accent": null,
+              "decorative": null
+            },
+            "control": null,
+            "primaryButton": null,
+            "secondaryButton": null
+          },
+          "background": null,
+          "padding": null
+        }
+      },
+      "surfaces": {
+        "checkout": {
+          "components": {
+            "footer": null,
+            "header": null,
+            "cartLink": null,
+            "buyerJourney": null,
+            "content": null,
+            "expressCheckout": null,
+            "orderSummary": {
+              "colors": {
+                "base": {
+                  "background": "#E9E3DA",
+                  "text": null,
+                  "border": null,
+                  "icon": null,
+                  "accent": null,
+                  "decorative": null
+                },
+                "control": null,
+                "primaryButton": null,
+                "secondaryButton": null
+              },
+              "divider": null,
+              "section": null
+            },
+            "main": null
+          }
+        },
+        "customerAccounts": {
+          "components": {
+            "footer": null,
+            "header": {
+              "alignment": null,
+              "colors": {
+                "base": {
+                  "background": "#E2DACE",
+                  "text": null,
+                  "border": null,
+                  "icon": null,
+                  "accent": null,
+                  "decorative": null
+                },
+                "control": null,
+                "primaryButton": null,
+                "secondaryButton": null
+              },
+              "logo": null,
+              "padding": null
+            },
+            "main": {
+              "colors": {
+                "base": {
+                  "background": "#E2DACE",
+                  "text": null,
+                  "border": null,
+                  "icon": null,
+                  "accent": null,
+                  "decorative": null
+                },
+                "control": null,
+                "primaryButton": null,
+                "secondaryButton": null
+              },
+              "section": null
+            }
+          }
+        },
+        "signIn": {
+          "components": {
+            "main": {
+              "colors": {
+                "base": {
+                  "background": "#E2DACE",
+                  "text": null,
+                  "border": null,
+                  "icon": null,
+                  "accent": null,
+                  "decorative": null
+                },
+                "control": null,
+                "primaryButton": null,
+                "secondaryButton": null
+              },
+              "section": null
+            },
+            "header": {
+              "logo": null,
+              "padding": null
+            }
+          }
+        }
+      }
+    }
+  }
+}
