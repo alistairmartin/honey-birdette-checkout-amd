@@ -6,7 +6,9 @@ export default async () => {
   render(<App />, document.body);
 };
 
-const SUPPORTED_CURRENCIES = ["AUD", "NZD", "USD", "CAD", "EUR", "GBP", "AED"];
+const SUPPORTED_CURRENCIES = [
+  "AUD", "NZD", "USD", "CAD", "EUR", "GBP", "AED", "HKD", "SGD",
+];
 
 const emptyPrices = () =>
   SUPPORTED_CURRENCIES.reduce((acc, code) => {
