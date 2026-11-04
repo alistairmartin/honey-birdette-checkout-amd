@@ -99,6 +99,11 @@ function flattenMetaobject(metaobject) {
   const products = refProducts("products");
   const option1 = refProducts("option_1");
   const option2 = refProducts("option_2");
+  const mixMatch = refProducts("mix_match_products");
+  const mixMatchQuantity = Number.parseInt(
+    fieldByKey.get("mix_match_quantity")?.value ?? "",
+    10,
+  );
 
   return {
     id: metaobject.id,
@@ -106,9 +111,12 @@ function flattenMetaobject(metaobject) {
     products,
     option1,
     option2,
+    mixMatch,
     productIds: products.map((p) => p.id),
     option1Ids: option1.map((p) => p.id),
     option2Ids: option2.map((p) => p.id),
+    mixMatchIds: mixMatch.map((p) => p.id),
+    mixMatchQuantity: Number.isFinite(mixMatchQuantity) ? mixMatchQuantity : 0,
     discountAmounts,
   };
 }
@@ -147,15 +155,19 @@ function parseMetafield(value) {
         const products = normalizeItems(b.products, b.productIds, b.productTitles);
         const option1 = normalizeItems(b.option1, b.option1Ids, b.option1Titles);
         const option2 = normalizeItems(b.option2, b.option2Ids, b.option2Titles);
+        const mixMatch = normalizeItems(b.mixMatch, b.mixMatchIds, b.mixMatchTitles);
         return {
           id: b.id,
           name: b.name ?? "",
           products,
           option1,
           option2,
+          mixMatch,
           productIds: products.map((p) => p.id),
           option1Ids: option1.map((p) => p.id),
           option2Ids: option2.map((p) => p.id),
+          mixMatchIds: mixMatch.map((p) => p.id),
+          mixMatchQuantity: Number(b.mixMatchQuantity) || 0,
           discountAmounts: {
             ...emptyDiscountAmounts(),
             ...(b.discountAmounts ?? {}),
@@ -330,7 +342,9 @@ function App() {
             Each bundle is defined as a <s-text emphasis="bold">Lubricant Bundle</s-text> metaobject
             (Content → Metaobjects). Cart must contain every product in the bundle's
             "Products" list. If Option 1 or Option 2 is set on the bundle, the cart must
-            also contain one product from that list. Discounts are charged in the cart's
+            also contain one product from that list. If Mix & match is set, the cart
+            must also contain that many units from the Mix & match list, in any mix
+            (e.g. any 6 crackers). Discounts are charged in the cart's
             checkout currency; bundles with $0 in that currency are skipped. When a cart
             qualifies for multiple bundles, the highest-discount bundle is applied first.
           </s-text>
@@ -356,16 +370,20 @@ function App() {
                   Edit bundle in Shopify admin
                 </s-link>
 
-                <s-stack gap="small">
-                  <s-heading>Products (all required)</s-heading>
-                  {bundle.products.length ? (
-                    bundle.products.map((p) => (
+                {bundle.products.length ? (
+                  <s-stack gap="small">
+                    <s-heading>Products (all required)</s-heading>
+                    {bundle.products.map((p) => (
                       <ProductRow key={p.id} product={p} />
-                    ))
-                  ) : (
-                    <s-text tone="critical">No products set on this bundle.</s-text>
-                  )}
-                </s-stack>
+                    ))}
+                  </s-stack>
+                ) : null}
+
+                {!bundle.products.length && !bundle.mixMatchQuantity ? (
+                  <s-text tone="critical">
+                    No products or mix &amp; match set on this bundle.
+                  </s-text>
+                ) : null}
 
                 {bundle.option1.length ? (
                   <s-stack gap="small">
@@ -380,6 +398,22 @@ function App() {
                   <s-stack gap="small">
                     <s-heading>Option 2 (customer picks one)</s-heading>
                     {bundle.option2.map((p) => (
+                      <ProductRow key={p.id} product={p} />
+                    ))}
+                  </s-stack>
+                ) : null}
+
+                {bundle.mixMatch.length ? (
+                  <s-stack gap="small">
+                    <s-heading>
+                      Mix &amp; match (any {bundle.mixMatchQuantity || "?"} from)
+                    </s-heading>
+                    {!bundle.mixMatchQuantity ? (
+                      <s-text tone="critical">
+                        Set "Mix &amp; match quantity" on the metaobject.
+                      </s-text>
+                    ) : null}
+                    {bundle.mixMatch.map((p) => (
                       <ProductRow key={p.id} product={p} />
                     ))}
                   </s-stack>

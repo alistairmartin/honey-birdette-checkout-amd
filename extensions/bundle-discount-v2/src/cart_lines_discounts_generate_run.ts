@@ -11,6 +11,9 @@ interface BundleConfig {
   productIds?: string[];
   option1Ids?: string[];
   option2Ids?: string[];
+  // Mix & match: any `mixMatchQuantity` units from this pool, in any mix.
+  mixMatchIds?: string[];
+  mixMatchQuantity?: number;
   discountAmounts?: Record<string, number>;
 }
 
@@ -46,7 +49,12 @@ export function cartLinesDiscountsGenerateRun(
   const bundles: ResolvedBundle[] = (config.bundles ?? [])
     .map<ResolvedBundle | null>((b) => {
       const productIds = Array.isArray(b.productIds) ? b.productIds : [];
-      if (!productIds.length) return null;
+      const mixMatchIds = Array.isArray(b.mixMatchIds) ? b.mixMatchIds : [];
+      const mixMatchQuantity =
+        mixMatchIds.length && Number.isInteger(b.mixMatchQuantity)
+          ? Math.max(0, b.mixMatchQuantity as number)
+          : 0;
+      if (!productIds.length && !mixMatchQuantity) return null;
 
       const amount = b.discountAmounts?.[currencyCode];
       if (typeof amount !== 'number' || amount <= 0) return null;
@@ -57,6 +65,9 @@ export function cartLinesDiscountsGenerateRun(
       }
       if (Array.isArray(b.option2Ids) && b.option2Ids.length) {
         slots.push(b.option2Ids);
+      }
+      for (let i = 0; i < mixMatchQuantity; i++) {
+        slots.push(mixMatchIds);
       }
 
       return {name: b.name, slots, discountAmount: amount};

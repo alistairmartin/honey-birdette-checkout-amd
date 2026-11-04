@@ -129,6 +129,11 @@ export function flattenMetaobject(metaobject) {
     null;
   const parentVariantId = parentProduct?.variants?.nodes?.[0]?.id ?? null;
 
+  const mixMatchQuantity = Number.parseInt(
+    fieldByKey.get("mix_match_quantity")?.value ?? "",
+    10,
+  );
+
   return {
     id: metaobject.id,
     name: metaobject.displayName ?? "",
@@ -141,6 +146,9 @@ export function flattenMetaobject(metaobject) {
     option2Ids: refIds("option_2"),
     option2VariantIds: refVariantIds("option_2"),
     option2Titles: refTitles("option_2"),
+    mixMatchIds: refIds("mix_match_products"),
+    mixMatchTitles: refTitles("mix_match_products"),
+    mixMatchQuantity: Number.isFinite(mixMatchQuantity) ? mixMatchQuantity : 0,
     parentProductId: parentProduct?.id ?? null,
     parentProductTitle: parentProduct?.title ?? null,
     parentVariantId,
@@ -431,10 +439,13 @@ export async function installCartTransform(admin) {
 // --------------------------------------------------------------------------
 
 export const EXPECTED_FIELDS = [
-  {key: "products", name: "Products", type: "list.product_reference", required: true},
+  // Optional for mix & match bundles, which only use mix_match_products.
+  {key: "products", name: "Products", type: "list.product_reference", required: false},
   {key: "option_1", name: "Option 1", type: "list.product_reference", required: false},
   {key: "option_2", name: "Option 2", type: "list.product_reference", required: false},
   {key: "parent_product", name: "Parent product", type: "product_reference", required: false},
+  {key: "mix_match_products", name: "Mix & match products", type: "list.product_reference", required: false},
+  {key: "mix_match_quantity", name: "Mix & match quantity", type: "number_integer", required: false},
   ...SUPPORTED_CURRENCIES.map((code) => ({
     key: moneyFieldKey(code),
     name: `Discount ${code}`,
