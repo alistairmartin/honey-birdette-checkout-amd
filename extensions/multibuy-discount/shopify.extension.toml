@@ -1,0 +1,20 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "t:name"
+handle = "multibuy-discount"
+type = "function"
+uid = "f15e7a2f-62f2-463b-9d89-29f5f5ba1099"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "cart.lines.discounts.generate.run"
+  input_query = "src/cart_lines_discounts_generate_run.graphql"
+  export = "cart-lines-discounts-generate-run"
+
+  [extensions.ui]
+  handle = "multibuy-discount-ui"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"
