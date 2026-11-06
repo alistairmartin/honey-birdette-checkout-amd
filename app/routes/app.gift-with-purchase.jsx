@@ -397,6 +397,14 @@ const INITIAL_BUILDER = {
   // GWP offer with eligibility "tiers".
   kind: "",
   eligible_tiers: [],
+  // Tier-gated offers only: list the gift on the Honey Club account page for
+  // eligible, unredeemed customers. Blank copy falls back to defaults there.
+  show_in_account: false,
+  account_heading: "",
+  account_message: "",
+  account_image_url: "",
+  account_cta_text: "",
+  account_cta_url: "",
   combines_product: false,
   combines_order: false,
   combines_shipping: false,
@@ -520,6 +528,19 @@ function buildConfig(state) {
       : [];
     if (segs.length) config.eligible_segment_ids = segs;
   }
+  if ((state.kind === "loyalty" || eligibility === "tiers") && state.show_in_account) {
+    config.show_in_account = true;
+    for (const key of [
+      "account_heading",
+      "account_message",
+      "account_image_url",
+      "account_cta_text",
+      "account_cta_url",
+    ]) {
+      const v = String(state[key] || "").trim();
+      if (v) config[key] = v;
+    }
+  }
   const vf = localToDateTimeParts(state.valid_from);
   if (vf.date) {
     config.valid_date_from = vf.date;
@@ -613,6 +634,12 @@ function builderFromConfig(c) {
       : [],
     kind: isLoyaltyConfig(c) ? "loyalty" : "",
     eligible_tiers: Array.isArray(c.eligible_tiers) ? c.eligible_tiers : [],
+    show_in_account: c.show_in_account === true,
+    account_heading: c.account_heading ?? "",
+    account_message: c.account_message ?? "",
+    account_image_url: c.account_image_url ?? "",
+    account_cta_text: c.account_cta_text ?? "",
+    account_cta_url: c.account_cta_url ?? "",
     combines_product: c.combines_with?.productDiscounts === true,
     combines_order: c.combines_with?.orderDiscounts === true,
     combines_shipping: c.combines_with?.shippingDiscounts === true,
@@ -775,6 +802,9 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
         ? `**Eligible tiers:** ${tiers.map((t) => `**${t}**`).join(", ")} Honey Club members only.`
         : "**Eligible tiers:** *none selected yet*, so no one can get this gift.",
     );
+    if (c.show_in_account === true) {
+      lines.push("**Customer account:** listed on the Honey Club page for eligible customers who haven't redeemed it.");
+    }
   } else if (c.eligibility === "customers") {
     const emails = Array.isArray(c.eligible_emails) ? c.eligible_emails : [];
     lines.push(
@@ -867,6 +897,64 @@ function formatTimestamp(iso) {
   } catch {
     return iso;
   }
+}
+
+// "Show in customer account" option for tier-gated offers (Loyalty exclusives
+// and GWP offers with Honey Club tiers eligibility). Read by
+// /api/account-gifts for the honey-club-page customer-account extension.
+function AccountDisplayFields({ builder, update }) {
+  return (
+    <>
+      <Checkbox
+        label="Show in customer account"
+        checked={builder.show_in_account}
+        onChange={(v) => update("show_in_account", v)}
+        helpText="Lists this gift under Exclusive gifts on the Honey Club account page, only for customers in an eligible tier who haven't redeemed it. Live, enabled offers inside their dates only."
+      />
+      {builder.show_in_account ? (
+        <FormLayout>
+          <TextField
+            label="Account heading"
+            value={builder.account_heading}
+            onChange={(v) => update("account_heading", v)}
+            autoComplete="off"
+            placeholder="Defaults to the gift product's title"
+          />
+          <TextField
+            label="Account message"
+            value={builder.account_message}
+            onChange={(v) => update("account_message", v)}
+            autoComplete="off"
+            multiline={2}
+            placeholder='Defaults to "Yours free with orders over $150" (or a general line for other triggers)'
+          />
+          <TextField
+            label="Image URL"
+            value={builder.account_image_url}
+            onChange={(v) => update("account_image_url", v)}
+            autoComplete="off"
+            placeholder="Defaults to the gift product's image"
+          />
+          <FormLayout.Group>
+            <TextField
+              label="Button text"
+              value={builder.account_cta_text}
+              onChange={(v) => update("account_cta_text", v)}
+              autoComplete="off"
+              placeholder="Shop now"
+            />
+            <TextField
+              label="Button URL"
+              value={builder.account_cta_url}
+              onChange={(v) => update("account_cta_url", v)}
+              autoComplete="off"
+              placeholder="/collections/new-arrivals (defaults to the store home page)"
+            />
+          </FormLayout.Group>
+        </FormLayout>
+      ) : null}
+    </>
+  );
 }
 
 export default function GiftWithPurchasePage() {
@@ -1092,6 +1180,21 @@ export default function GiftWithPurchasePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep ?config=<rowId> in the URL while a saved config is open in the
+  // builder, and drop it on the Saved tab or a new/duplicated config, so the
+  // address bar is always a shareable link to what's on screen. Uses
+  // history.replaceState (App Bridge mirrors it to the admin URL) rather than
+  // setSearchParams, which would re-run the loader on every switch.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const want = selectedTab === 1 && editingId ? String(editingId) : null;
+    if ((url.searchParams.get("config") || null) === want) return;
+    if (want) url.searchParams.set("config", want);
+    else url.searchParams.delete("config");
+    window.history.replaceState(window.history.state, "", url.toString());
+  }, [selectedTab, editingId]);
 
   const duplicateSaved = (row) => {
     try {
@@ -1667,6 +1770,7 @@ export default function GiftWithPurchasePage() {
                           discount&apos;s eligibility. Guests and customers outside these tiers
                           see nothing.
                         </Text>
+                        <AccountDisplayFields builder={builder} update={update} />
                       </>
                     ) : (
                     <>
@@ -1719,6 +1823,7 @@ export default function GiftWithPurchasePage() {
                             : ""}. The app keeps a Shopify customer segment per tier
                           (&quot;Honey Club Gold (AU)&quot;) for the discount&apos;s eligibility.
                         </Text>
+                        <AccountDisplayFields builder={builder} update={update} />
                       </>
                     ) : null}
                     {builder.eligibility === "segments" ? (

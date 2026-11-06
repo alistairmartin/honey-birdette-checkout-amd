@@ -4,6 +4,7 @@ import "@shopify/ui-extensions/preact";
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { BirthdayCard } from "./Birthday";
+import { ExclusiveGifts } from "./ExclusiveGifts";
 
 // The target is bound in shopify.extension.toml
 // (customer-account.page.render -> this module).
@@ -183,6 +184,8 @@ function HoneyClubPage() {
         <LoyaltyMessages status={status} />
 
         <Status status={status} currency={currency} />
+
+        {member && <ExclusiveGifts storefrontUrl={storefrontUrl} />}
 
         {member && <BirthdayCard />}
 

@@ -278,7 +278,7 @@ async function findFunctionId(admin) {
 // the shop's ianaTimezone can't be resolved. Normally each store's own timezone
 // (Australia/Sydney, America/Los_Angeles, Europe/Paris, Europe/London, ...) is
 // used, fetched from shop.ianaTimezone.
-const DEFAULT_STORE_TIMEZONE = "Australia/Sydney";
+export const DEFAULT_STORE_TIMEZONE = "Australia/Sydney";
 
 // Offset (ms) of `timeZone` from UTC at the given UTC instant, DST-aware.
 function tzOffsetMs(utcMs, timeZone) {
@@ -325,7 +325,7 @@ function storeLocalToISO(dateStr, timeStr, timeZone) {
 // Active window for the discount from the config's valid-date fields, in the
 // shop's timezone. startsAt is required by the API, so it defaults to now when
 // the config has no start.
-function discountDatesFor(config, timeZone) {
+export function discountDatesFor(config, timeZone) {
   const startsAt =
     storeLocalToISO(config?.valid_date_from, config?.valid_time_from, timeZone) ||
     new Date().toISOString();

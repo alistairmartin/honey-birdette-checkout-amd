@@ -59,5 +59,11 @@
   "linkContact": "Kontakt",
   "linkBoutiques": "Boutique finden",
   "loadError": "Deine Honey Club Daten konnten gerade nicht geladen werden. Bitte versuche es später erneut.",
-  "findOutMore": "Mehr erfahren"
+  "findOutMore": "Mehr erfahren",
+  "giftsHeading": "Deine exklusiven Geschenke",
+  "giftEyebrow": "Honey Club {{tier}} Exklusiv",
+  "giftFallbackHeading": "Ein Geschenk für dich, Honey",
+  "giftMinSpend": "Gratis ab einem Bestellwert von {{amount}}. Wird an der Kasse hinzugefügt.",
+  "giftGeneric": "Gratis zu deiner nächsten Bestellung. Wird an der Kasse hinzugefügt.",
+  "giftCta": "Jetzt shoppen"
 }

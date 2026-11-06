@@ -59,5 +59,11 @@
   "linkContact": "Contact us",
   "linkBoutiques": "Find a boutique",
   "loadError": "We couldn't load your Honey Club details right now. Try again later.",
-  "findOutMore": "Find out more"
+  "findOutMore": "Find out more",
+  "giftsHeading": "Your exclusive gifts",
+  "giftEyebrow": "Honey Club {{tier}} exclusive",
+  "giftFallbackHeading": "A gift for you, Honey",
+  "giftMinSpend": "Yours free with orders over {{amount}}. Added at checkout.",
+  "giftGeneric": "Yours free on your next order. Added at checkout.",
+  "giftCta": "Shop now"
 }

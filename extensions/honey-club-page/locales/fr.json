@@ -59,5 +59,11 @@
   "linkContact": "Nous contacter",
   "linkBoutiques": "Trouver une boutique",
   "loadError": "Impossible de charger tes informations Honey Club pour le moment. Réessaie plus tard.",
-  "findOutMore": "En savoir plus"
+  "findOutMore": "En savoir plus",
+  "giftsHeading": "Vos cadeaux exclusifs",
+  "giftEyebrow": "Exclusivité Honey Club {{tier}}",
+  "giftFallbackHeading": "Un cadeau pour vous, Honey",
+  "giftMinSpend": "Offert dès {{amount}} d'achat. Ajouté au paiement.",
+  "giftGeneric": "Offert avec votre prochaine commande. Ajouté au paiement.",
+  "giftCta": "Découvrir"
 }
