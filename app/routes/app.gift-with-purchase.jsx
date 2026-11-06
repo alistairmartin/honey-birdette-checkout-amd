@@ -43,7 +43,7 @@ import {
   TRIGGER_TYPES,
   triggerUsesMinSpend,
 } from "../lib/gwpAppV1.shared";
-import { LOYALTY_TIERS, isLoyaltyConfig, suggestRedeemedTag } from "../lib/loyalty.shared";
+import { LOYALTY_TIERS, isLoyaltyConfig, isTierGatedConfig, suggestRedeemedTag } from "../lib/loyalty.shared";
 
 // Gift With Purchase: the merchant builds and saves each offer here. Every
 // saved config (a GwpAppV1Config row) is pushed to a shop metafield read by the
@@ -393,7 +393,8 @@ const INITIAL_BUILDER = {
   eligibility: "all",
   eligible_emails: "",
   eligible_segments: [],
-  // Loyalty exclusives only (kind "loyalty"): Honey Club tiers that qualify.
+  // Honey Club tiers that qualify: loyalty exclusives (kind "loyalty"), or a
+  // GWP offer with eligibility "tiers".
   kind: "",
   eligible_tiers: [],
   combines_product: false,
@@ -496,10 +497,17 @@ function buildConfig(state) {
   const eligibility =
     state.kind === "loyalty"
       ? "all"
-      : state.eligibility === "customers" || state.eligibility === "segments"
+      : ["customers", "segments", "tiers"].includes(state.eligibility)
         ? state.eligibility
         : "all";
   if (state.kind !== "loyalty") config.eligibility = eligibility;
+  // GWP offer limited to Honey Club tiers: same tier gating as a loyalty
+  // exclusive (tier segments on the discount, tier check in checkout).
+  if (eligibility === "tiers") {
+    config.eligible_tiers = LOYALTY_TIERS.map((t) => t.value).filter((v) =>
+      (state.eligible_tiers || []).includes(v),
+    );
+  }
   if (eligibility === "customers") {
     const emails = String(state.eligible_emails || "")
       .split(/[\s,]+/)
@@ -594,10 +602,9 @@ function builderFromConfig(c) {
       : [],
     shipping_countries: c.shipping_countries ?? "all",
     customer_redeemed_tag: c.customer_redeemed_tag ?? "",
-    eligibility:
-      c.eligibility === "customers" || c.eligibility === "segments"
-        ? c.eligibility
-        : "all",
+    eligibility: ["customers", "segments", "tiers"].includes(c.eligibility)
+      ? c.eligibility
+      : "all",
     eligible_emails: Array.isArray(c.eligible_emails)
       ? c.eligible_emails.join("\n")
       : "",
@@ -761,7 +768,7 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
       : "**Redemption:** one per **order** (no cross-order limit).") + capText,
   );
 
-  if (isLoyaltyConfig(c)) {
+  if (isTierGatedConfig(c)) {
     const tiers = Array.isArray(c.eligible_tiers) ? c.eligible_tiers : [];
     lines.push(
       tiers.length
@@ -1110,7 +1117,12 @@ export default function GiftWithPurchasePage() {
   // Loyalty exclusives can't be saved half-gated: they need tiers, and a tag
   // to stop repeat redemptions.
   const loyaltyProblem = () => {
-    if (!loyalty) return null;
+    if (!loyalty) {
+      if (builder.eligibility === "tiers" && !builder.eligible_tiers?.length) {
+        return "Pick at least one Honey Club tier";
+      }
+      return null;
+    }
     if (!builder.eligible_tiers?.length) return "Pick at least one Honey Club tier";
     if (!builder.customer_redeemed_tag.trim()) return "Add a customer redeemed tag";
     return null;
@@ -1673,6 +1685,7 @@ export default function GiftWithPurchasePage() {
                         { label: "All customers", value: "all" },
                         { label: "Specific customers", value: "customers" },
                         { label: "Specific customer segments", value: "segments" },
+                        { label: "Honey Club tiers", value: "tiers" },
                       ]}
                       value={builder.eligibility}
                       onChange={(v) => update("eligibility", v)}
@@ -1687,6 +1700,26 @@ export default function GiftWithPurchasePage() {
                         placeholder={"jane@honeybirdette.com\njohn@honeybirdette.com"}
                         helpText="One email per line. Each must already be a customer in this shop; unknown emails are skipped."
                       />
+                    ) : null}
+                    {builder.eligibility === "tiers" ? (
+                      <>
+                        <ChoiceList
+                          allowMultiple
+                          title="Eligible tiers"
+                          choices={LOYALTY_TIERS.map((t) => ({ label: t.label, value: t.value }))}
+                          selected={builder.eligible_tiers}
+                          onChange={(v) => update("eligible_tiers", v)}
+                        />
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Only customers tagged with one of these tiers (cx-tier-&lt;tier&gt;-&lt;region&gt;)
+                          get the discount. In checkout the gift stays hidden until the
+                          customer is logged in or has entered their email, and the app has
+                          confirmed their tier{builder.redemption_type === "one_per_customer"
+                            ? " and that they haven't redeemed it before"
+                            : ""}. The app keeps a Shopify customer segment per tier
+                          (&quot;Honey Club Gold (AU)&quot;) for the discount&apos;s eligibility.
+                        </Text>
+                      </>
                     ) : null}
                     {builder.eligibility === "segments" ? (
                       segments && segments.length > 0 ? (

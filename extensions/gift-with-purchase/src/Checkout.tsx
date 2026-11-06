@@ -653,9 +653,12 @@ const config = useMemo(() => {
     banner_message_added: String(cfg.banner_message_added || "").trim(),
     banner_title_redeemed: String(cfg.banner_title_redeemed || "").trim(),
     banner_message_redeemed: String(cfg.banner_message_redeemed || "").trim(),
-    // Loyalty exclusives (Loyalty > Exclusives in the app): only offered to
-    // customers in one of these Honey Club tiers. Empty = everyone (normal GWP).
-    loyalty: String(cfg.kind || "") === "loyalty",
+    // Tier-gated offers: loyalty exclusives (Loyalty > Exclusives in the app)
+    // and GWP offers with "Honey Club tiers" eligibility. Only offered to
+    // customers in one of these tiers. Empty = everyone (normal GWP).
+    loyalty:
+      String(cfg.kind || "") === "loyalty" ||
+      (Array.isArray(cfg.eligible_tiers) && cfg.eligible_tiers.length > 0),
     eligible_tiers: Array.isArray(cfg.eligible_tiers) ? cfg.eligible_tiers.map(String) : [],
     banner_title_region: String(cfg.banner_title_region || "").trim(),
     banner_message_region: String(cfg.banner_message_region || "").trim(),
@@ -1982,6 +1985,17 @@ const messageText = config.banner_message_before
 
   // Hide the component entirely when offer is inactive, unless debug is enabled
   if (!offerActive && !config.show_testing_information) return null;
+
+  // Tier-gated offers stay completely hidden until every check has passed:
+  // tier confirmed (offerActive above, which needs a login or typed email) AND
+  // the one-per-customer redemption lookup has settled and found no prior
+  // redemption. No "already redeemed" banner for these, just nothing.
+  if (
+    config.loyalty &&
+    (!redemptionGuardSettled || effectiveHasRedeemed) &&
+    !config.show_testing_information
+  )
+    return null;
 
   // Hide the offer when its gift product can't be loaded (draft, unpublished to
   // this sales channel, or a bad ID). The customer just sees no offer instead

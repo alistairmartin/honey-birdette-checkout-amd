@@ -16,6 +16,12 @@ export function isLoyaltyConfig(config) {
   return config?.kind === "loyalty";
 }
 
+// Offers limited to Honey Club tiers: every loyalty exclusive, plus regular
+// GWP offers whose Customer eligibility is set to "Honey Club tiers".
+export function isTierGatedConfig(config) {
+  return isLoyaltyConfig(config) || config?.eligibility === "tiers";
+}
+
 // Suggested redeemed tag for a new exclusive, from its title.
 export function suggestRedeemedTag(title) {
   const slug = String(title || "")

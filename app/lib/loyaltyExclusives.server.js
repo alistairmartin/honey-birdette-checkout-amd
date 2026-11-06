@@ -16,7 +16,7 @@
 import prisma from "../db.server";
 import { adminGraphql } from "./adminGraphql.server";
 import { regionForShop } from "./loyaltyTierSync.server";
-import { LOYALTY_TIERS, isLoyaltyConfig } from "./loyalty.shared";
+import { LOYALTY_TIERS, isTierGatedConfig } from "./loyalty.shared";
 
 const SEGMENTS = `#graphql
   query LoyaltySegments {
@@ -74,12 +74,13 @@ async function ensureTierSegments(admin, shop, tierValues) {
   return ids;
 }
 
-// The config as the engine should run it: for a loyalty exclusive, eligibility
+// The config as the engine should run it: for a tier-gated offer (a loyalty
+// exclusive, or a GWP offer with "Honey Club tiers" eligibility), eligibility
 // becomes its tier segments and the tier tags are stamped on for the checkout.
 // Non-loyalty configs pass through untouched. With no tiers picked the offer is
 // left with no eligible customers rather than opened up to everyone.
 export async function applyLoyaltyEligibility(admin, shop, config) {
-  if (!isLoyaltyConfig(config)) return config;
+  if (!isTierGatedConfig(config)) return config;
   const tiers = Array.isArray(config.eligible_tiers) ? config.eligible_tiers : [];
   const segmentIds = tiers.length ? await ensureTierSegments(admin, shop, tiers) : [];
   return {
