@@ -4,7 +4,7 @@
 //
 // Only orders in a recent window are scanned; each request processes for at
 // most BUDGET_MS and hands back a cursor so the browser can resume.
-import { adminGraphql, costPause, sleep, BUDGET_MS } from "./adminGraphql.server";
+import { adminGraphqlWithRetry as graphqlWithRetry, costPause, sleep, BUDGET_MS } from "./adminGraphql.server";
 import { tierTagsForRegion } from "./loyaltyTierSync.server";
 
 export const ORDER_TAG_PREFIX = "Loyalty:";
@@ -45,28 +45,6 @@ export function hasLoyaltyOrderTag(orderTags) {
 }
 
 const MAX_ERRORS = 50;
-
-// adminGraphql only retries on throttling. Connection resets between Render
-// and Shopify ("Http request error, no response available") surface as plain
-// errors, so retry those a few times before giving up on the batch.
-function isNetworkError(err) {
-  const msg = err?.message || String(err);
-  return /no response available|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|fetch failed|network/i.test(
-    msg,
-  );
-}
-
-async function graphqlWithRetry(admin, query, variables) {
-  const MAX = 4;
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await adminGraphql(admin, query, variables);
-    } catch (err) {
-      if (!isNetworkError(err) || attempt >= MAX) throw err;
-      await sleep(Math.min(1000 * 2 ** attempt, 8000));
-    }
-  }
-}
 
 // Process one budgeted batch. Returns page counts plus a cursor to resume from
 // (null when the window is exhausted).

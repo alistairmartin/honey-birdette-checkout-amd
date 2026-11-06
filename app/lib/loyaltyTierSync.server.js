@@ -7,7 +7,7 @@
 //
 // The metafield is a single line text choice (Gold / Diamond / Platinum / VIP),
 // NOT a list, so we write a plain string value.
-import { adminGraphql } from "./adminGraphql.server";
+import { adminGraphqlWithRetry } from "./adminGraphql.server";
 
 export const METAFIELD_NAMESPACE = "custom";
 export const METAFIELD_KEY = "loyalty_tier";
@@ -75,7 +75,7 @@ async function customersWithTag(admin, tag) {
   // Quote the tag so values with hyphens are matched exactly.
   const q = `tag:'${tag}'`;
   do {
-    const body = await adminGraphql(admin, CUSTOMERS_BY_TAG, { q, cursor });
+    const body = await adminGraphqlWithRetry(admin, CUSTOMERS_BY_TAG, { q, cursor });
     const conn = body?.data?.customers;
     for (const node of conn?.nodes ?? []) {
       out.push({ id: node.id, current: node.metafield?.value ?? null });
@@ -90,7 +90,7 @@ async function writeTiers(admin, updates) {
   let updated = 0;
   const errors = [];
   for (const batch of chunk(updates, 25)) {
-    const body = await adminGraphql(admin, METAFIELDS_SET, {
+    const body = await adminGraphqlWithRetry(admin, METAFIELDS_SET, {
       metafields: batch.map((u) => ({
         ownerId: u.id,
         namespace: METAFIELD_NAMESPACE,

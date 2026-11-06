@@ -65,3 +65,26 @@ export async function adminGraphql(admin, query, variables, attempt = 0) {
     throw err;
   }
 }
+
+// Connection resets between Render and Shopify ("Http request error, no
+// response available") surface as plain errors that adminGraphql doesn't
+// retry. Only use this for idempotent operations (reads, metafieldsSet,
+// tagsAdd): the request may have reached Shopify before the connection dropped.
+export function isNetworkError(err) {
+  const msg = err?.message || String(err);
+  return /no response available|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|fetch failed|network/i.test(
+    msg,
+  );
+}
+
+export async function adminGraphqlWithRetry(admin, query, variables) {
+  const MAX = 4;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await adminGraphql(admin, query, variables);
+    } catch (err) {
+      if (!isNetworkError(err) || attempt >= MAX) throw err;
+      await sleep(Math.min(1000 * 2 ** attempt, 8000));
+    }
+  }
+}
