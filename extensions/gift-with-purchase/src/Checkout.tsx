@@ -1971,6 +1971,73 @@ const messageText = config.banner_message_before
     void syncGift();
   }, [tagsLoading, redemptionGuardSettled, effectiveHasRedeemed, shippingOk, taggedSpend, isGiftInCart, anyGiftOptionInCart, autoAdd, giftVariantGid, giftAvailable, adjustedGoal, offerActive, tierPending, qualification.qualifies, usageSoldOut, usageCapConfigured, usageChecked]);
 
+  // Tier-gated offers (loyalty exclusives / GWP with Honey Club tiers): the gift
+  // product is exclusive, so validate EVERY cart line of it - not only the
+  // `_promo` lines the app added. Covers items added from the storefront or the
+  // Honey Club account page.
+  //   - buyer not in an eligible tier, or already redeemed -> remove all of it
+  //   - eligible -> cap it at quantity 1 (one gift per order)
+  // Waits for the tier lookup, and for guests until they've typed an email
+  // (checkout requires one before payment), so an entitled buyer's gift isn't
+  // removed while we still don't know who they are.
+  const exclusiveProductGids = useMemo(() => {
+    const set = new Set<string>();
+    for (const id of optionIds) {
+      const numeric = id.match(/(\d+)$/)?.[1];
+      if (numeric) set.add(`gid://shopify/Product/${numeric}`);
+    }
+    return set;
+  }, [optionIds]);
+  const exclusiveInFlight = useRef(false);
+  useEffect(() => {
+    if (!config.loyalty || !config.enabled) return;
+    if (exclusiveProductGids.size === 0) return;
+    if (tierPending || !redemptionGuardSettled) return;
+    if (!customerPresent && !tierEmail.includes("@")) return;
+    const exclusiveLines = lines.filter((l: any) =>
+      exclusiveProductGids.has(String(l?.merchandise?.product?.id || "")),
+    );
+    if (exclusiveLines.length === 0) return;
+
+    const allowed = tierOk && !effectiveHasRedeemed;
+    // Changes needed: remove everything when not allowed; otherwise keep the
+    // first line at qty 1 and remove any extra lines.
+    // Keep the line the main effect treats as "the gift" (selected variant,
+    // app-added first) so the two effects don't fight: removing it would make
+    // the main effect re-add it.
+    const isPromo = (l: any) =>
+      Array.isArray(l?.attributes) &&
+      l.attributes.some((a: any) => a?.key === "_promo" && String(a?.value) === "true");
+    const rank = (l: any) =>
+      (optionVariantGids.has(l.merchandise.id) ? 0 : 2) + (isPromo(l) ? 0 : 1);
+    const ordered = [...exclusiveLines].sort((a: any, b: any) => rank(a) - rank(b));
+    const changes: {id: string; quantity: number}[] = [];
+    ordered.forEach((l: any, i: number) => {
+      const qty = Number(l.quantity || 0);
+      const target = allowed && i === 0 ? 1 : 0;
+      if (qty !== target) changes.push({id: l.id, quantity: target});
+    });
+    if (changes.length === 0 || exclusiveInFlight.current) return;
+    exclusiveInFlight.current = true;
+    (async () => {
+      try {
+        for (const change of changes) {
+          const result = await shopify.applyCartLinesChange({
+            type: "updateCartLine",
+            id: change.id,
+            quantity: change.quantity,
+          });
+          if ((result as any)?.type === "error") {
+            console.error("GWP exclusive line update failed", (result as any)?.message);
+            break;
+          }
+        }
+      } finally {
+        exclusiveInFlight.current = false;
+      }
+    })();
+  }, [config.loyalty, config.enabled, exclusiveProductGids, optionVariantGids, tierPending, redemptionGuardSettled, customerPresent, tierEmail, lines, tierOk, effectiveHasRedeemed]);
+
   // (Optional) show fetch error
   // {tagsError ? <Text size="small">Tag fetch error</Text> : null}
 
