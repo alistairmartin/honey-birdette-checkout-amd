@@ -23,6 +23,7 @@ import {
   Banner,
   Box,
   ChoiceList,
+  DropZone,
 } from "@shopify/polaris";
 import { ArrowLeftIcon } from "@shopify/polaris-icons";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
@@ -282,6 +283,10 @@ export const action = async ({ request }) => {
     return json({ ok: true, intent, id });
   }
 
+  if (intent === "import") {
+    return importConfigs(admin, session.shop, formData, isLoyaltyRequest(request));
+  }
+
   if (intent === "create_discount") {
     const id = String(formData.get("id") ?? "");
     if (!id) return json({ ok: false, error: "Missing config id." });
@@ -315,6 +320,153 @@ export const action = async ({ request }) => {
 
   return json({ ok: false, error: "Unknown intent." });
 };
+
+// Export file format. Import also accepts a bare config object (what Copy JSON
+// gives you) or an array of configs / { name, config } entries.
+const EXPORT_FORMAT = "amd-gwp-configs";
+const EXPORT_VERSION = 1;
+
+function normalizeImportEntries(payload) {
+  const list = Array.isArray(payload)
+    ? payload
+    : payload && Array.isArray(payload.configs)
+      ? payload.configs
+      : payload && typeof payload === "object"
+        ? [payload]
+        : [];
+  return list
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const config =
+        entry.config && typeof entry.config === "object" ? entry.config : entry;
+      const name = String(
+        entry.name || config.label || config.admin_title || "Imported config",
+      ).trim();
+      return { name, config };
+    })
+    .filter(Boolean);
+}
+
+// Product + segment ids are store-specific. Report any that don't exist in
+// this shop so a config copied from another region gets fixed before going live.
+async function findMissingReferences(admin, configs, segments) {
+  const productIds = new Set();
+  const segmentIds = new Set();
+  for (const c of configs) {
+    const ids = [c.product_id];
+    if (Array.isArray(c.gift_options)) {
+      for (const opt of c.gift_options) {
+        ids.push(opt && typeof opt === "object" ? opt.product_id : opt);
+      }
+    }
+    for (const id of ids) {
+      if (id == null || id === "") continue;
+      const raw = String(id).trim();
+      const numeric = raw.match(/\/(\d+)$/)?.[1] ?? raw;
+      if (/^\d+$/.test(numeric)) productIds.add(numeric);
+    }
+    for (const id of c.eligible_segment_ids || []) segmentIds.add(String(id));
+  }
+  const missingProducts = [];
+  if (productIds.size > 0) {
+    const gids = [...productIds].map((n) => `gid://shopify/Product/${n}`);
+    try {
+      const response = await admin.graphql(
+        `#graphql
+          query GwpImportProductCheck($ids: [ID!]!) {
+            nodes(ids: $ids) { ... on Product { id } }
+          }`,
+        { variables: { ids: gids } },
+      );
+      const data = await response.json();
+      const found = new Set(
+        (data.data?.nodes ?? []).filter(Boolean).map((n) => n.id),
+      );
+      for (const gid of gids) {
+        if (!found.has(gid)) missingProducts.push(gid.split("/").pop());
+      }
+    } catch (err) {
+      console.error("GWP import product check failed", err);
+    }
+  }
+  const knownSegments = new Set(segments.map((s) => s.id));
+  const missingSegments = [...segmentIds].filter((id) => !knownSegments.has(id));
+  return { missingProducts, missingSegments };
+}
+
+async function importConfigs(admin, shop, formData, loyalty) {
+  let payload;
+  try {
+    payload = JSON.parse(String(formData.get("payload") ?? ""));
+  } catch {
+    return json({ ok: false, error: "Import file is not valid JSON." });
+  }
+  const entries = normalizeImportEntries(payload);
+  if (entries.length === 0) {
+    return json({ ok: false, error: "No configs found in the import file." });
+  }
+
+  // This page only manages its own kind (GWP vs loyalty exclusives).
+  const accepted = [];
+  const skipped = [];
+  for (const entry of entries) {
+    if (isLoyaltyConfig(entry.config) === loyalty) accepted.push(entry);
+    else skipped.push(entry.name);
+  }
+  if (accepted.length === 0) {
+    return json({
+      ok: false,
+      error: loyalty
+        ? "Those are GWP configs - import them on the Gift With Purchase page."
+        : "Those are loyalty exclusives - import them on Loyalty > Exclusives.",
+    });
+  }
+
+  // Create each row in test mode first so its discount is created DEACTIVATED
+  // (a new discount is only active when enabled + live), then restore the real
+  // config. The discount's active state is left alone on later syncs, so the
+  // import never switches anything on at checkout.
+  const created = [];
+  for (const { name, config } of accepted) {
+    const row = await prisma.gwpAppV1Config.create({
+      data: {
+        shop,
+        name,
+        configJson: JSON.stringify({ ...config, mode: "test" }),
+      },
+    });
+    created.push({ id: row.id, configJson: JSON.stringify(config) });
+  }
+  try {
+    await syncConfigs(admin, shop);
+  } catch (err) {
+    console.error("Failed to sync GWP configs (import, pass 1)", err);
+  }
+  for (const { id, configJson } of created) {
+    await prisma.gwpAppV1Config.update({ where: { id }, data: { configJson } });
+  }
+  try {
+    await syncConfigs(admin, shop);
+  } catch (err) {
+    console.error("Failed to sync GWP configs (import, pass 2)", err);
+  }
+
+  const segments = await listSegments(admin);
+  const { missingProducts, missingSegments } = await findMissingReferences(
+    admin,
+    accepted.map((e) => e.config),
+    segments,
+  );
+
+  return json({
+    ok: true,
+    intent: "import",
+    imported: created.length,
+    skipped,
+    missingProducts,
+    missingSegments,
+  });
+}
 
 const DEFAULT_COPY = {
   admin_title: "{{ free_gift }} GWP - {{ trigger_type }}",
@@ -969,6 +1121,9 @@ export default function GiftWithPurchasePage() {
   const [editingId, setEditingId] = useState(null);
   const [configName, setConfigName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importResult, setImportResult] = useState(null);
 
   const update = (key, value) =>
     setBuilder((prev) => ({ ...prev, [key]: value }));
@@ -1038,6 +1193,14 @@ export default function GiftWithPurchasePage() {
           setBuilder(freshBuilder());
         }
         shopify.toast.show("Deleted");
+      } else if (lastResult.intent === "import") {
+        setImportOpen(false);
+        setImportText("");
+        setImportResult(lastResult);
+        setSelectedTab(0);
+        shopify.toast.show(
+          `Imported ${lastResult.imported} config${lastResult.imported === 1 ? "" : "s"}`,
+        );
       } else if (lastResult.intent === "create_discount") {
         shopify.toast.show("Discount created");
       } else if (lastResult.intent === "activate_discount") {
@@ -1208,6 +1371,69 @@ export default function GiftWithPurchasePage() {
     setConfigName(`${row.name} (copy)`);
     setSelectedTab(1);
     shopify.toast.show(`Duplicated "${row.name}" - save to keep the copy`);
+  };
+
+  // Download saved configs as a JSON file (all of them, or one row).
+  const exportConfigs = (rows) => {
+    const configs = [];
+    for (const row of rows) {
+      try {
+        configs.push({ name: row.name, config: JSON.parse(row.configJson) });
+      } catch {
+        // Skip rows with invalid stored JSON; they can't be re-imported anyway.
+      }
+    }
+    if (configs.length === 0) {
+      shopify.toast.show("Nothing to export", { isError: true });
+      return;
+    }
+    const file = {
+      format: EXPORT_FORMAT,
+      version: EXPORT_VERSION,
+      kind: loyalty ? "loyalty" : "gwp",
+      exportedAt: new Date().toISOString(),
+      configs,
+    };
+    const slug =
+      rows.length === 1
+        ? rows[0].name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+        : loyalty
+          ? "loyalty-exclusives"
+          : "gwp-configs";
+    const blob = new Blob([JSON.stringify(file, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${slug}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    shopify.toast.show(
+      `Exported ${configs.length} config${configs.length === 1 ? "" : "s"}`,
+    );
+  };
+
+  const readImportFile = async (files) => {
+    const file = files?.[0];
+    if (!file) return;
+    try {
+      setImportText(await file.text());
+    } catch {
+      shopify.toast.show("Couldn't read that file", { isError: true });
+    }
+  };
+
+  const submitImport = () => {
+    try {
+      JSON.parse(importText);
+    } catch {
+      shopify.toast.show("That isn't valid JSON", { isError: true });
+      return;
+    }
+    fetcher.submit({ intent: "import", payload: importText }, { method: "post" });
   };
 
   const newConfig = () => {
@@ -2124,8 +2350,59 @@ export default function GiftWithPurchasePage() {
                     <Text as="h2" variant="headingMd">
                       Saved configs
                     </Text>
-                    <Button onClick={newConfig}>New config</Button>
+                    <InlineStack gap="200">
+                      <Button onClick={() => setImportOpen(true)}>Import</Button>
+                      <Button
+                        onClick={() => exportConfigs(saved)}
+                        disabled={saved.length === 0}
+                      >
+                        Export all
+                      </Button>
+                      <Button onClick={newConfig}>New config</Button>
+                    </InlineStack>
                   </InlineStack>
+
+                  {importResult ? (
+                    <Banner
+                      tone={
+                        importResult.missingProducts?.length ||
+                        importResult.missingSegments?.length
+                          ? "warning"
+                          : "success"
+                      }
+                      title={`Imported ${importResult.imported} config${
+                        importResult.imported === 1 ? "" : "s"
+                      } - discounts are deactivated`}
+                      onDismiss={() => setImportResult(null)}
+                    >
+                      <BlockStack gap="100">
+                        <Text as="p" variant="bodyMd">
+                          Review each imported config, then use Make active when
+                          you&apos;re ready.
+                        </Text>
+                        {importResult.missingProducts?.length ? (
+                          <Text as="p" variant="bodyMd">
+                            Products not found in this store (likely from another
+                            region - edit the config and re-pick the gift):{" "}
+                            {importResult.missingProducts.join(", ")}
+                          </Text>
+                        ) : null}
+                        {importResult.missingSegments?.length ? (
+                          <Text as="p" variant="bodyMd">
+                            Customer segments not found in this store - edit the
+                            config and re-select eligibility:{" "}
+                            {importResult.missingSegments.join(", ")}
+                          </Text>
+                        ) : null}
+                        {importResult.skipped?.length ? (
+                          <Text as="p" variant="bodyMd">
+                            Skipped (wrong page for this kind of config):{" "}
+                            {importResult.skipped.join(", ")}
+                          </Text>
+                        ) : null}
+                      </BlockStack>
+                    </Banner>
+                  ) : null}
 
                   <Banner tone="info">
                     <Text as="p" variant="bodyMd">
@@ -2266,6 +2543,7 @@ export default function GiftWithPurchasePage() {
                                 >
                                   Copy JSON
                                 </Button>
+                                <Button onClick={() => exportConfigs([row])}>Export</Button>
                                 <Button
                                   tone="critical"
                                   variant="tertiary"
@@ -2396,6 +2674,47 @@ export default function GiftWithPurchasePage() {
         )}
 
       </BlockStack>
+
+      {importOpen ? (
+        <Modal
+          open
+          onClose={() => setImportOpen(false)}
+          title={loyalty ? "Import loyalty exclusives" : "Import configs"}
+          primaryAction={{
+            content: "Import",
+            onAction: submitImport,
+            disabled: !importText.trim(),
+            loading: isSaving,
+          }}
+          secondaryActions={[{ content: "Cancel", onAction: () => setImportOpen(false) }]}
+        >
+          <Modal.Section>
+            <BlockStack gap="300">
+              <Text as="p" variant="bodyMd">
+                Choose an exported .json file, or paste JSON (an export file or a
+                single config from Copy JSON). Each config is added as a new
+                saved config - nothing is overwritten - and its discount is
+                created deactivated.
+              </Text>
+              <DropZone
+                accept="application/json,.json"
+                allowMultiple={false}
+                onDrop={(_all, accepted) => readImportFile(accepted)}
+              >
+                <DropZone.FileUpload actionHint="or drop an exported .json file" />
+              </DropZone>
+              <TextField
+                label="JSON"
+                value={importText}
+                onChange={setImportText}
+                multiline={8}
+                autoComplete="off"
+                monospaced
+              />
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
+      ) : null}
 
       {deleteTarget ? (
         <Modal
