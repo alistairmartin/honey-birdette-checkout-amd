@@ -2639,6 +2639,16 @@ export default function GiftWithPurchasePage() {
                                       )}
                                     </InlineStack>
                                   </InlineStack>
+                                  {disc.exists ? (
+                                    <Text as="p" variant="bodySm">
+                                      <Text as="span" fontWeight="semibold">
+                                        {disc.title || "Untitled discount"}
+                                      </Text>{" "}
+                                      <Text as="span" tone="subdued">
+                                        (#{String(disc.discountId).match(/(\d+)$/)?.[1] ?? disc.discountId})
+                                      </Text>
+                                    </Text>
+                                  ) : null}
                                   {!disc.exists ? (
                                     <Text as="p" variant="bodySm" tone="subdued">
                                       No discount exists for this config yet.
