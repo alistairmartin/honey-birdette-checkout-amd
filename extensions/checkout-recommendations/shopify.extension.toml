@@ -19,6 +19,12 @@ uid = "d296a286-e696-6ece-36cc-64f3fd7b258c5b2b48b8"
 module = "./src/Checkout.jsx"
 target = "purchase.checkout.block.render"
 
+# Free-shipping progress + gap-fill products, shown inside the selected
+# shipping rate (static target: renders automatically, no editor placement).
+[[extensions.targeting]]
+module = "./src/ShippingRateUpsell.jsx"
+target = "purchase.checkout.shipping-option-item.details.render"
+
 [extensions.capabilities]
 # Gives your extension access to directly query Shopify’s storefront API.
 # https://shopify.dev/docs/api/checkout-ui-extensions/latest/configuration#api-access

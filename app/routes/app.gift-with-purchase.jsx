@@ -523,6 +523,10 @@ const INITIAL_BUILDER = {
   max_total_uses: "",
   show_banners: true,
   show_success_banner: true,
+  // Also render this offer in the storefront side cart (theme mini-cart).
+  show_in_cart: false,
+  // Off = side cart offer only renders on unpublished (preview / dev) themes.
+  show_on_live_theme: false,
   label: "LIMITED OFFER",
   admin_title: DEFAULT_COPY.admin_title,
   discount_title: "",
@@ -589,6 +593,8 @@ function buildConfig(state) {
     add_mode: state.add_mode === "manual" ? "manual" : "auto",
     auto_remove_gift: !!state.auto_remove_gift,
   };
+  if (state.show_in_cart) config.show_in_cart = true;
+  if (state.show_in_cart && state.show_on_live_theme) config.show_on_live_theme = true;
   if (state.description.trim()) config.description = state.description.trim();
   if (state.label.trim()) config.label = state.label.trim();
   if (state.admin_title.trim()) config.admin_title = state.admin_title.trim();
@@ -742,6 +748,8 @@ function builderFromConfig(c) {
     max_total_uses: c.max_total_uses != null ? String(c.max_total_uses) : "",
     show_banners: c.show_banners !== false,
     show_success_banner: c.show_success_banner !== false,
+    show_in_cart: c.show_in_cart === true,
+    show_on_live_theme: c.show_on_live_theme === true,
     label: c.label ?? "",
     admin_title: c.admin_title ?? "",
     discount_title: c.discount_title ?? "",
@@ -1648,6 +1656,26 @@ export default function GiftWithPurchasePage() {
                       onChange={(v) => update("show_success_banner", v)}
                       helpText="Show the success banner after the gift is added. Independent of 'Show banners'."
                     />
+
+                    <Checkbox
+                      label="Show in side cart"
+                      checked={builder.show_in_cart}
+                      onChange={(v) => update("show_in_cart", v)}
+                      helpText={
+                        builder.kind === "loyalty" || (builder.eligibility && builder.eligibility !== "all")
+                          ? "Not available for this offer: the side cart can only show offers open to all customers (no customer list, segment or Honey Club tier limit)."
+                          : "Also show this offer in the website side cart (progress, unlocked and added copy, plus the gift with an Add button). Auto-add offers are added there too. Live offers only."
+                      }
+                    />
+
+                    {builder.show_in_cart ? (
+                      <Checkbox
+                        label="Show on live theme"
+                        checked={builder.show_on_live_theme}
+                        onChange={(v) => update("show_on_live_theme", v)}
+                        helpText="Off: the side cart offer only shows on unpublished themes (theme previews / dev themes), so you can test it before customers see it. On: it also shows on the live (published) theme."
+                      />
+                    ) : null}
 
                     <Select
                       label="Add to cart behavior"

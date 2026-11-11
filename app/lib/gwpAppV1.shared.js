@@ -69,6 +69,12 @@ export function triggerUsesMinSpend(triggerType) {
 // Metafield wiring.
 export const SHOP_METAFIELD_NAMESPACE = "$app:gift-with-purchase";
 export const SHOP_METAFIELD_KEY = "configs";
+// Slim, theme-facing copy of the configs ticked "Show in side cart". A plain
+// (non-reserved) namespace so the Online Store theme can read it in Liquid as
+// shop.metafields.amd_gwp.cart_offers without knowing this app's numeric id.
+// Only public-safe fields go in here (no eligible emails / segment ids).
+export const CART_METAFIELD_NAMESPACE = "amd_gwp";
+export const CART_METAFIELD_KEY = "cart_offers";
 export const FUNCTION_METAFIELD_NAMESPACE = "$app";
 export const FUNCTION_METAFIELD_KEY = "function-configuration";
 

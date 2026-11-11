@@ -72,7 +72,7 @@ const stripCurrency = (s) =>
     .replace(/\b(EUR|USD|AUD|NZD|GBP|CAD)\b/g, (match) => currencySymbols[match])
     .replace(/\s+/g, '');
 
-const formatPrice = (amount) =>
+export const formatPrice = (amount) =>
   stripCurrency(shopify.i18n.formatCurrency(Number(amount)).replace(/\.00$/, ''));
 
 // Free-shipping progress tiers. Merchants set a standard and an express
@@ -85,7 +85,7 @@ const SHIPPING_TIERS = [
 
 // Resolve the standard/express free-shipping thresholds for a currency from the
 // app config (Checkout Recommendations admin page).
-const resolveShippingThresholds = (appConfig, currencyCode) => {
+export const resolveShippingThresholds = (appConfig, currencyCode) => {
   const upper = String(currencyCode || '').toUpperCase();
   const fromConfig = appConfig?.free_shipping?.[upper] || {};
 
@@ -100,7 +100,7 @@ const resolveShippingThresholds = (appConfig, currencyCode) => {
 // Returns the shipping nudge subtitle plus the remaining spend ("gap") to the
 // next free-shipping tier. The gap drives both the subtitle and the rule-1
 // gap-fill recommendations.
-const getShippingInfo = (thresholds, subtotal) => {
+export const getShippingInfo = (thresholds, subtotal) => {
   if (!subtotal) return { subtitle: null, gap: 0 };
 
   const tiers = SHIPPING_TIERS.map((tier) => ({
@@ -131,7 +131,7 @@ const getShippingInfo = (thresholds, subtotal) => {
 // subtotal in its currency sits inside [min, max); the buyer is nudged toward
 // `max` (e.g. a free-shipping threshold). When several overlap, the closest goal
 // wins so the most attainable nudge shows.
-const pickActiveMotivator = (motivators, currencyCode, subtotalAmount) => {
+export const pickActiveMotivator = (motivators, currencyCode, subtotalAmount) => {
   if (!Array.isArray(motivators) || !currencyCode || !(subtotalAmount >= 0)) return null;
 
   let best = null;
@@ -153,7 +153,7 @@ const pickActiveMotivator = (motivators, currencyCode, subtotalAmount) => {
   return best;
 };
 
-const renderMotivatorText = (text, remaining) =>
+export const renderMotivatorText = (text, remaining) =>
   String(text || '').replace(/\{\{\s*remaining\s*\}\}/g, formatPrice(remaining));
 
 // Debug helper: for each configured motivator, explain whether it matched the
@@ -327,7 +327,7 @@ const APP_CONFIG_QUERY = `
   }
 `;
 
-const fetchAppConfig = async () => {
+export const fetchAppConfig = async () => {
   try {
     const { data, errors } = await shopify.query(APP_CONFIG_QUERY);
 
@@ -523,7 +523,7 @@ const defaultSelection = (card) => {
  * from the automatic tiers, but allowed for manual upsells and motivator products
  * (the merchant picked them deliberately; the buyer picks a size at checkout).
  */
-const resolveRecommendations = async ({ metaType, countryCode, slotLimit, lines, manualProductIds, motivatorProductIds }) => {
+export const resolveRecommendations = async ({ metaType, countryCode, slotLimit, lines, manualProductIds, motivatorProductIds }) => {
   const cartProductIds = [...new Set(lines.map((l) => l.merchandise?.product?.id).filter(Boolean))];
   const cartTypes = new Set(
     lines.map((l) => String(l.merchandise?.product?.productType || '').toLowerCase()).filter(Boolean)
@@ -852,7 +852,7 @@ const PLACEHOLDER_IMAGE =
 const sizedImage = (url, size) =>
   url ? `${url}${url.includes('?') ? '&' : '?'}width=${size}&height=${size}&crop=center` : PLACEHOLDER_IMAGE;
 
-function RecommendationCard({ card, addingVariantId, onAdd }) {
+export function RecommendationCard({ card, addingVariantId, onAdd }) {
   // Buyer's per-option picks (defaults to the card's default variant). For
   // single-variant products `options` is empty and the button adds directly.
   const [selection, setSelection] = useState(() => defaultSelection(card));

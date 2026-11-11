@@ -16,6 +16,8 @@
 
 import prisma from "../db.server";
 import {
+  CART_METAFIELD_KEY,
+  CART_METAFIELD_NAMESPACE,
   FUNCTION_METAFIELD_KEY,
   FUNCTION_METAFIELD_NAMESPACE,
   SHOP_METAFIELD_KEY,
@@ -714,6 +716,119 @@ async function retireLegacyDiscount(admin, installationId, legacyDiscountId) {
 // Push the full config set to the shop metafield (checkout extension) and bring
 // every config's own discount in line (create/update/deactivate). Retires the
 // legacy shared discount on first run. Runs on every load and after every save.
+// --------------------------------------------------------------------------
+// Side cart (theme) payload
+// --------------------------------------------------------------------------
+
+const GIFT_HANDLES_QUERY = `#graphql
+  query GwpCartGiftHandles($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      __typename
+      ... on Product { id handle }
+      ... on ProductVariant { id product { handle } }
+    }
+  }
+`;
+
+// Copy keys passed through verbatim to the theme. Same {{ }} placeholders as
+// the checkout extension.
+const CART_COPY_KEYS = [
+  "label",
+  "admin_title",
+  "banner_subtitle",
+  "banner_buy_x_hint",
+  "banner_title_before",
+  "banner_message_before",
+  "banner_title_after",
+  "banner_message_after",
+  "banner_title_added",
+  "banner_message_added",
+  "banner_title_region",
+  "banner_message_region",
+  "cart_message",
+];
+
+// The side cart can only evaluate rules it can see in the storefront: cart
+// lines, customer tags and the browsing country. Offers limited to specific
+// customers, segments or Honey Club tiers are left out (and their emails /
+// segment ids must never reach a public metafield). Test-mode and disabled
+// offers are left out too.
+export function isCartEligibleConfig(c) {
+  if (!c || c.show_in_cart !== true) return false;
+  if (c.enabled === false || c.mode === "test") return false;
+  if (c.kind === "loyalty") return false;
+  if (c.eligibility && c.eligibility !== "all") return false;
+  return true;
+}
+
+async function buildCartOffers(admin, configs) {
+  const eligible = configs.filter(isCartEligibleConfig);
+  if (!eligible.length) return [];
+
+  const giftIdsFor = (c) => {
+    const raw = Array.isArray(c.gift_options) && c.gift_options.length > 1
+      ? c.gift_options.map((o) => (o && typeof o === "object" ? o.product_id : o))
+      : [c.product_id];
+    return raw.map((v) => String(v ?? "").trim()).filter(Boolean);
+  };
+
+  // Numeric ids are ambiguous (the admin accepts product or variant ids), so
+  // try both gid shapes - same order of preference as the checkout extension.
+  const candidatesFor = (id) => {
+    if (id.startsWith("gid://")) return [id];
+    return [`gid://shopify/ProductVariant/${id}`, `gid://shopify/Product/${id}`];
+  };
+  const allCandidates = Array.from(
+    new Set(eligible.flatMap((c) => giftIdsFor(c).flatMap(candidatesFor))),
+  );
+  const nodeById = {};
+  for (let i = 0; i < allCandidates.length; i += 100) {
+    const data = await gql(admin, GIFT_HANDLES_QUERY, { ids: allCandidates.slice(i, i + 100) });
+    for (const n of data?.nodes ?? []) if (n?.id) nodeById[n.id] = n;
+  }
+  const resolveGift = (id) => {
+    for (const gid of candidatesFor(id)) {
+      const n = nodeById[gid];
+      if (n?.__typename === "Product") return { handle: n.handle, variant_id: null };
+      if (n?.__typename === "ProductVariant" && n.product?.handle) {
+        return { handle: n.product.handle, variant_id: Number(gid.split("/").pop()) };
+      }
+    }
+    return null;
+  };
+
+  return eligible
+    .map((c) => {
+      const gifts = giftIdsFor(c).map(resolveGift).filter(Boolean);
+      if (!gifts.length) return null;
+      const offer = {
+        id: c.id,
+        trigger_type: c.trigger_type || "min_spend",
+        add_mode: gifts.length > 1 ? "manual" : c.add_mode === "manual" ? "manual" : "auto",
+        product_tag: c.product_tag || "",
+        min_spend: Object.fromEntries(
+          Object.entries(c)
+            .filter(([k, v]) => k.startsWith("min_spend_") && k !== "min_spend_currency" && Number(v) > 0)
+            .map(([k, v]) => [k.slice("min_spend_".length), Number(v)]),
+        ),
+        discount_percentage: Number(c.discount_percentage ?? 100),
+        shipping_countries: c.shipping_countries || "",
+        customer_redeemed_tag:
+          c.redemption_type === "one_per_customer" ? c.customer_redeemed_tag || "" : "",
+        valid_date_from: c.valid_date_from || "",
+        valid_time_from: c.valid_time_from || "",
+        valid_date_till: c.valid_date_till || "",
+        valid_time_till: c.valid_time_till || "",
+        // Off = the theme only renders this offer on unpublished themes.
+        show_on_live_theme: c.show_on_live_theme === true,
+        gifts,
+      };
+      for (const k of CART_COPY_KEYS) if (c[k]) offer[k] = c[k];
+      return offer;
+    })
+    .filter(Boolean);
+}
+
 export async function syncConfigs(admin, shop) {
   await ensureShopMetafieldDefinition(admin);
 
@@ -767,6 +882,19 @@ export async function syncConfigs(admin, shop) {
     key: SHOP_METAFIELD_KEY,
     value: { configs, timeZone },
   });
+
+  // 1b. Theme-facing copy for the side cart (configs ticked "Show in side cart").
+  // Never let this block the discount sync below.
+  try {
+    await setMetafield(admin, {
+      ownerId: shopId,
+      namespace: CART_METAFIELD_NAMESPACE,
+      key: CART_METAFIELD_KEY,
+      value: { offers: await buildCartOffers(admin, configs), timeZone },
+    });
+  } catch (err) {
+    console.error("Failed to write GWP side-cart metafield", err);
+  }
 
   // 2. Retire the legacy single shared discount, if it still exists.
   await retireLegacyDiscount(admin, installationId, legacyDiscountId);
