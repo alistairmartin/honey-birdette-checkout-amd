@@ -600,6 +600,12 @@ const config = useMemo(() => {
     // Short label shown as a pill above the progress banner (e.g. "LIMITED OFFER").
     label: String(cfg.label || "").trim(),
     product_tag: String(cfg.product_tag || "").trim(),
+    // Hand-picked qualifying products (Product gids). A line qualifies when its
+    // product is one of these OR carries product_tag.
+    buy_x_product_gids: (Array.isArray(cfg.buy_x_products) ? cfg.buy_x_products : [])
+      .map((p: any) => String((p && typeof p === "object" ? p.product_id : p) ?? "").match(/(\d+)$/)?.[1] || "")
+      .filter(Boolean)
+      .map((id: string) => `gid://shopify/Product/${id}`) as string[],
     min_spend: Number(cfg.min_spend || 0),
     min_spend_AUD: Number(cfg.min_spend_AUD ?? cfg.min_spend ?? 0),
     min_spend_NZD: Number(cfg.min_spend_NZD ?? 0),
@@ -1329,6 +1335,31 @@ async function removeGiftIfPresent() {
     return map;
   }, [tagData]);
 
+  // variantId -> Product gid, for matching hand-picked qualifying products.
+  const variantProductIdMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const n of tagData?.nodes || []) {
+      if (n?.id && n?.product?.id) map[n.id] = n.product.id;
+    }
+    return map;
+  }, [tagData]);
+
+  const buyXProductGids = useMemo(
+    () => new Set<string>(config.buy_x_product_gids),
+    [JSON.stringify(config.buy_x_product_gids)],
+  );
+
+  // Does this variant's product count as a qualifying ("buy X") product? Either
+  // it carries `tag` or it was hand-picked. Both blank = nothing qualifies.
+  const isQualifyingVariant = (vId: string, tag: string) => {
+    if (tag) {
+      const tags: string[] = variantProductTags[vId] || [];
+      if (tags.some((tg) => tg.toLowerCase() === tag)) return true;
+    }
+    const productId = variantProductIdMap[vId];
+    return Boolean(productId && buyXProductGids.has(productId));
+  };
+
   // Triggers whose gift is gated on a spend threshold.
   const usesMinSpend =
     config.trigger_type === "min_spend" || config.trigger_type === "buy_x_and_min_spend";
@@ -1347,22 +1378,20 @@ async function removeGiftIfPresent() {
   // counts - excluding the gift line itself and any gift cards.
   const taggedSpend = useMemo(() => {
     const tag = spendTag.toLowerCase();
+    // min_spend narrows the spend to qualifying products (tag and/or picked).
+    const narrowSpend = Boolean(tag) || (config.trigger_type === "min_spend" && buyXProductGids.size > 0);
     let total = 0;
     for (const line of lines) {
       const vId = line.merchandise.id;
       if (giftVariantGid && vId === giftVariantGid) continue;
       if (giftCardVariantIds.has(vId)) continue;
-      if (tag) {
-        const tags: string[] = variantProductTags[vId] || [];
-        const hasTag = tags.some((tg) => tg.toLowerCase() === tag);
-        if (!hasTag) continue;
-      }
+      if (narrowSpend && !isQualifyingVariant(vId, tag)) continue;
       const unit = variantPriceMap[vId] ?? 0;
       const qty = Number(line.quantity || 1);
       total += unit * (isFinite(qty) ? qty : 1);
     }
     return total;
-  }, [lines, variantProductTags, variantPriceMap, spendTag, giftCardVariantIds, giftVariantGid]);
+  }, [lines, variantProductTags, variantPriceMap, spendTag, giftCardVariantIds, giftVariantGid, variantProductIdMap, buyXProductGids]);
 
   // Calculate cart-level discounts, excluding shipping-only discounts so we don't inflate the GWP goal
   const totalCartDiscounts = useMemo(() => {
@@ -1408,16 +1437,14 @@ async function removeGiftIfPresent() {
   // threshold (e.g. a product discount applied directly to a qualifying SKU).
   const taggedLineItemDiscounts = useMemo(() => {
     const tag = spendTag.toLowerCase();
+    // min_spend narrows the spend to qualifying products (tag and/or picked).
+    const narrowSpend = Boolean(tag) || (config.trigger_type === "min_spend" && buyXProductGids.size > 0);
     let total = 0;
     for (const line of lines) {
       const vId = line.merchandise.id;
       if (giftVariantGid && vId === giftVariantGid) continue;
       if (giftCardVariantIds.has(vId)) continue;
-      if (tag) {
-        const tags: string[] = variantProductTags[vId] || [];
-        const hasTag = tags.some((tg) => tg.toLowerCase() === tag);
-        if (!hasTag) continue;
-      }
+      if (narrowSpend && !isQualifyingVariant(vId, tag)) continue;
       if (line.discountAllocations && line.discountAllocations.length > 0) {
         for (const allocation of line.discountAllocations) {
           const amount = Number(allocation?.discountedAmount?.amount || 0);
@@ -1426,7 +1453,7 @@ async function removeGiftIfPresent() {
       }
     }
     return total;
-  }, [lines, variantProductTags, spendTag, giftCardVariantIds, giftVariantGid]);
+  }, [lines, variantProductTags, spendTag, giftCardVariantIds, giftVariantGid, variantProductIdMap, buyXProductGids]);
 
   // Gross spend across the non-gift cart, used to apportion order-level
   // discounts back onto tagged lines.
@@ -1543,13 +1570,12 @@ async function removeGiftIfPresent() {
   // the "buy X" half of buy_x_get_y and buy_x_and_min_spend.
   const hasTaggedLine = useMemo(() => {
     const tag = (config.product_tag || "").toLowerCase();
-    if (!tag) return false;
+    if (!tag && buyXProductGids.size === 0) return false;
     return lines.some((l) => {
       if (giftVariantGid && l.merchandise.id === giftVariantGid) return false;
-      const tags = variantProductTags[l.merchandise.id] || [];
-      return tags.some((t) => t.toLowerCase() === tag);
+      return isQualifyingVariant(l.merchandise.id, tag);
     });
-  }, [config.product_tag, lines, variantProductTags, giftVariantGid]);
+  }, [config.product_tag, lines, variantProductTags, giftVariantGid, variantProductIdMap, buyXProductGids]);
 
   const hitsSpendGoal = adjustedGoal > 0 && taggedSpend >= adjustedGoal;
 
@@ -2463,7 +2489,7 @@ const messageText = config.banner_message_before
               <DebugRow label="Qualifies" value={yn(qualification.qualifies)} />
               {triggerNeedsTaggedLine ? (
                 <DebugRow
-                  label={`Buy X (tag "${config.product_tag || "-"}")`}
+                  label={`Buy X (tag "${config.product_tag || "-"}", ${config.buy_x_product_gids.length} picked)`}
                   value={hasTaggedLine ? "found in cart" : "NOT in cart"}
                 />
               ) : null}

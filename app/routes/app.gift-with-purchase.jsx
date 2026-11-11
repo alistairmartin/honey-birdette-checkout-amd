@@ -43,6 +43,7 @@ import {
   DEFAULT_DISCOUNT_PERCENTAGE,
   DISCOUNT_TYPES,
   normalizeDiscountType,
+  buyXProductIdsFromConfig,
   discountAmountsFromConfig,
   TRIGGER_TYPES,
   triggerUsesMinSpend,
@@ -538,6 +539,9 @@ const INITIAL_BUILDER = {
   // fixed_amount only: amount off the gift per currency, e.g. { AUD: "30" }.
   discount_amounts: SUPPORTED_CURRENCIES.reduce((acc, code) => ({ ...acc, [code]: "" }), {}),
   product_tag: "",
+  // Hand-picked qualifying products: [{ product_id, title }]. Qualify alongside
+  // product_tag (either one).
+  buy_x_products: [],
   min_spend: emptyMinSpend(),
   min_spend_currency: "AUD",
   add_mode: "auto",
@@ -616,6 +620,12 @@ function buildConfig(state) {
   }
   if (state.trigger_type !== "subscription" && state.product_tag.trim()) {
     config.product_tag = state.product_tag.trim();
+  }
+  if (state.trigger_type !== "subscription") {
+    const picked = (Array.isArray(state.buy_x_products) ? state.buy_x_products : [])
+      .filter((p) => String(p?.product_id || "").trim())
+      .map((p) => ({ product_id: String(p.product_id).trim(), title: p.title || "" }));
+    if (picked.length) config.buy_x_products = picked;
   }
   if (triggerUsesMinSpend(state.trigger_type)) {
     for (const code of SUPPORTED_CURRENCIES) {
@@ -777,6 +787,11 @@ function builderFromConfig(c) {
       return acc;
     }, {}),
     product_tag: c.product_tag ?? "",
+    buy_x_products: Array.isArray(c.buy_x_products)
+      ? c.buy_x_products
+          .filter((p) => p && p.product_id != null)
+          .map((p) => ({ product_id: String(p.product_id), title: p.title || "" }))
+      : [],
     min_spend,
     min_spend_currency: c.min_spend_currency ?? "AUD",
     add_mode: c.add_mode === "manual" ? "manual" : "auto",
@@ -859,6 +874,14 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
 
   const trigger = String(c.trigger_type || "min_spend");
   const tag = String(c.product_tag || "").trim();
+  const pickedCount = buyXProductIdsFromConfig(c).length;
+  // "products tagged X", "3 selected products", or both joined with "or".
+  const qualifyingText = [
+    tag ? `tagged **"${tag}"**` : "",
+    pickedCount ? `one of **${pickedCount} selected product${pickedCount === 1 ? "" : "s"}**` : "",
+  ]
+    .filter(Boolean)
+    .join(" or ");
 
   // Min spend: lead with the fallback currency's threshold (or the first one
   // that's set) and note when other currencies carry their own.
@@ -891,8 +914,8 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
   if (trigger === "min_spend") {
     if (spendText) {
       lines.push(
-        tag
-          ? `**Trigger:** the customer must spend at least **${spendText}**${perCurrencyNote} on products tagged **"${tag}"**. Gift cards never count.`
+        qualifyingText
+          ? `**Trigger:** the customer must spend at least **${spendText}**${perCurrencyNote} on products ${qualifyingText}. Gift cards never count.`
           : `**Trigger:** the customer must spend at least **${spendText}**${perCurrencyNote} across their cart (any product on site except gift cards).`,
       );
     } else {
@@ -902,14 +925,14 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
     }
   } else if (trigger === "buy_x_get_y") {
     lines.push(
-      tag
-        ? `**Trigger:** the customer must have at least **1 product tagged "${tag}"** in their cart.`
-        : "**Trigger:** Buy X get Y, but *no product tag is set yet, so the gift can never unlock*.",
+      qualifyingText
+        ? `**Trigger:** the customer must have at least **1 product** ${qualifyingText} in their cart.`
+        : "**Trigger:** Buy X get Y, but *no qualifying products or tag set yet, so the gift can never unlock*.",
     );
   } else if (trigger === "buy_x_and_min_spend") {
-    const tagPart = tag
-      ? `at least **1 product tagged "${tag}"** in their cart`
-      : "at least 1 product with the qualifying tag (*not set yet, so the gift can never unlock*)";
+    const tagPart = qualifyingText
+      ? `at least **1 product** ${qualifyingText} in their cart`
+      : "at least 1 qualifying product (*no products or tag set yet, so the gift can never unlock*)";
     const spendPart = spendText
       ? `a minimum spend of **${spendText}**${perCurrencyNote} across the whole cart (any product on site except gift cards)`
       : "a minimum spend threshold (*not set yet*)";
@@ -1294,6 +1317,34 @@ export default function GiftWithPurchasePage() {
       product_price: priceAmount ? `$${Number(priceAmount).toFixed(2)}` : "",
     }));
   };
+
+  // Qualifying ("buy X") products: adds to the list, skipping duplicates.
+  const pickBuyXProducts = async () => {
+    const selection = await shopify.resourcePicker({
+      type: "product",
+      multiple: true,
+      action: "select",
+      filter: { variants: false, archived: false },
+      selectionIds: (builder.buy_x_products || []).map((p) => ({
+        id: `gid://shopify/Product/${p.product_id}`,
+      })),
+    });
+    if (!selection) return;
+    setBuilder((prev) => ({
+      ...prev,
+      buy_x_products: selection.map((product) => ({
+        product_id: extractNumericId(product.id),
+        title: product.title,
+      })),
+    }));
+  };
+  const removeBuyXProduct = (productId) =>
+    setBuilder((prev) => ({
+      ...prev,
+      buy_x_products: (prev.buy_x_products || []).filter(
+        (p) => String(p.product_id) !== String(productId),
+      ),
+    }));
 
   const pickExtraGiftOptions = async () => {
     const selection = await shopify.resourcePicker({
@@ -1822,6 +1873,50 @@ export default function GiftWithPurchasePage() {
                     )}
 
                     {showProductTag && (
+                      <BlockStack gap="200">
+                        <Text as="h3" variant="headingSm">
+                          {builder.trigger_type === "min_spend"
+                            ? "Qualifying products (optional)"
+                            : "Qualifying products"}
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          {builder.trigger_type === "min_spend"
+                            ? "Narrow the spend to these products and/or the tag below. Leave both blank to count the whole cart."
+                            : "Pick products, set a tag below, or both. A cart line qualifies if its product is picked here OR carries the tag."}
+                        </Text>
+                        <InlineStack gap="200" blockAlign="center">
+                          <Button onClick={pickBuyXProducts}>
+                            {(builder.buy_x_products || []).length ? "Edit products" : "Select products"}
+                          </Button>
+                          <Text as="span" tone="subdued">
+                            {(builder.buy_x_products || []).length
+                              ? `${builder.buy_x_products.length} selected`
+                              : "No products selected"}
+                          </Text>
+                        </InlineStack>
+                        {(builder.buy_x_products || []).length ? (
+                          <InlineStack gap="200" wrap>
+                            {builder.buy_x_products.map((p) => (
+                              <Badge key={p.product_id}>
+                                <InlineStack gap="100" blockAlign="center">
+                                  <span>{p.title || `Product ${p.product_id}`}</span>
+                                  <Button
+                                    variant="plain"
+                                    size="micro"
+                                    accessibilityLabel={`Remove ${p.title || p.product_id}`}
+                                    onClick={() => removeBuyXProduct(p.product_id)}
+                                  >
+                                    x
+                                  </Button>
+                                </InlineStack>
+                              </Badge>
+                            ))}
+                          </InlineStack>
+                        ) : null}
+                      </BlockStack>
+                    )}
+
+                    {showProductTag && (
                       <TextField
                         label={
                           builder.trigger_type === "min_spend"
@@ -1836,8 +1931,8 @@ export default function GiftWithPurchasePage() {
                           builder.trigger_type === "min_spend"
                             ? "Only cart lines whose product carries this tag count toward the spend threshold. Leave blank to count the whole cart. Gift cards never count."
                             : builder.trigger_type === "buy_x_and_min_spend"
-                              ? "The customer must have at least one product carrying this tag in the cart. It does NOT narrow the spend threshold - that's measured across the whole cart. Required: a blank tag never qualifies."
-                              : "Cart lines whose product carries this tag count toward the trigger."
+                              ? "The customer must have at least one qualifying product (picked above or carrying this tag) in the cart. It does NOT narrow the spend threshold - that's measured across the whole cart. With no products picked and no tag, the gift never unlocks."
+                              : "Cart lines whose product carries this tag (or is picked above) count toward the trigger."
                         }
                       />
                     )}

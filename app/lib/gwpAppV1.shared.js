@@ -93,6 +93,19 @@ export function triggerUsesMinSpend(triggerType) {
   return t === "min_spend" || t === "buy_x_and_min_spend";
 }
 
+// Hand-picked qualifying ("buy X") products, as numeric product id strings.
+// A cart line qualifies when its product is one of these OR carries
+// `product_tag` - either method, or both. Saved on the config as
+// `buy_x_products: [{ product_id, title }]` (title is display-only).
+export function buyXProductIdsFromConfig(config) {
+  const list = Array.isArray(config?.buy_x_products) ? config.buy_x_products : [];
+  const ids = list
+    .map((p) => String((p && typeof p === "object" ? p.product_id : p) ?? "").trim())
+    .map((id) => id.match(/(\d+)$/)?.[1] ?? "")
+    .filter(Boolean);
+  return Array.from(new Set(ids));
+}
+
 // Metafield wiring.
 export const SHOP_METAFIELD_NAMESPACE = "$app:gift-with-purchase";
 export const SHOP_METAFIELD_KEY = "configs";

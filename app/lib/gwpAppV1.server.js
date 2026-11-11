@@ -18,6 +18,7 @@ import prisma from "../db.server";
 import {
   CART_METAFIELD_KEY,
   CART_METAFIELD_NAMESPACE,
+  buyXProductIdsFromConfig,
   FUNCTION_METAFIELD_KEY,
   FUNCTION_METAFIELD_NAMESPACE,
   SHOP_METAFIELD_KEY,
@@ -482,7 +483,10 @@ async function resolveQualifyingProductIds(admin, productTag) {
 // trigger doesn't gate on a tagged product.
 async function qualifyingProductIdsFor(admin, config) {
   if (String(config?.trigger_type || "") !== "buy_x_and_min_spend") return [];
-  return resolveQualifyingProductIds(admin, config?.product_tag);
+  // Tagged products plus any hand-picked ones (either qualifies).
+  const tagged = await resolveQualifyingProductIds(admin, config?.product_tag);
+  const picked = buyXProductIdsFromConfig(config).map((id) => `gid://shopify/Product/${id}`);
+  return Array.from(new Set([...tagged, ...picked]));
 }
 
 // Create a new automatic app discount bound to the function, carrying one
@@ -806,6 +810,7 @@ async function buildCartOffers(admin, configs) {
         trigger_type: c.trigger_type || "min_spend",
         add_mode: gifts.length > 1 ? "manual" : c.add_mode === "manual" ? "manual" : "auto",
         product_tag: c.product_tag || "",
+        buy_x_product_ids: buyXProductIdsFromConfig(c).map(Number),
         min_spend: Object.fromEntries(
           Object.entries(c)
             .filter(([k, v]) => k.startsWith("min_spend_") && k !== "min_spend_currency" && Number(v) > 0)
