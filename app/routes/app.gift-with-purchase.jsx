@@ -1748,7 +1748,7 @@ export default function GiftWithPurchasePage() {
                       helpText={
                         builder.kind === "loyalty" || (builder.eligibility && builder.eligibility !== "all")
                           ? "Not available for this offer: the side cart can only show offers open to all customers (no customer list, segment or Honey Club tier limit)."
-                          : "Also show this offer in the website side cart (progress, unlocked and added copy, plus the gift with an Add button). Auto-add offers are added there too. Live offers only."
+                          : "Also show this offer in the website side cart (progress, unlocked and added copy, plus the gift with an Add button). Auto-add offers are added there too. Test-mode offers only show on unpublished themes."
                       }
                     />
 
@@ -1757,7 +1757,7 @@ export default function GiftWithPurchasePage() {
                         label="Show on live theme"
                         checked={builder.show_on_live_theme}
                         onChange={(v) => update("show_on_live_theme", v)}
-                        helpText="Off: the side cart offer only shows on unpublished themes (theme previews / dev themes), so you can test it before customers see it. On: it also shows on the live (published) theme."
+                        helpText="Off: the side cart offer only shows on unpublished themes (theme previews / dev themes), so you can test it before customers see it. On: it also shows on the live (published) theme - once the offer's mode is Live."
                       />
                     ) : null}
 

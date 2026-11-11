@@ -755,11 +755,12 @@ const CART_COPY_KEYS = [
 // The side cart can only evaluate rules it can see in the storefront: cart
 // lines, customer tags and the browsing country. Offers limited to specific
 // customers, segments or Honey Club tiers are left out (and their emails /
-// segment ids must never reach a public metafield). Test-mode and disabled
-// offers are left out too.
+// segment ids must never reach a public metafield). Disabled offers are left
+// out. Test-mode offers are kept but flagged, and the theme only renders them
+// on unpublished themes (like checkout, where test offers only show in preview).
 export function isCartEligibleConfig(c) {
   if (!c || c.show_in_cart !== true) return false;
-  if (c.enabled === false || c.mode === "test") return false;
+  if (c.enabled === false) return false;
   if (c.kind === "loyalty") return false;
   if (c.eligibility && c.eligibility !== "all") return false;
   return true;
@@ -826,7 +827,9 @@ async function buildCartOffers(admin, configs) {
         valid_time_from: c.valid_time_from || "",
         valid_date_till: c.valid_date_till || "",
         valid_time_till: c.valid_time_till || "",
-        // Off = the theme only renders this offer on unpublished themes.
+        // Test mode, or "Show on live theme" off = the theme only renders this
+        // offer on unpublished themes.
+        mode: c.mode === "test" ? "test" : "live",
         show_on_live_theme: c.show_on_live_theme === true,
         gifts,
       };
