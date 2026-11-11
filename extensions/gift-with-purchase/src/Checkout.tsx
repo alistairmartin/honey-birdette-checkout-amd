@@ -612,6 +612,13 @@ const config = useMemo(() => {
     // Passed through to the discount function via the metafield; not used by the
     // extension UI directly (the function makes the gift line free / % off).
     discount_percentage: Number(cfg.discount_percentage ?? 100),
+    // "fixed_amount" = a per-currency amount off the gift (discount_amounts).
+    discount_type: (String(cfg.discount_type || "") === "fixed_amount" ? "fixed_amount" : "percentage") as
+      | "percentage"
+      | "fixed_amount",
+    discount_amounts: (cfg.discount_amounts && typeof cfg.discount_amounts === "object"
+      ? cfg.discount_amounts
+      : {}) as Record<string, number>,
     // DB row id the app stamps onto each config in the shop metafield, used to
     // ask the backend for this offer's discount usage (sold-out gate).
     config_id: String(cfg.id || "").trim(),
@@ -1599,7 +1606,9 @@ async function removeGiftIfPresent() {
 
   // Whether the gift is fully free (100% off) vs a partial / purchase-with-
   // purchase deal - drives "Add free X" vs "Add X" CTA wording.
-  const giftIsFree = Number(config.discount_percentage ?? 100) >= 100;
+  // Fixed-amount offers are a purchase-with-purchase deal, never "free" wording.
+  const giftIsFree =
+    config.discount_type !== "fixed_amount" && Number(config.discount_percentage ?? 100) >= 100;
 
   // Confirmation copy shown once the gift is in the cart. Prefers the dedicated
   // "added" message, then the unlocked/after copy, then a sensible default.
@@ -2215,14 +2224,23 @@ const messageText = config.banner_message_before
   ): ComponentChildren => {
     if (!opt || opt.priceAmount == null) return null;
     const currency = opt.priceCurrency || activeCurrency;
-    const pct = Math.max(0, Math.min(100, Number(config.discount_percentage ?? 100)));
-    const discounted = opt.priceAmount * (1 - pct / 100);
+    let discounted: number;
+    let hasDiscount: boolean;
+    if (config.discount_type === "fixed_amount") {
+      const off = Number(config.discount_amounts?.[currency] || 0);
+      discounted = Math.max(0, opt.priceAmount - (Number.isFinite(off) ? off : 0));
+      hasDiscount = off > 0;
+    } else {
+      const pct = Math.max(0, Math.min(100, Number(config.discount_percentage ?? 100)));
+      discounted = opt.priceAmount * (1 - pct / 100);
+      hasDiscount = pct > 0;
+    }
     return (
       <s-stack direction="inline" gap="small-200" alignItems="center">
         <s-text type="strong">
           {discounted <= 0 ? "FREE" : formatMoney(discounted, currency)}
         </s-text>
-        {pct > 0 ? (
+        {hasDiscount ? (
           <s-text color="subdued" type="redundant">
             {formatMoney(opt.priceAmount, currency)}
           </s-text>
@@ -2503,7 +2521,14 @@ const messageText = config.banner_message_before
               />
               <DebugRow label="In cart" value={yn(isGiftInCart || anyGiftOptionInCart)} />
               <DebugRow label="Add mode" value={`${config.add_mode}${autoAdd ? "" : " (manual pick)"}`} />
-              <DebugRow label="Discount" value={`${config.discount_percentage ?? 100}% off`} />
+              <DebugRow
+                label="Discount"
+                value={
+                  config.discount_type === "fixed_amount"
+                    ? `${JSON.stringify(config.discount_amounts)} off`
+                    : `${config.discount_percentage ?? 100}% off`
+                }
+              />
               {usageCapConfigured ? (
                 <DebugRow
                   label="Usage cap"

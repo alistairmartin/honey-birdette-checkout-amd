@@ -14,8 +14,14 @@ interface OfferConfig {
   // are gated by the checkout extension, which only adds the gift line when the
   // offer qualifies.
   trigger_type?: string;
+  // "percentage" (default) or "fixed_amount".
+  discount_type?: string;
   // Percentage off the gift line. 100 = free gift; 50 = half price, etc.
   discount_percentage?: number;
+  // fixed_amount only: amount off the gift per ISO currency code, in that
+  // currency (e.g. { AUD: 30, GBP: 20 }). No amount for the cart's currency =
+  // no discount in that market.
+  discount_amounts?: Record<string, number>;
   // Minimum cart subtotal per ISO currency code (AUD, NZD, USD, CAD, GBP, EUR, AED).
   thresholds?: Record<string, number>;
   // buy_x_and_min_spend only: the products that satisfy the "buy X" half of the
@@ -98,14 +104,20 @@ export function cartLinesDiscountsGenerateRun(
   const candidates: Array<{
     message: string;
     targets: Array<{cartLine: {id: string; quantity?: number}}>;
-    value: {percentage: {value: number}};
+    value:
+      | {percentage: {value: number}}
+      | {fixedAmount: {amount: string; appliesToEachItem: boolean}};
   }> = [];
 
   for (const config of configs) {
     if (config.enabled === false) continue;
 
+    const fixed = config.discount_type === 'fixed_amount';
     const percentage = Number(config.discount_percentage ?? 100);
-    if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100) {
+    const fixedAmount = fixed ? Number(config.discount_amounts?.[currencyCode]) : NaN;
+    if (fixed) {
+      if (!Number.isFinite(fixedAmount) || fixedAmount <= 0) continue;
+    } else if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100) {
       continue;
     }
 
@@ -194,11 +206,24 @@ export function cartLinesDiscountsGenerateRun(
       }
     }
 
-    candidates.push({
-      message: config.message || `${percentage}% off`,
-      targets: [{cartLine: {id: bestLine.id, quantity: 1}}],
-      value: {percentage: {value: percentage}},
-    });
+    if (fixed) {
+      // Never take more off than one unit of the gift costs.
+      const amount = Number.isFinite(bestUnit) && bestUnit > 0
+        ? Math.min(fixedAmount, bestUnit)
+        : fixedAmount;
+      candidates.push({
+        message: config.message || `${amount} off`,
+        targets: [{cartLine: {id: bestLine.id, quantity: 1}}],
+        // Decimal input: the amount in the cart's currency, as a string.
+        value: {fixedAmount: {amount: amount.toFixed(2), appliesToEachItem: false}},
+      });
+    } else {
+      candidates.push({
+        message: config.message || `${percentage}% off`,
+        targets: [{cartLine: {id: bestLine.id, quantity: 1}}],
+        value: {percentage: {value: percentage}},
+      });
+    }
   }
 
   if (!candidates.length) {

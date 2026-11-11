@@ -811,7 +811,9 @@ async function buildCartOffers(admin, configs) {
             .filter(([k, v]) => k.startsWith("min_spend_") && k !== "min_spend_currency" && Number(v) > 0)
             .map(([k, v]) => [k.slice("min_spend_".length), Number(v)]),
         ),
+        discount_type: c.discount_type === "fixed_amount" ? "fixed_amount" : "percentage",
         discount_percentage: Number(c.discount_percentage ?? 100),
+        discount_amounts: c.discount_type === "fixed_amount" ? c.discount_amounts || {} : {},
         shipping_countries: c.shipping_countries || "",
         customer_redeemed_tag:
           c.redemption_type === "one_per_customer" ? c.customer_redeemed_tag || "" : "",

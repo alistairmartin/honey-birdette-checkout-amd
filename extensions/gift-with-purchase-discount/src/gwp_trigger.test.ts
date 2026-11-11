@@ -111,3 +111,35 @@ describe('existing triggers are unchanged', () => {
     expect(discounted(r)).toHaveLength(1);
   });
 });
+
+describe('fixed amount discount type', () => {
+  const fixedConfig = {
+    enabled: true,
+    trigger_type: 'buy_x_get_y',
+    discount_type: 'fixed_amount',
+    discount_amounts: {AUD: 30, GBP: 20},
+    productIds: [GIFT],
+    message: 'Sparkle neck chain',
+  };
+
+  it('takes the cart-currency amount off one gift unit', () => {
+    const result = run([line('1', VICTORIANA, 160), line('2', GIFT, 110)], fixedConfig);
+    const candidate = (result.operations[0] as any).productDiscountsAdd.candidates[0];
+
+    expect(candidate.value).toEqual({fixedAmount: {amount: '30.00', appliesToEachItem: false}});
+    expect(candidate.targets).toEqual([{cartLine: {id: '2', quantity: 1}}]);
+  });
+
+  it('caps the amount at the gift unit price', () => {
+    const result = run([line('2', GIFT, 25)], fixedConfig);
+    const candidate = (result.operations[0] as any).productDiscountsAdd.candidates[0];
+
+    expect(candidate.value.fixedAmount.amount).toBe('25.00');
+  });
+
+  it('gives no discount when the cart currency has no amount', () => {
+    const result = run([line('2', GIFT, 110)], {...fixedConfig, discount_amounts: {GBP: 20}});
+
+    expect(result.operations).toEqual([]);
+  });
+});

@@ -41,6 +41,9 @@ import {
   SUPPORTED_CURRENCIES,
   DEFAULT_THRESHOLDS,
   DEFAULT_DISCOUNT_PERCENTAGE,
+  DISCOUNT_TYPES,
+  normalizeDiscountType,
+  discountAmountsFromConfig,
   TRIGGER_TYPES,
   triggerUsesMinSpend,
 } from "../lib/gwpAppV1.shared";
@@ -530,7 +533,10 @@ const INITIAL_BUILDER = {
   label: "LIMITED OFFER",
   admin_title: DEFAULT_COPY.admin_title,
   discount_title: "",
+  discount_type: "percentage",
   discount_percentage: String(DEFAULT_DISCOUNT_PERCENTAGE),
+  // fixed_amount only: amount off the gift per currency, e.g. { AUD: "30" }.
+  discount_amounts: SUPPORTED_CURRENCIES.reduce((acc, code) => ({ ...acc, [code]: "" }), {}),
   product_tag: "",
   min_spend: emptyMinSpend(),
   min_spend_currency: "AUD",
@@ -599,8 +605,15 @@ function buildConfig(state) {
   if (state.label.trim()) config.label = state.label.trim();
   if (state.admin_title.trim()) config.admin_title = state.admin_title.trim();
   if (state.discount_title.trim()) config.discount_title = state.discount_title.trim();
-  const pct = Number(state.discount_percentage);
-  if (Number.isFinite(pct)) config.discount_percentage = pct;
+  const discountType = normalizeDiscountType(state.discount_type);
+  config.discount_type = discountType;
+  if (discountType === "fixed_amount") {
+    const amounts = discountAmountsFromConfig({ discount_amounts: state.discount_amounts });
+    if (Object.keys(amounts).length) config.discount_amounts = amounts;
+  } else {
+    const pct = Number(state.discount_percentage);
+    if (Number.isFinite(pct)) config.discount_percentage = pct;
+  }
   if (state.trigger_type !== "subscription" && state.product_tag.trim()) {
     config.product_tag = state.product_tag.trim();
   }
@@ -753,10 +766,16 @@ function builderFromConfig(c) {
     label: c.label ?? "",
     admin_title: c.admin_title ?? "",
     discount_title: c.discount_title ?? "",
+    discount_type: normalizeDiscountType(c.discount_type),
     discount_percentage:
       c.discount_percentage != null
         ? String(c.discount_percentage)
         : String(DEFAULT_DISCOUNT_PERCENTAGE),
+    discount_amounts: SUPPORTED_CURRENCIES.reduce((acc, code) => {
+      const n = c.discount_amounts?.[code];
+      acc[code] = n != null && n !== "" ? String(n) : "";
+      return acc;
+    }, {}),
     product_tag: c.product_tag ?? "",
     min_spend,
     min_spend_currency: c.min_spend_currency ?? "AUD",
@@ -915,8 +934,17 @@ function summarizeConfig(c, { productInfo = {}, extraTitles = {}, segments = [] 
     }
   }
   const pct = Number(c.discount_percentage);
+  const fixedAmounts = discountAmountsFromConfig(c);
   const pctText =
-    !Number.isFinite(pct) || pct >= 100 ? "**free**" : `at **${pct}% off**`;
+    normalizeDiscountType(c.discount_type) === "fixed_amount"
+      ? Object.keys(fixedAmounts).length
+        ? `with **${Object.entries(fixedAmounts)
+            .map(([code, n]) => `${code} ${n}`)
+            .join(" / ")} off**`
+        : "with *no discount amounts set*"
+      : !Number.isFinite(pct) || pct >= 100
+        ? "**free**"
+        : `at **${pct}% off**`;
   if (giftIds.length === 0) {
     lines.push("**Gift:** *no gift product selected yet*.");
   } else if (giftIds.length === 1) {
@@ -1135,6 +1163,11 @@ export default function GiftWithPurchasePage() {
 
   const update = (key, value) =>
     setBuilder((prev) => ({ ...prev, [key]: value }));
+  const updateDiscountAmount = (code, value) =>
+    setBuilder((prev) => ({
+      ...prev,
+      discount_amounts: { ...prev.discount_amounts, [code]: value },
+    }));
   const updateMinSpend = (code, value) =>
     setBuilder((prev) => ({
       ...prev,
@@ -1734,17 +1767,59 @@ export default function GiftWithPurchasePage() {
                       helpText="Title of the automatic discount this config creates, shown in the Shopify admin Discounts list. Leave blank to use the config name."
                     />
 
-                    <TextField
-                      label="Discount percentage off the gift"
-                      type="number"
-                      value={builder.discount_percentage}
-                      onChange={(v) => update("discount_percentage", v)}
-                      autoComplete="off"
-                      suffix="%"
-                      min={1}
-                      max={100}
-                      helpText="The gift-with-purchase-discount function applies this off the gift line. 100 = free gift; 50 = half price (purchase-with-purchase)."
+                    <Select
+                      label="Discount type"
+                      options={DISCOUNT_TYPES}
+                      value={builder.discount_type}
+                      onChange={(v) => update("discount_type", normalizeDiscountType(v))}
+                      helpText="Percentage off the gift, or a set amount off per currency (e.g. AUD 30 / GBP 20 / USD 25 / EUR 25)."
                     />
+
+                    {builder.discount_type === "fixed_amount" ? (
+                      <BlockStack gap="200">
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Amount taken off one gift unit, in each currency. Leave a currency blank and the gift gets no discount in that market. Never takes more than the gift's price.
+                        </Text>
+                        <FormLayout.Group>
+                          {SUPPORTED_CURRENCIES.slice(0, 4).map((code) => (
+                            <TextField
+                              key={code}
+                              label={`${code} off`}
+                              type="number"
+                              min={0}
+                              value={builder.discount_amounts?.[code] ?? ""}
+                              onChange={(v) => updateDiscountAmount(code, v)}
+                              autoComplete="off"
+                            />
+                          ))}
+                        </FormLayout.Group>
+                        <FormLayout.Group>
+                          {SUPPORTED_CURRENCIES.slice(4).map((code) => (
+                            <TextField
+                              key={code}
+                              label={`${code} off`}
+                              type="number"
+                              min={0}
+                              value={builder.discount_amounts?.[code] ?? ""}
+                              onChange={(v) => updateDiscountAmount(code, v)}
+                              autoComplete="off"
+                            />
+                          ))}
+                        </FormLayout.Group>
+                      </BlockStack>
+                    ) : (
+                      <TextField
+                        label="Discount percentage off the gift"
+                        type="number"
+                        value={builder.discount_percentage}
+                        onChange={(v) => update("discount_percentage", v)}
+                        autoComplete="off"
+                        suffix="%"
+                        min={1}
+                        max={100}
+                        helpText="The gift-with-purchase-discount function applies this off the gift line. 100 = free gift; 50 = half price (purchase-with-purchase)."
+                      />
+                    )}
 
                     {showProductTag && (
                       <TextField

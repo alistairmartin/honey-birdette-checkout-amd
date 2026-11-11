@@ -254,6 +254,8 @@ export const loader = async ({ request, params }) => {
       ? {
           triggerType: fnConfig.trigger_type,
           discountPercentage: fnConfig.discount_percentage,
+          discountType: fnConfig.discount_type || "percentage",
+          discountAmounts: fnConfig.discount_amounts || {},
           thresholds: fnConfig.thresholds || {},
           message: fnConfig.message || null,
         }
@@ -479,7 +481,13 @@ export default function GwpDiscountDetails() {
                     </DetailRow>
                   ) : null}
                   <DetailRow label="Gift discount">
-                    {`${fnConfig?.discountPercentage ?? config?.discountPercentage ?? 100}% off`}
+                    {fnConfig?.discountType === "fixed_amount"
+                      ? Object.keys(fnConfig.discountAmounts || {}).length
+                        ? `${Object.entries(fnConfig.discountAmounts)
+                            .map(([code, n]) => `${code} ${n}`)
+                            .join(", ")} off`
+                        : "No amounts set"
+                      : `${fnConfig?.discountPercentage ?? config?.discountPercentage ?? 100}% off`}
                   </DetailRow>
                   {fnConfig?.message ? (
                     <DetailRow label="Checkout label">{fnConfig.message}</DetailRow>

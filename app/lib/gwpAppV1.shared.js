@@ -45,6 +45,33 @@ export const DEFAULT_THRESHOLDS = {
 // Free gift by default. PWP offers set this lower (e.g. 50 for 50% off).
 export const DEFAULT_DISCOUNT_PERCENTAGE = 100;
 
+// How the gift line is discounted.
+//   percentage   - `discount_percentage` off the gift (100 = free).
+//   fixed_amount - a per-currency amount off the gift (`discount_amounts`, e.g.
+//                  { AUD: 30, GBP: 20 }). A currency with no amount gets no
+//                  discount, so the offer doesn't run in that market.
+export const DISCOUNT_TYPES = [
+  { label: "Percentage off", value: "percentage" },
+  { label: "Amount off (per currency)", value: "fixed_amount" },
+];
+
+export function normalizeDiscountType(value) {
+  return value === "fixed_amount" ? "fixed_amount" : "percentage";
+}
+
+// { AUD: 30, ... } with only positive numbers kept.
+export function discountAmountsFromConfig(config) {
+  const out = {};
+  const src = config?.discount_amounts && typeof config.discount_amounts === "object"
+    ? config.discount_amounts
+    : {};
+  for (const code of SUPPORTED_CURRENCIES) {
+    const n = Number(src[code]);
+    if (Number.isFinite(n) && n > 0) out[code] = n;
+  }
+  return out;
+}
+
 // The rules that can unlock a gift.
 //   min_spend           - spend N on products carrying `product_tag` (whole cart
 //                         when the tag is blank).
@@ -161,9 +188,14 @@ export function buildFunctionConfig(c, qualifyingProductIds = []) {
   if (productIds.length === 0 && variantIds.length === 0) return null;
   const pct = Number(c.discount_percentage);
   const trigger_type = String(c.trigger_type || "min_spend");
+  const discount_type = normalizeDiscountType(c.discount_type);
   return {
     enabled: true,
     trigger_type,
+    discount_type,
+    ...(discount_type === "fixed_amount"
+      ? { discount_amounts: discountAmountsFromConfig(c) }
+      : {}),
     ...(trigger_type === "buy_x_and_min_spend"
       ? {
           qualifying_product_ids: Array.isArray(qualifyingProductIds)
